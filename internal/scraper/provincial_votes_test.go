@@ -328,6 +328,90 @@ func TestParseNLJournalDivisions_OutcomeOnly(t *testing.T) {
 	}
 }
 
+func TestParsePEIJournalDivisions_YeasAndNays(t *testing.T) {
+	// Minimal text modelled on the real April 10, 2026 journal (Nays first, then Yeas).
+	text := `Hon. Premier moved the following Motion. Hon. Mr. Speaker put the Question. ` +
+		`A Recorded Division being sought, the names were recorded by the Clerk as follows: ` +
+		`Nays (2\ Leader of the Third Party Karla Bernard (Charlottetown - Victoria Park\ Gordon McNeilly (Charlottetown - West Royalty\ ` +
+		`Yeas (3\ Hon. Darlene Compton (Land and Environment\ Hon. Premier Hon. Bloyce Thompson (Agriculture, Justice and Public Safety, Attorney General\ ` +
+		`The Motion was CARRIED and resolved accordingly.`
+
+	divs := scraper.ParsePEIJournalDivisionsForTest(text, "https://docs.assembly.pe.ca/test.pdf", 67, 3, 1, "2026-04-10")
+	if len(divs) != 1 {
+		t.Fatalf("len(divs)=%d, want 1", len(divs))
+	}
+	d := divs[0]
+	if d.Division.Nays != 2 || d.Division.Yeas != 3 {
+		t.Errorf("counts=(%d,%d), want (2,3)", d.Division.Nays, d.Division.Yeas)
+	}
+	if d.Division.Result != "Carried" {
+		t.Errorf("result=%q, want Carried", d.Division.Result)
+	}
+
+	var yeas, nays []string
+	for _, v := range d.Votes {
+		if v.Vote == "Yea" {
+			yeas = append(yeas, v.MemberName)
+		} else {
+			nays = append(nays, v.MemberName)
+		}
+	}
+	if len(nays) != 2 {
+		t.Errorf("nay voters=%v, want 2", nays)
+	}
+	if len(yeas) != 2 {
+		t.Errorf("yea voters=%v, want 2", yeas)
+	}
+}
+
+func TestParsePEIJournalDivisions_NaysFirst(t *testing.T) {
+	text := `A Recorded Division being sought, the names were recorded by the Clerk as follows: ` +
+		`Nays (12\ Hon. Darlene Compton (Land and Environment\ Hon. Jill Burridge (Finance and Affordability\ ` +
+		`Hon. Bloyce Thompson (Agriculture, Justice and Public Safety, Attorney General\ Hon. Zack Bell (Workforce and Advanced Learning\ ` +
+		`Hon. Ernie Hudson (Fisheries, Rural Development and Tourism\ Tyler DesRoches (Summerside - Wilmot\ ` +
+		`Hon. Barb Ramsay (Social Development and Seniors\ Hon. Robin Croucher (Education and Early Years\ ` +
+		`Hon. Jenn Redmond (Economic Development, Trade and Artificial Intelligence\ Hon. Kent Dollar (Housing and Communities\ ` +
+		`Susie Dillon (Charlottetown - Belvedere\ Brendan Curran (Georgetown - Pownal\ ` +
+		`Yeas (7\ Leader of the Third Party Karla Bernard (Charlottetown - Victoria Park\ Gordon McNeilly (Charlottetown - West Royalty\ ` +
+		`Hon. Leader of the Opposition Peter Bevan - Baker (New Haven - Rocky Point\ ` +
+		`Robert Henderson (O'Leary - Inverness\ Carolyn Simpson (Charlottetown - Hillsborough Park\ ` +
+		`Motion resolved in the Negative.`
+
+	divs := scraper.ParsePEIJournalDivisionsForTest(text, "https://docs.assembly.pe.ca/test.pdf", 67, 3, 1, "2026-04-07")
+	if len(divs) != 1 {
+		t.Fatalf("len(divs)=%d, want 1", len(divs))
+	}
+	d := divs[0]
+	if d.Division.Nays != 12 || d.Division.Yeas != 7 {
+		t.Errorf("counts=(%d,%d), want (12,7)", d.Division.Nays, d.Division.Yeas)
+	}
+	if d.Division.Result != "Negatived" {
+		t.Errorf("result=%q, want Negatived", d.Division.Result)
+	}
+	if len(d.Votes) < 5 {
+		t.Errorf("too few votes: %d", len(d.Votes))
+	}
+}
+
+func TestParsePEIJournalDivisions_CountsWithoutParentheses(t *testing.T) {
+	text := `Hon. Mr. Speaker put the Question. A Recorded Division being sought, the names were recorded by the Clerk as follows: ` +
+		`Nays 12 \ Hon. Darlene Compton Land and Environment\ Hon. Jill Burridge Finance and Affordability\ ` +
+		`Yea 7 \ Leader of the Third Party Karla Bernard Charlottetown - Victoria Park\ Gordon McNeilly Charlottetown - West Royalty\ ` +
+		`Motion resolved in the Negative.`
+
+	divs := scraper.ParsePEIJournalDivisionsForTest(text, "https://docs.assembly.pe.ca/test.pdf", 67, 3, 1, "2026-04-07")
+	if len(divs) != 1 {
+		t.Fatalf("len(divs)=%d, want 1", len(divs))
+	}
+	d := divs[0]
+	if d.Division.Nays != 12 || d.Division.Yeas != 7 {
+		t.Errorf("counts=(%d,%d), want (12,7)", d.Division.Nays, d.Division.Yeas)
+	}
+	if d.Division.Result != "Negatived" {
+		t.Errorf("result=%q, want Negatived", d.Division.Result)
+	}
+}
+
 func TestCrawlPrinceEdwardIslandVotes_HandlesCaptcha(t *testing.T) {
 	const peiLegislature = 68
 	srv := newTestServer(`<html><body><link rel="stylesheet" href="https://captcha.perfdrive.com/challenge.css"></body></html>`)
@@ -339,50 +423,6 @@ func TestCrawlPrinceEdwardIslandVotes_HandlesCaptcha(t *testing.T) {
 	}
 	if len(divs) != 0 {
 		t.Fatalf("expected 0 divisions on CAPTCHA, got %d", len(divs))
-	}
-}
-
-func TestCrawlPrinceEdwardIslandVotes_UsesWorkflowAPI(t *testing.T) {
-	const peiLegislature = 68
-	mux := http.NewServeMux()
-	mux.HandleFunc("/services/api/workflow", func(w http.ResponseWriter, r *http.Request) {
-		if r.Method != http.MethodPost {
-			t.Fatalf("expected POST, got %s", r.Method)
-		}
-		w.Header().Set("Content-Type", "application/json")
-		fmt.Fprint(w, `{"results":[{"url":"/journals/2026-04-11"},{"detailUrl":"/journals/2026-04-12"}]}`)
-	})
-	mux.HandleFunc("/journals/2026-04-11", func(w http.ResponseWriter, _ *http.Request) {
-		w.Header().Set("Content-Type", "text/html; charset=utf-8")
-		fmt.Fprint(w, `<html><body>
-<p>Motion agreed to:</p>
-<table class="division">
-<tr><td class="head" colspan="4">Yeas &#8212; 3</td></tr>
-<tr><td>Smith <br>Jones <br></td><td>Brown <br></td><td></td><td></td></tr>
-<tr><td class="head" colspan="4">Nays &#8212; 1</td></tr>
-<tr><td>Lee <br></td><td></td><td></td><td></td></tr>
-</table></body></html>`)
-	})
-	mux.HandleFunc("/journals/2026-04-12", func(w http.ResponseWriter, _ *http.Request) {
-		w.Header().Set("Content-Type", "text/html; charset=utf-8")
-		fmt.Fprint(w, `<html><body>
-<p>Motion agreed to:</p>
-<table class="division">
-<tr><td class="head" colspan="4">Yeas &#8212; 2</td></tr>
-<tr><td>Alpha <br></td><td>Beta <br></td><td></td><td></td></tr>
-<tr><td class="head" colspan="4">Nays &#8212; 0</td></tr>
-<tr><td></td><td></td><td></td><td></td></tr>
-</table></body></html>`)
-	})
-	srv := httptest.NewServer(mux)
-	defer srv.Close()
-
-	divs, err := scraper.CrawlPrinceEdwardIslandVotes(srv.URL+"/services/api/workflow", peiLegislature, 1, srv.Client())
-	if err != nil {
-		t.Fatalf("CrawlPrinceEdwardIslandVotes workflow: %v", err)
-	}
-	if len(divs) < 2 {
-		t.Fatalf("len(divs)=%d, want at least 2", len(divs))
 	}
 }
 

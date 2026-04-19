@@ -4,6 +4,7 @@ import (
 	"context"
 	"database/sql"
 	"encoding/json"
+	"fmt"
 	"net/http"
 	"net/http/httptest"
 	"strings"
@@ -11,6 +12,38 @@ import (
 
 	_ "github.com/mattn/go-sqlite3"
 )
+
+func buildTestPDF(text string) []byte {
+	objects := []string{
+		"1 0 obj\n<< /Type /Catalog /Pages 2 0 R >>\nendobj\n",
+		"2 0 obj\n<< /Type /Pages /Kids [3 0 R] /Count 1 >>\nendobj\n",
+		"3 0 obj\n<< /Type /Page /Parent 2 0 R /MediaBox [0 0 300 144] /Contents 4 0 R /Resources << /Font << /F1 5 0 R >> >> >>\nendobj\n",
+		fmt.Sprintf("4 0 obj\n<< /Length %d >>\nstream\nBT\n/F1 18 Tf\n36 96 Td\n(%s) Tj\nET\nendstream\nendobj\n", len("BT\n/F1 18 Tf\n36 96 Td\n("+text+") Tj\nET\n"), text),
+		"5 0 obj\n<< /Type /Font /Subtype /Type1 /BaseFont /Helvetica >>\nendobj\n",
+	}
+
+	var b strings.Builder
+	b.WriteString("%PDF-1.4\n")
+	offsets := make([]int, 0, len(objects)+1)
+	offsets = append(offsets, 0)
+	for _, obj := range objects {
+		offsets = append(offsets, b.Len())
+		b.WriteString(obj)
+	}
+	xref := b.Len()
+	b.WriteString("xref\n")
+	b.WriteString(fmt.Sprintf("0 %d\n", len(objects)+1))
+	b.WriteString("0000000000 65535 f \n")
+	for _, off := range offsets[1:] {
+		b.WriteString(fmt.Sprintf("%010d 00000 n \n", off))
+	}
+	b.WriteString("trailer\n")
+	b.WriteString(fmt.Sprintf("<< /Size %d /Root 1 0 R >>\n", len(objects)+1))
+	b.WriteString("startxref\n")
+	b.WriteString(fmt.Sprintf("%d\n", xref))
+	b.WriteString("%%EOF\n")
+	return []byte(b.String())
+}
 
 func TestParseSummaryJSON_FencedJSON(t *testing.T) {
 	raw := "```json\n{\"one_sentence\":\"One line\",\"plain_summary\":\"Two lines\",\"key_changes\":[\"a\"],\"who_is_affected\":[\"b\"],\"notable_considerations\":[],\"category\":\"Other\"}\n```"
@@ -187,6 +220,23 @@ func TestSummarizeBillsFromChannel_Clears404FullTextURL(t *testing.T) {
 	db.QueryRow(`SELECT COALESCE(full_text_url,'') FROM bills WHERE id='45-1-s-1'`).Scan(&storedURL)
 	if storedURL != "" {
 		t.Errorf("expected full_text_url to be cleared after 404, got %q", storedURL)
+	}
+}
+
+func TestFetchBillText_PDF(t *testing.T) {
+	pdfBytes := buildTestPDF("Prince Edward Island bill text")
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		w.Header().Set("Content-Type", "application/pdf")
+		w.Write(pdfBytes)
+	}))
+	defer srv.Close()
+
+	text, err := fetchBillText(t.Context(), srv.URL+"/bill.pdf")
+	if err != nil {
+		t.Fatalf("fetchBillText(pdf): %v", err)
+	}
+	if !strings.Contains(text, "Prince Edward Island bill text") {
+		t.Fatalf("expected extracted pdf text, got %q", text)
 	}
 }
 
