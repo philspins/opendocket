@@ -2034,6 +2034,7 @@ func CrawlManitobaVotes(indexURL string, legislature, session int, client *http.
 	return crawlManitobaVotesFromPDF(indexURL, legislature, session, client)
 }
 
+
 // CrawlQuebecVotes crawls Quebec registre/votes pages.
 func CrawlQuebecVotes(indexURL string, legislature, session int, client *http.Client) ([]ProvincialDivisionResult, error) {
 	if indexURL == "" {
@@ -3227,6 +3228,7 @@ func crawlPEIVotes(indexURL string, legislature, session int, client *http.Clien
 	return results, nil
 }
 
+
 // CrawlPrinceEdwardIslandVotes crawls PEI votes/proceedings pages.
 //
 // assembly.pe.ca is protected by a Radware bot-manager CAPTCHA challenge. This
@@ -3283,6 +3285,7 @@ func CrawlPrinceEdwardIslandVotes(indexURL string, legislature, session int, cli
 
 	return crawlPEIVotes(indexURL, legislature, session, client)
 }
+
 
 // CrawlGenericProvincialVotes fetches a provincial votes/proceedings index page,
 // discovers likely per-day links, then parses divisions from each page using
