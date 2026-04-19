@@ -15,6 +15,7 @@ import (
 
 	"github.com/PuerkitoBio/goquery"
 	"github.com/philspins/open-democracy/internal/db"
+	"github.com/philspins/open-democracy/internal/scraper/provincial"
 	"github.com/philspins/open-democracy/internal/utils"
 )
 
@@ -612,7 +613,7 @@ var parliamentSessionRe = regexp.MustCompile(`(?i)(\d{1,3})(?:st|nd|rd|th)\s*par
 var legislatureSessionRe = regexp.MustCompile(`(?i)(\d{1,3})(?:st|nd|rd|th)\s*(?:legislature|general assembly)[^\d]{0,40}(\d{1,2})(?:st|nd|rd|th)?\s*session`)
 var parliamentSessionURLRe = regexp.MustCompile(`(?i)(\d{1,3})(?:st|nd|rd|th)?[-_/]parliament[-_/](\d{1,2})(?:st|nd|rd|th)?[-_/]session`)
 var assemblySessionURLRe = regexp.MustCompile(`(?i)assembly[-_/](\d{1,3})[-_/]session[-_/](\d{1,2})(?:/|$)`) // e.g. /assembly-65-session-1
-var compactLegSessionURLRe = regexp.MustCompile(`(?i)/(\d{1,3})-(\d{1,2})(?:/|$)`) // e.g. /43-2/
+var compactLegSessionURLRe = regexp.MustCompile(`(?i)/(\d{1,3})-(\d{1,2})(?:/|$)`)                           // e.g. /43-2/
 var albertaLegislatureSessionLabelRe = regexp.MustCompile(`(?i)legislature\s*,?\s*session\s+(\d{1,3})-(\d{1,2})`)
 var albertaLegislatureSessionCommaRe = regexp.MustCompile(`(?i)legislature\s+(\d{1,3})\s*,\s*session\s+(\d{1,2})`)
 var albertaLegislatureSessionQueryRe = regexp.MustCompile(`(?i)[?&]legl=(\d{1,3})&session=(\d{1,2})(?:[&#]|$)`)
@@ -680,11 +681,11 @@ func resolveProvincialLegislatureSession(conn *sql.DB, src ProvincialSource, cli
 	}
 
 	if src.Code == "pe" {
-		if l, s, ok := fetchPEICurrentAssemblySession(); ok {
+		if l, s, ok := provincial.FetchPEICurrentAssemblySession(); ok {
 			log.Printf("[pe] auto-detected assembly=%d session=%d from WDF API", l, s)
 			return l, s
 		}
-		return peiGeneralAssembly, peiAssemblySession
+		return provincial.PEIFallbackAssembly(), provincial.PEIFallbackSession()
 	}
 	switch src.Special {
 	case "on":
@@ -860,33 +861,32 @@ func provincialSetSlugForCode(code string) string {
 	}
 }
 
+func cleanupManitobaStaleSessionDivisions(conn *sql.DB, legislature, session int) (int64, error) {
+	if conn == nil {
+		return 0, nil
+	}
+	idLike := fmt.Sprintf("mb-%d-%d-%%", legislature, session)
+	wantPath := fmt.Sprintf("%%%s/%s/%%", provincial.ParliamentOrdinalForTest(legislature), provincial.ParliamentOrdinalForTest(session))
 
-	func cleanupManitobaStaleSessionDivisions(conn *sql.DB, legislature, session int) (int64, error) {
-		if conn == nil {
-			return 0, nil
-		}
-		idLike := fmt.Sprintf("mb-%d-%d-%%", legislature, session)
-		wantPath := fmt.Sprintf("%%%s/%s/%%", parliamentOrdinal(legislature), parliamentOrdinal(session))
-
-		res, err := conn.Exec(`
+	res, err := conn.Exec(`
 			DELETE FROM member_votes
 			WHERE division_id IN (
 				SELECT id FROM divisions
 				WHERE id LIKE ? AND sitting_url IS NOT NULL AND sitting_url NOT LIKE ?
 			)`, idLike, wantPath)
-		if err != nil {
-			return 0, err
-		}
-		_, _ = res.RowsAffected()
+	if err != nil {
+		return 0, err
+	}
+	_, _ = res.RowsAffected()
 
-		divRes, err := conn.Exec(`
+	divRes, err := conn.Exec(`
 			DELETE FROM divisions
 			WHERE id LIKE ? AND sitting_url IS NOT NULL AND sitting_url NOT LIKE ?`, idLike, wantPath)
-		if err != nil {
-			return 0, err
-		}
-		return divRes.RowsAffected()
+	if err != nil {
+		return 0, err
 	}
+	return divRes.RowsAffected()
+}
 func ensureProvincialMembersForSource(conn *sql.DB, client *http.Client, delay time.Duration, src ProvincialSource) error {
 	if conn == nil {
 		return nil

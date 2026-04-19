@@ -1,5 +1,5 @@
 // Provincial votes scrapers: Ontario Votes & Proceedings and Saskatchewan Assembly Minutes.
-package scraper
+package provincial
 
 import (
 	"bufio"
@@ -71,7 +71,7 @@ func ProvincialDivisionID(province string, legislature, session, num int, date s
 
 // CrawlOntarioVPSittingDates fetches the Ontario legislature session index page
 // and returns the list of sitting dates that have a Votes and Proceedings document.
-func CrawlOntarioVPSittingDates(indexURL string, parliament, session int, client *http.Client) ([]string, error) {
+func crawlOntarioVPSittingDates(indexURL string, parliament, session int, client *http.Client) ([]string, error) {
 	if indexURL == "" {
 		indexURL = fmt.Sprintf(
 			"https://www.ola.org/en/legislative-business/house-documents/parliament-%d/session-%d",
@@ -129,7 +129,7 @@ func CrawlOntarioVPSittingDates(indexURL string, parliament, session int, client
 }
 
 // OntarioVPDayURL returns the canonical URL for the Ontario V&P page on a given date.
-func OntarioVPDayURL(parliament, session int, date string) string {
+func ontarioVPDayURL(parliament, session int, date string) string {
 	return fmt.Sprintf(
 		"https://www.ola.org/en/legislative-business/house-documents/parliament-%d/session-%d/%s/votes-proceedings",
 		parliament, session, date,
@@ -138,7 +138,7 @@ func OntarioVPDayURL(parliament, session int, date string) string {
 
 // CrawlOntarioVPDay scrapes a single Ontario Votes and Proceedings page for the
 // given date. vpURL is the full URL for the page (use OntarioVPDayURL to build it).
-func CrawlOntarioVPDay(vpURL string, parliament, session int, date string, client *http.Client) ([]ProvincialDivisionResult, error) {
+func crawlOntarioVPDay(vpURL string, parliament, session int, date string, client *http.Client) ([]ProvincialDivisionResult, error) {
 	if client == nil {
 		client = utils.NewHTTPClient()
 	}
@@ -280,7 +280,7 @@ func parseOntarioVPDoc(doc *goquery.Document, parliament, session int, date stri
 
 // CrawlSaskatchewanMinutesLinks fetches the Saskatchewan legislature archive page
 // and returns the list of Assembly Minutes HTML document URLs.
-func CrawlSaskatchewanMinutesLinks(archiveURL string, client *http.Client) ([]string, error) {
+func crawlSaskatchewanMinutesLinks(archiveURL string, client *http.Client) ([]string, error) {
 	if archiveURL == "" {
 		archiveURL = SaskatchewanArchiveURL
 	}
@@ -316,7 +316,7 @@ var isoDateFromURLRe = regexp.MustCompile(`(\d{4}-\d{2}-\d{2}|\d{8})`)
 
 // CrawlSaskatchewanMinutes scrapes a single Saskatchewan Assembly Minutes HTML document.
 // legislature and session are used to build division IDs.
-func CrawlSaskatchewanMinutes(minutesURL string, legislature, session int, client *http.Client) ([]ProvincialDivisionResult, error) {
+func crawlSaskatchewanMinutes(minutesURL string, legislature, session int, client *http.Client) ([]ProvincialDivisionResult, error) {
 	if client == nil {
 		client = utils.NewHTTPClient()
 	}
@@ -1539,7 +1539,7 @@ func crawlAlbertaVotesFromPDF(indexURL string, legislature, session int, client 
 // The AB assembly page links to per-day VP PDFs via backslash-escaped hrefs; this
 // function normalises those hrefs and parses each PDF using the Alberta-specific
 // "For the [phrase]: N / Against the [phrase]: N" vote format.
-func CrawlAlbertaVotes(indexURL string, legislature, session int, client *http.Client) ([]ProvincialDivisionResult, error) {
+func crawlAlbertaVotes(indexURL string, legislature, session int, client *http.Client) ([]ProvincialDivisionResult, error) {
 	if indexURL == "" {
 		indexURL = "https://www.assembly.ab.ca/assembly-business/assembly-records/votes-and-proceedings"
 	}
@@ -1810,7 +1810,7 @@ func crawlBritishColumbiaVotesFromLIMS(limsBase, parliament, session string, leg
 //
 // indexURL, when non-empty, overrides the LIMS base URL. This is used in tests to
 // point the scraper at a local HTTP server instead of lims.leg.bc.ca.
-func CrawlBritishColumbiaVotes(indexURL string, legislature, session int, client *http.Client) ([]ProvincialDivisionResult, error) {
+func crawlBritishColumbiaVotes(indexURL string, legislature, session int, client *http.Client) ([]ProvincialDivisionResult, error) {
 	if client == nil {
 		client = utils.NewHTTPClient()
 	}
@@ -2027,16 +2027,15 @@ func ParseManitobaAyeNayDivisionsForTest(text, detailURL string, legislature, se
 // (e.g. 43rd/43rd_3rd.html) → per-day PDF (e.g. 3rd/votes_041.pdf).
 // Each PDF is parsed for YEAS/NAYS recorded divisions using a format
 // adapted from the New Brunswick journal parser.
-func CrawlManitobaVotes(indexURL string, legislature, session int, client *http.Client) ([]ProvincialDivisionResult, error) {
+func crawlManitobaVotes(indexURL string, legislature, session int, client *http.Client) ([]ProvincialDivisionResult, error) {
 	if indexURL == "" {
 		indexURL = "https://www.gov.mb.ca/legislature/business/votes_proceedings.html"
 	}
 	return crawlManitobaVotesFromPDF(indexURL, legislature, session, client)
 }
 
-
 // CrawlQuebecVotes crawls Quebec registre/votes pages.
-func CrawlQuebecVotes(indexURL string, legislature, session int, client *http.Client) ([]ProvincialDivisionResult, error) {
+func crawlQuebecVotes(indexURL string, legislature, session int, client *http.Client) ([]ProvincialDivisionResult, error) {
 	if indexURL == "" {
 		indexURL = "https://www.assnat.qc.ca/en/travaux-parlementaires/registre-des-votes/index.html"
 	}
@@ -2134,7 +2133,7 @@ func CrawlQuebecVotes(indexURL string, legislature, session int, client *http.Cl
 }
 
 // CrawlNewBrunswickVotes crawls NB journals/votes pages.
-func CrawlNewBrunswickVotes(indexURL string, legislature, session int, client *http.Client) ([]ProvincialDivisionResult, error) {
+func crawlNewBrunswickVotes(indexURL string, legislature, session int, client *http.Client) ([]ProvincialDivisionResult, error) {
 	if indexURL == "" {
 		indexURL = "https://www.legnb.ca/en/house-business/journals"
 	}
@@ -2355,7 +2354,7 @@ func crawlNLVotesFromPDF(indexURL string, legislature, session int, client *http
 // present in the accessible static PDF format. Division results (Carried/Negatived) are
 // extracted from the motion outcome text; yea/nay counts are not available.
 // Two-level crawl: /HouseBusiness/Journals/ → ga51session1/ → YY-MM-DD.pdf
-func CrawlNewfoundlandAndLabradorVotes(indexURL string, legislature, session int, client *http.Client) ([]ProvincialDivisionResult, error) {
+func crawlNewfoundlandAndLabradorVotes(indexURL string, legislature, session int, client *http.Client) ([]ProvincialDivisionResult, error) {
 	if indexURL == "" {
 		indexURL = "https://www.assembly.nl.ca/HouseBusiness/Journals/"
 	}
@@ -2495,7 +2494,7 @@ func crawlNovaScotiaVotesFromPDF(indexURL string, legislature, session int, clie
 // divisions are exposed from per-session Hansard pages whose PDFs contain
 // recorded YEAS/NAYS blocks that the generic PDF parser can consume. The old
 // journals listing remains as a fallback for older sessions.
-func CrawlNovaScotiaVotes(indexURL string, legislature, session int, client *http.Client) ([]ProvincialDivisionResult, error) {
+func crawlNovaScotiaVotes(indexURL string, legislature, session int, client *http.Client) ([]ProvincialDivisionResult, error) {
 	if indexURL == "" {
 		indexURL = novaScotiaHansardSessionURL("", legislature, session)
 	}
@@ -2599,6 +2598,18 @@ func fetchPEICurrentAssemblySession() (int, int, bool) {
 		}
 	}
 	return 0, 0, false
+}
+
+func FetchPEICurrentAssemblySession() (int, int, bool) {
+	return fetchPEICurrentAssemblySession()
+}
+
+func PEIFallbackAssembly() int {
+	return peiGeneralAssembly
+}
+
+func PEIFallbackSession() int {
+	return peiAssemblySession
 }
 
 // peiAssemblySessionFromQueryParams extracts the legislature and session numbers
@@ -3228,7 +3239,6 @@ func crawlPEIVotes(indexURL string, legislature, session int, client *http.Clien
 	return results, nil
 }
 
-
 // CrawlPrinceEdwardIslandVotes crawls PEI votes/proceedings pages.
 //
 // assembly.pe.ca is protected by a Radware bot-manager CAPTCHA challenge. This
@@ -3252,7 +3262,7 @@ func newPEIHTTPClient(delay time.Duration) *http.Client {
 	}
 }
 
-func CrawlPrinceEdwardIslandVotes(indexURL string, legislature, session int, client *http.Client) ([]ProvincialDivisionResult, error) {
+func crawlPrinceEdwardIslandVotes(indexURL string, legislature, session int, client *http.Client) ([]ProvincialDivisionResult, error) {
 	defaultURL := indexURL == ""
 	if defaultURL {
 		indexURL = peiJournalsIndexURL
@@ -3286,11 +3296,10 @@ func CrawlPrinceEdwardIslandVotes(indexURL string, legislature, session int, cli
 	return crawlPEIVotes(indexURL, legislature, session, client)
 }
 
-
 // CrawlGenericProvincialVotes fetches a provincial votes/proceedings index page,
 // discovers likely per-day links, then parses divisions from each page using
 // resilient heuristics that work across multiple legislature layouts.
-func CrawlGenericProvincialVotes(indexURL, provinceCode, chamber string, legislature, session int, client *http.Client) ([]ProvincialDivisionResult, error) {
+func crawlGenericProvincialVotes(indexURL, provinceCode, chamber string, legislature, session int, client *http.Client) ([]ProvincialDivisionResult, error) {
 	return crawlGenericProvincialVotesWithMatcher(indexURL, provinceCode, chamber, legislature, session, client, genericVotesLinkRe)
 }
 

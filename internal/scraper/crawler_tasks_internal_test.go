@@ -5,6 +5,7 @@ import (
 	"testing"
 
 	"github.com/philspins/open-democracy/internal/db"
+	"github.com/philspins/open-democracy/internal/scraper/provincial"
 )
 
 func TestExtractLegislatureSessionCandidates_AlbertaFormats(t *testing.T) {
@@ -96,7 +97,7 @@ func TestNormalizeSaskatchewanBillsURL(t *testing.T) {
 	}
 
 	for _, tc := range tests {
-		if got := normalizeSaskatchewanBillsURL(tc.in); got != tc.want {
+		if got := provincial.NormalizeSaskatchewanBillsURLForTest(tc.in); got != tc.want {
 			t.Fatalf("normalizeSaskatchewanBillsURL(%q)=%q, want %q", tc.in, got, tc.want)
 		}
 	}
@@ -106,7 +107,7 @@ func TestCleanupManitobaStaleSessionDivisions(t *testing.T) {
 	path := filepath.Join(t.TempDir(), "test.db")
 	conn, err := db.Open(path)
 	if err != nil {
-		 t.Fatalf("db.Open: %v", err)
+		t.Fatalf("db.Open: %v", err)
 	}
 	defer conn.Close()
 

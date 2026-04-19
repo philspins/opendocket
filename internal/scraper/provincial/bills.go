@@ -1,4 +1,4 @@
-package scraper
+package provincial
 
 import (
 	"bytes"
@@ -208,7 +208,7 @@ func billTitleFromContext(anchorText, contextText, billNumber string) string {
 	return contextText
 }
 
-func CrawlAlbertaBills(indexURL string, legislature, session int, client *http.Client) ([]ProvincialBillStub, error) {
+func crawlAlbertaBills(indexURL string, legislature, session int, client *http.Client) ([]ProvincialBillStub, error) {
 	if indexURL == "" {
 		indexURL = "https://www.assembly.ab.ca/assembly-business/bills/bill-status"
 	}
@@ -226,7 +226,7 @@ func CrawlAlbertaBills(indexURL string, legislature, session int, client *http.C
 	return crawlProvincialBillsFromIndexWithMatcher(indexURL, "ab", legislature, session, "alberta", client, albertaBillLinkRe)
 }
 
-func CrawlBritishColumbiaBills(indexURL string, legislature, session int, client *http.Client) ([]ProvincialBillStub, error) {
+func crawlBritishColumbiaBills(indexURL string, legislature, session int, client *http.Client) ([]ProvincialBillStub, error) {
 	if client == nil {
 		client = utils.NewHTTPClient()
 	}
@@ -255,7 +255,7 @@ func CrawlBritishColumbiaBills(indexURL string, legislature, session int, client
 	return bills, nil
 }
 
-func CrawlManitobaBills(indexURL string, legislature, session int, client *http.Client) ([]ProvincialBillStub, error) {
+func crawlManitobaBills(indexURL string, legislature, session int, client *http.Client) ([]ProvincialBillStub, error) {
 	if indexURL == "" {
 		indexURL = "https://web2.gov.mb.ca/bills/sess/index.php"
 	}
@@ -269,14 +269,14 @@ func CrawlManitobaBills(indexURL string, legislature, session int, client *http.
 	return crawlProvincialBillsFromIndexWithMatcher(indexURL, "mb", legislature, session, "manitoba", client, manitobaBillLinkRe)
 }
 
-func CrawlNewBrunswickBills(indexURL string, legislature, session int, client *http.Client) ([]ProvincialBillStub, error) {
+func crawlNewBrunswickBills(indexURL string, legislature, session int, client *http.Client) ([]ProvincialBillStub, error) {
 	if indexURL == "" {
 		indexURL = "https://www.legnb.ca/en/legislation/bills"
 	}
 	return crawlProvincialBillsFromIndexWithMatcher(indexURL, "nb", legislature, session, "new_brunswick", client, newBrunswickBillLinkRe)
 }
 
-func CrawlNewfoundlandAndLabradorBills(indexURL string, legislature, session int, client *http.Client) ([]ProvincialBillStub, error) {
+func crawlNewfoundlandAndLabradorBills(indexURL string, legislature, session int, client *http.Client) ([]ProvincialBillStub, error) {
 	if indexURL == "" {
 		indexURL = "https://www.assembly.nl.ca/HouseBusiness/Bills/"
 	}
@@ -340,14 +340,14 @@ func CrawlNewfoundlandAndLabradorBills(indexURL string, legislature, session int
 	return out, nil
 }
 
-func CrawlNovaScotiaBills(indexURL string, legislature, session int, client *http.Client) ([]ProvincialBillStub, error) {
+func crawlNovaScotiaBills(indexURL string, legislature, session int, client *http.Client) ([]ProvincialBillStub, error) {
 	if indexURL == "" {
 		indexURL = "https://nslegislature.ca/legislative-business/bills-statutes/bills"
 	}
 	return crawlProvincialBillsFromIndexWithMatcher(indexURL, "ns", legislature, session, "nova_scotia", client, novaScotiaBillLinkRe)
 }
 
-func CrawlOntarioBills(indexURL string, legislature, session int, client *http.Client) ([]ProvincialBillStub, error) {
+func crawlOntarioBills(indexURL string, legislature, session int, client *http.Client) ([]ProvincialBillStub, error) {
 	if indexURL == "" {
 		indexURL = "https://www.ola.org/en/legislative-business"
 	}
@@ -524,7 +524,7 @@ func crawlPEIBillsFromWorkflow(wdfBase string, year, legislature, session int, c
 	return out, nil
 }
 
-func CrawlPrinceEdwardIslandBills(indexURL string, legislature, session int, client *http.Client) ([]ProvincialBillStub, error) {
+func crawlPrinceEdwardIslandBills(indexURL string, legislature, session int, client *http.Client) ([]ProvincialBillStub, error) {
 	defaultURL := indexURL == ""
 	if defaultURL {
 		indexURL = peiBillsIndexURL
@@ -558,14 +558,14 @@ func CrawlPrinceEdwardIslandBills(indexURL string, legislature, session int, cli
 	return crawlProvincialBillsFromIndexWithMatcher(indexURL, "pe", legislature, session, "pei", client, peiBillLinkRe)
 }
 
-func CrawlQuebecBills(indexURL string, legislature, session int, client *http.Client) ([]ProvincialBillStub, error) {
+func crawlQuebecBills(indexURL string, legislature, session int, client *http.Client) ([]ProvincialBillStub, error) {
 	if indexURL == "" {
 		indexURL = "https://www.assnat.qc.ca/en/travaux-parlementaires/projets-loi/index.html"
 	}
 	return crawlProvincialBillsFromIndexWithMatcher(indexURL, "qc", legislature, session, "quebec", client, quebecBillLinkRe)
 }
 
-func CrawlSaskatchewanBills(indexURL string, legislature, session int, client *http.Client) ([]ProvincialBillStub, error) {
+func crawlSaskatchewanBills(indexURL string, legislature, session int, client *http.Client) ([]ProvincialBillStub, error) {
 	indexURL = normalizeSaskatchewanBillsURL(indexURL)
 	if indexURL == "" {
 		indexURL = "https://www.legassembly.sk.ca/legislative-business/bills/"
@@ -590,6 +590,10 @@ func normalizeSaskatchewanBillsURL(indexURL string) string {
 		return "https://www.legassembly.sk.ca/legislative-business/bills/"
 	}
 	return trimmed
+}
+
+func NormalizeSaskatchewanBillsURLForTest(indexURL string) string {
+	return normalizeSaskatchewanBillsURL(indexURL)
 }
 
 type bcProgressBillFile struct {
