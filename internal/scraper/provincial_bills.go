@@ -4,12 +4,14 @@ import (
 	"bytes"
 	"encoding/json"
 	"fmt"
+	"log"
 	"net/http"
 	"net/url"
 	"regexp"
 	"sort"
 	"strconv"
 	"strings"
+	"time"
 
 	"github.com/PuerkitoBio/goquery"
 	"github.com/philspins/open-democracy/internal/utils"
@@ -351,16 +353,207 @@ func CrawlOntarioBills(indexURL string, legislature, session int, client *http.C
 	return crawlProvincialBillsFromIndexWithMatcher(indexURL, "on", legislature, session, "ontario", client, genericBillLinkRe)
 }
 
+// peiWorkflowBills is the WDF workflow name for the PEI legislative bill search.
+// The name is taken from the default-service attribute on the <gpei-root> web
+// component on assembly.pe.ca/legislative-business/house-records/bills.
+const (
+	peiWorkflowBills       = "LegislativeAssemblyBillProgress"
+	peiWDFActivityBills    = "LegislativeAssemblyBillSearch"
+	peiWDFActivityBillView = "LegislativeAssemblyBillView"
+
+	// peiBillsIndexURL is the default index page for PEI bills.
+	peiBillsIndexURL = peiAssemblyBase + "/legislative-business/house-records/bills"
+)
+
+func firstWDFLinkHref(nodes []wdfNode) string {
+	for _, node := range nodes {
+		if node.Type == "LinkV2" {
+			var ld wdfLinkData
+			if json.Unmarshal(node.Data, &ld) == nil && ld.Href != nil && strings.TrimSpace(*ld.Href) != "" {
+				return strings.TrimSpace(*ld.Href)
+			}
+		}
+		if href := firstWDFLinkHref(node.Children); href != "" {
+			return href
+		}
+	}
+	return ""
+}
+
+func fetchPEIBillDetailURL(wdfBase, billDocID string, client *http.Client, delay time.Duration) string {
+	if strings.TrimSpace(billDocID) == "" {
+		return ""
+	}
+	body, err := postPEIWorkflow(wdfBase, peiWorkflowBills, peiWDFActivityBillView, map[string]string{
+		"id": billDocID,
+	}, client, delay)
+	if err != nil || body == nil {
+		return ""
+	}
+
+	var resp wdfTreeResponse
+	if err := json.Unmarshal(body, &resp); err != nil || resp.Data == nil {
+		return ""
+	}
+	return firstWDFLinkHref(resp.Data)
+}
+
+// crawlPEIBillsFromWorkflow queries the WDF bill-progress workflow for PEI bill stubs.
+// wdfBase overrides the WDF service root URL (useful for tests); it defaults to
+// peiWDFAPIBase when empty. Returns (nil, nil) when the API is unavailable.
+// delay is the rate-limit pause threaded to postPEIWorkflow.
+func crawlPEIBillsFromWorkflow(wdfBase string, year, legislature, session int, client *http.Client, delay time.Duration) ([]ProvincialBillStub, error) {
+	params := map[string]string{
+		"search_bills":  "true",
+		"wdf_url_query": "true",
+	}
+	if legislature > 0 && session > 0 {
+		params["search"] = "assembly"
+		params["general_assembly"] = strconv.Itoa(legislature)
+		params["session"] = strconv.Itoa(session)
+	} else {
+		params["year"] = strconv.Itoa(year)
+		params["search"] = "year"
+	}
+	body, err := postPEIWorkflow(wdfBase, peiWorkflowBills, peiWDFActivityBills, params, client, delay)
+	if err != nil || body == nil {
+		return nil, err
+	}
+
+	var resp wdfTreeResponse
+	if err := json.Unmarshal(body, &resp); err != nil {
+		log.Printf("[pe-bills] wdf tree decode: %v; falling back to HTML", err)
+		return nil, nil
+	}
+	if resp.Data == nil {
+		log.Printf("[pe-bills] wdf returned null data; falling back to HTML")
+		return nil, nil
+	}
+
+	rows := wdfCollectRows(resp.Data)
+	if len(rows) == 0 {
+		log.Printf("[pe-bills] wdf returned 0 bill rows; falling back to HTML")
+		return nil, nil
+	}
+
+	seen := make(map[string]bool)
+	out := make([]ProvincialBillStub, 0, len(rows))
+	for _, row := range rows {
+		if len(row.Children) < 2 {
+			continue
+		}
+		// Cell 0: title link (LinkV2 inside TableV2Cell)
+		var title, detailURL, billDocID string
+		if len(row.Children[0].Children) > 0 {
+			lnk := row.Children[0].Children[0]
+			if lnk.Type == "LinkV2" {
+				var ld wdfLinkData
+				if json.Unmarshal(lnk.Data, &ld) == nil {
+					title = strings.TrimSpace(ld.Text)
+					if id, ok := ld.QueryParams["id"]; ok {
+						billDocID = strings.TrimSpace(id)
+					}
+					if ld.Href != nil && *ld.Href != "" {
+						detailURL = *ld.Href
+					} else if ld.RouterLink != nil && *ld.RouterLink != "" {
+						detailURL = *ld.RouterLink
+					}
+				}
+			}
+		}
+
+		// Cell 1: bill number text
+		billNumber := ""
+		var cd1 wdfCellData
+		if json.Unmarshal(row.Children[1].Data, &cd1) == nil && cd1.Text != nil {
+			billNumber = strings.ToUpper(strings.TrimSpace(*cd1.Text))
+		}
+		if billNumber == "" {
+			billNumber = ExtractProvincialBillNumber(title)
+		}
+		if billNumber == "" {
+			continue
+		}
+
+		// Cell 3: last activity date ("April 16, 2026" → "2026-04-16")
+		lastActivity := ""
+		if len(row.Children) > 3 {
+			var cd wdfCellData
+			if json.Unmarshal(row.Children[3].Data, &cd) == nil && cd.Text != nil {
+				lastActivity = utils.FindDateInText(*cd.Text)
+			}
+		}
+
+		id := ProvincialBillID("pe", legislature, session, billNumber)
+		if id == "" || seen[id] {
+			continue
+		}
+		seen[id] = true
+
+		if title == "" {
+			title = "Bill " + billNumber
+		}
+
+		// The list row only exposes a routerLink + opaque bill document ID. Resolve
+		// that ID through the WDF detail workflow to obtain the actual bill PDF URL.
+		if billDocID != "" {
+			if pdfURL := fetchPEIBillDetailURL(wdfBase, billDocID, client, delay); pdfURL != "" {
+				detailURL = pdfURL
+			}
+		}
+		detailURL = resolveRelativeURL(peiAssemblyBase, detailURL)
+
+		out = append(out, ProvincialBillStub{
+			ID:               id,
+			ProvinceCode:     "pe",
+			Parliament:       legislature,
+			Session:          session,
+			Number:           billNumber,
+			Title:            title,
+			Chamber:          "pei",
+			DetailURL:        detailURL,
+			SourceURL:        strings.TrimRight(wdfBase, "/") + "/legislative-assembly/services/api/workflow",
+			LastActivityDate: lastActivity,
+			LastScraped:      utils.NowISO(),
+		})
+	}
+
+	sort.Slice(out, func(i, j int) bool { return out[i].ID < out[j].ID })
+	log.Printf("[pe-bills] wdf parsed %d bills", len(out))
+	return out, nil
+}
+
 func CrawlPrinceEdwardIslandBills(indexURL string, legislature, session int, client *http.Client) ([]ProvincialBillStub, error) {
-	if indexURL == "" {
-		indexURL = "https://www.assembly.pe.ca/legislative-business/house-records/bills"
+	defaultURL := indexURL == ""
+	if defaultURL {
+		indexURL = peiBillsIndexURL
 	}
-	// assembly.pe.ca is protected by a Radware bot-manager CAPTCHA. Use the same
-	// browser-like transport used by CrawlPrinceEdwardIslandVotes when no client
-	// is provided by the caller.
+	// When no client is supplied (production), create a PEI-specific client with
+	// browser-like headers and the production rate-limit delay.  When the caller
+	// provides their own client (e.g. tests), use a zero delay so the test suite
+	// runs at full speed and the rate limiter has no effect outside of PEI crawls.
+	delay := time.Duration(0)
 	if client == nil {
-		client = newPEIHTTPClient()
+		delay = peiDefaultDelay
+		client = newPEIHTTPClient(delay)
 	}
+
+	// Attempt the WDF workflow API first. In production (defaultURL), use the
+	// canonical WDF base. When a test server URL is passed, route the WDF call
+	// through the same server so tests can mock both paths via the same mux.
+	wdfBase := peiWDFAPIBase
+	if !defaultURL {
+		wdfBase = indexURL
+	}
+	year := time.Now().Year()
+	bills, werr := crawlPEIBillsFromWorkflow(wdfBase, year, legislature, session, client, delay)
+	if werr == nil && len(bills) > 0 {
+		return bills, nil
+	}
+	if werr != nil {
+		log.Printf("[pe-bills] wdf api: %v; falling back to HTML", werr)
+	}
+
 	return crawlProvincialBillsFromIndexWithMatcher(indexURL, "pe", legislature, session, "pei", client, peiBillLinkRe)
 }
 

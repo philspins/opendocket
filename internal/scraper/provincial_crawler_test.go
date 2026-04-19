@@ -2,9 +2,12 @@ package scraper_test
 
 import (
 	"database/sql"
+	"encoding/json"
+	"fmt"
 	"net/http"
 	"net/http/httptest"
 	"path/filepath"
+	"strings"
 	"testing"
 	"time"
 
@@ -152,3 +155,116 @@ func TestCrawlProvinceSource_FallsBackToPreviousSessionWhenDBEmpty(t *testing.T)
 	}
 }
 
+func TestCrawlProvinceSource_PEICrawlsAllSessionsInCurrentLegislature(t *testing.T) {
+	mux := http.NewServeMux()
+	srv := httptest.NewServer(mux)
+	defer srv.Close()
+
+	mux.HandleFunc("/bills", func(w http.ResponseWriter, _ *http.Request) {
+		w.Header().Set("Content-Type", "text/html; charset=utf-8")
+		_, _ = w.Write([]byte(`<html><body><h2>67th General Assembly 3rd Session</h2></body></html>`))
+	})
+	mux.HandleFunc("/journals", func(w http.ResponseWriter, _ *http.Request) {
+		w.Header().Set("Content-Type", "text/html; charset=utf-8")
+		_, _ = w.Write([]byte(`<html><body><h2>67th General Assembly 3rd Session</h2></body></html>`))
+	})
+	workflowHandler := func(w http.ResponseWriter, r *http.Request) {
+		defer r.Body.Close()
+		var req struct {
+			QueryName string            `json:"queryName"`
+			QueryVars map[string]string `json:"queryVars"`
+		}
+		if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+			http.Error(w, err.Error(), http.StatusBadRequest)
+			return
+		}
+		session := req.QueryVars["session"]
+		if req.QueryName != "LegislativeAssemblyBillView" {
+			if req.QueryVars["search"] != "assembly" {
+				t.Fatalf("search=%q, want assembly", req.QueryVars["search"])
+			}
+			if req.QueryVars["general_assembly"] != "67" {
+				t.Fatalf("general_assembly=%q, want 67", req.QueryVars["general_assembly"])
+			}
+		}
+		w.Header().Set("Content-Type", "application/json")
+		switch req.QueryName {
+		case "LegislativeAssemblyBillSearch":
+			_, _ = fmt.Fprintf(w, `{"processInstanceId":"b%s","messages":{"error":[]},"data":[{"id":"1","type":"TableV2","data":{},"children":[{"id":"2","type":"TableV2Row","data":{},"children":[{"id":"3","type":"TableV2Cell","data":{},"children":[{"id":"4","type":"LinkV2","data":{"text":"Bill %s - Session %s Act","routerLink":"../LegislativeAssemblyBillView","queryParams":{"id":"bill-doc-%s"}},"children":[]}]},{"id":"5","type":"TableV2Cell","data":{"text":"%s"},"children":[]},{"id":"6","type":"TableV2Cell","data":{"text":"First Reading"},"children":[]},{"id":"7","type":"TableV2Cell","data":{"text":"March 15, 2026"},"children":[]}]}]}]}`, session, session, session, session, session)
+		case "LegislativeAssemblyBillView":
+			billDocID := req.QueryVars["id"]
+			_, _ = fmt.Fprintf(w, `{"processInstanceId":"d%s","messages":{"error":[]},"data":[{"id":"10","type":"TableV2","data":{},"children":[{"id":"11","type":"TableV2Row","data":{},"children":[{"id":"12","type":"TableV2Header","data":{"text":"Read Original Bill Text* (PDF)"},"children":[]},{"id":"13","type":"TableV2Cell","data":{"text":null},"children":[{"id":"14","type":"LinkV2","data":{"text":"Bill Text","href":"https://docs.assembly.pe.ca/download/dms?objectId=%s&fileName=%s.pdf"},"children":[]}]}]}]}]}`, billDocID, billDocID, strings.TrimPrefix(billDocID, "bill-doc-"))
+		case "LegislativeAssemblyJournalsSearch":
+			_, _ = fmt.Fprintf(w, `{"processInstanceId":"j%s","messages":{"error":[]},"data":[{"id":"1","type":"TableV2","data":{},"children":[{"id":"2","type":"TableV2Row","data":{},"children":[{"id":"3","type":"TableV2Cell","data":{},"children":[{"id":"4","type":"LinkV2","data":{"text":"Journal Session %s","href":"%s/journals/session-%s"},"children":[]}]}]}]}]}`, session, session, srv.URL, session)
+		default:
+			http.Error(w, "unexpected query", http.StatusBadRequest)
+		}
+	}
+	mux.HandleFunc("/bills/legislative-assembly/services/api/workflow", workflowHandler)
+	mux.HandleFunc("/journals/legislative-assembly/services/api/workflow", workflowHandler)
+	for session := 1; session <= 3; session++ {
+		session := session
+		mux.HandleFunc(fmt.Sprintf("/journals/session-%d", session), func(w http.ResponseWriter, _ *http.Request) {
+			w.Header().Set("Content-Type", "text/html; charset=utf-8")
+			_, _ = w.Write([]byte(fmt.Sprintf(`<!DOCTYPE html><html><body>
+<p>Bill %d carried on the following division:</p>
+<table class="division">
+<tr><td class="head" colspan="4">Yeas &#8212; 3</td></tr>
+<tr><td>Alpha <br>Beta <br></td><td>Gamma <br></td><td></td><td></td></tr>
+<tr><td class="head" colspan="4">Nays &#8212; 1</td></tr>
+<tr><td>Delta <br></td><td></td><td></td><td></td></tr>
+</table></body></html>`, session)))
+		})
+	}
+
+	conn := newScraperDB(t)
+	for i := 0; i < 10; i++ {
+		if err := db.UpsertMember(conn, db.Member{
+			ID:              fmt.Sprintf("pe-member-%d", i),
+			Name:            fmt.Sprintf("Member %d", i),
+			Province:        "Prince Edward Island",
+			Active:          true,
+			GovernmentLevel: "provincial",
+		}); err != nil {
+			t.Fatalf("UpsertMember(%d): %v", i, err)
+		}
+	}
+
+	enqueued := make(map[string]bool)
+	enqueue := func(billID, _, _, _ string) {
+		enqueued[billID] = true
+	}
+	src := scraper.ProvincialSource{
+		Code:     "pe",
+		Province: "Prince Edward Island",
+		Chamber:  "pei",
+		BillsURL: srv.URL + "/bills",
+		VotesURL: srv.URL + "/journals",
+	}
+
+	if err := scraper.CrawlProvinceSource(conn, srv.Client(), noDelay, src, enqueue); err != nil {
+		t.Fatalf("CrawlProvinceSource: %v", err)
+	}
+
+	for session := 1; session <= 3; session++ {
+		billID := fmt.Sprintf("pe-67-%d-%d", session, session)
+		var billCount int
+		if err := conn.QueryRow(`SELECT COUNT(1) FROM bills WHERE id = ?`, billID).Scan(&billCount); err != nil {
+			t.Fatalf("bill count query for %s: %v", billID, err)
+		}
+		if billCount != 1 {
+			t.Fatalf("expected bill %s to be stored once, got %d", billID, billCount)
+		}
+		if !enqueued[billID] {
+			t.Fatalf("expected summary enqueue for %s", billID)
+		}
+	}
+
+	var distinctSessions int
+	if err := conn.QueryRow(`SELECT COUNT(DISTINCT session) FROM divisions WHERE id LIKE 'pe-67-%'`).Scan(&distinctSessions); err != nil {
+		t.Fatalf("division session count query: %v", err)
+	}
+	if distinctSessions != 3 {
+		t.Fatalf("expected divisions from 3 PEI sessions, got %d", distinctSessions)
+	}
+}
