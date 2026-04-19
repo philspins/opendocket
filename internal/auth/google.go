@@ -5,8 +5,16 @@ import (
 	"net/http"
 	"net/url"
 	"os"
+	"strings"
 	"time"
 )
+
+func (s *Service) googleRedirectURI() string {
+	if callbackURL := strings.TrimSpace(os.Getenv("OAUTH_CALLBACK_URL")); callbackURL != "" {
+		return callbackURL
+	}
+	return s.baseURL + "/auth/google/callback"
+}
 
 func (s *Service) HandleGoogleLogin(w http.ResponseWriter, r *http.Request) {
 	s.startOAuth(
@@ -14,7 +22,7 @@ func (s *Service) HandleGoogleLogin(w http.ResponseWriter, r *http.Request) {
 		"google",
 		"https://accounts.google.com/o/oauth2/v2/auth",
 		os.Getenv("GOOGLE_CLIENT_ID"),
-		s.baseURL+"/auth/google/callback",
+		s.googleRedirectURI(),
 		"openid email profile",
 	)
 }
@@ -30,7 +38,7 @@ func (s *Service) HandleGoogleCallback(w http.ResponseWriter, r *http.Request) {
 	params.Set("code", code)
 	params.Set("client_id", os.Getenv("GOOGLE_CLIENT_ID"))
 	params.Set("client_secret", os.Getenv("GOOGLE_CLIENT_SECRET"))
-	params.Set("redirect_uri", s.baseURL+"/auth/google/callback")
+	params.Set("redirect_uri", s.googleRedirectURI())
 	params.Set("grant_type", "authorization_code")
 	b, err := exchangeCode(s.httpClient, "https://oauth2.googleapis.com/token", params)
 	if err != nil {

@@ -220,6 +220,29 @@ func TestHandleGoogleLogin_SetsStateCookieAndRedirect(t *testing.T) {
 	}
 }
 
+func TestHandleGoogleLogin_UsesOAuthCallbackOverride(t *testing.T) {
+	svc, _ := newTestService(t)
+	t.Setenv("GOOGLE_CLIENT_ID", "google-client")
+	t.Setenv("OAUTH_CALLBACK_URL", "https://open-democracy.ca/auth/google/callback")
+
+	req := httptest.NewRequest(http.MethodGet, "/auth/google/login", nil)
+	rr := httptest.NewRecorder()
+
+	svc.HandleGoogleLogin(rr, req)
+
+	if rr.Code != http.StatusFound {
+		t.Fatalf("status=%d want %d", rr.Code, http.StatusFound)
+	}
+	loc := rr.Header().Get("Location")
+	u, err := url.Parse(loc)
+	if err != nil {
+		t.Fatalf("parse location: %v", err)
+	}
+	if got, want := u.Query().Get("redirect_uri"), "https://open-democracy.ca/auth/google/callback"; got != want {
+		t.Fatalf("redirect_uri=%q want %q", got, want)
+	}
+}
+
 func TestHandleLogout_DeletesSessionAndClearsCookie(t *testing.T) {
 	svc, st := newTestService(t)
 	u, err := st.UpsertUser("logout@example.com")
