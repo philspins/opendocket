@@ -2,6 +2,7 @@
 package summarizer
 
 import (
+	"bufio"
 	"bytes"
 	"context"
 	"database/sql"
@@ -12,6 +13,9 @@ import (
 	"log"
 	"net/http"
 	"os"
+	"path/filepath"
+	"regexp"
+	"sort"
 	"strconv"
 	"strings"
 	"sync"
@@ -20,6 +24,7 @@ import (
 	"unicode/utf8"
 
 	"github.com/PuerkitoBio/goquery"
+	"github.com/pdfcpu/pdfcpu/pkg/api"
 	"github.com/philspins/open-democracy/internal/utils"
 )
 
@@ -33,6 +38,78 @@ const (
 	claudeModel = "claude-sonnet-4-6"
 	claudeURL   = "https://api.anthropic.com/v1/messages"
 )
+
+var pdfParenTextRe = regexp.MustCompile(`\(([^()]*)\)`)
+
+func decodePDFStringToken(token string) string {
+	token = strings.ReplaceAll(token, `\\(`, "(")
+	token = strings.ReplaceAll(token, `\\)`, ")")
+	token = strings.ReplaceAll(token, `\\n`, " ")
+	token = strings.ReplaceAll(token, `\\r`, " ")
+	token = strings.ReplaceAll(token, `\\t`, " ")
+	token = strings.ReplaceAll(token, `\\`, "")
+	return token
+}
+
+func extractPDFText(data []byte) (string, error) {
+	tmpFile, err := os.CreateTemp("", "od-bill-*.pdf")
+	if err != nil {
+		return "", err
+	}
+	tmpPath := tmpFile.Name()
+	defer os.Remove(tmpPath)
+	if _, err := tmpFile.Write(data); err != nil {
+		tmpFile.Close()
+		return "", err
+	}
+	if err := tmpFile.Close(); err != nil {
+		return "", err
+	}
+
+	contentDir, err := os.MkdirTemp("", "od-bill-content-*")
+	if err != nil {
+		return "", err
+	}
+	defer os.RemoveAll(contentDir)
+
+	if err := api.ExtractContentFile(tmpPath, contentDir, nil, nil); err != nil {
+		return "", err
+	}
+
+	files, err := filepath.Glob(filepath.Join(contentDir, "*_Content_page_*.txt"))
+	if err != nil {
+		return "", err
+	}
+	sort.Strings(files)
+
+	var text strings.Builder
+	for _, contentPath := range files {
+		fp, err := os.Open(contentPath)
+		if err != nil {
+			return "", err
+		}
+		scanner := bufio.NewScanner(fp)
+		for scanner.Scan() {
+			line := strings.TrimSpace(scanner.Text())
+			if strings.HasSuffix(line, "TJ") || strings.HasSuffix(line, "Tj") {
+				for _, match := range pdfParenTextRe.FindAllStringSubmatch(line, -1) {
+					if len(match) >= 2 {
+						text.WriteString(decodePDFStringToken(match[1]))
+					}
+				}
+				text.WriteByte(' ')
+			}
+		}
+		if err := scanner.Err(); err != nil {
+			fp.Close()
+			return "", err
+		}
+		fp.Close()
+		text.WriteByte('\f')
+	}
+
+	return strings.TrimSpace(collapseWhitespace(text.String())), nil
+}
 
 func selectedClaudeModels() []string {
 	models := make([]string, 0, 5)
@@ -575,6 +652,15 @@ func fetchBillText(ctx context.Context, url string) (string, error) {
 			resp.Header.Get("Content-Type"),
 			snippet,
 		)
+	}
+
+	contentType := strings.ToLower(resp.Header.Get("Content-Type"))
+	if strings.Contains(contentType, "application/pdf") || strings.HasSuffix(strings.ToLower(url), ".pdf") {
+		pdfData, err := io.ReadAll(resp.Body)
+		if err != nil {
+			return "", err
+		}
+		return extractPDFText(pdfData)
 	}
 
 	// Use goquery to parse HTML and extract text.

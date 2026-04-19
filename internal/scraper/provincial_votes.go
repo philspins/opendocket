@@ -2732,9 +2732,15 @@ func ParsePEIJournalDivisionsForTest(text, pdfURL string, legislature, session, 
 // Returns (nil, nil) when the workflow API is unavailable or returns no items.
 func crawlPEIVotesFromWorkflow(wdfBase string, year, legislature, session int, client *http.Client, delay time.Duration) ([]ProvincialDivisionResult, error) {
 	queryVars := map[string]string{
-		"year":          strconv.Itoa(year),
-		"search":        "year",
 		"wdf_url_query": "true",
+	}
+	if legislature > 0 && session > 0 {
+		queryVars["search"] = "assembly"
+		queryVars["general_assembly"] = strconv.Itoa(legislature)
+		queryVars["session"] = strconv.Itoa(session)
+	} else {
+		queryVars["year"] = strconv.Itoa(year)
+		queryVars["search"] = "year"
 	}
 	body, err := postPEIWorkflow(wdfBase, peiWorkflowJournals, peiWDFActivityJournals, queryVars, client, delay)
 	if err != nil || body == nil {

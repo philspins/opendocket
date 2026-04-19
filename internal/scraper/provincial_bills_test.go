@@ -1,6 +1,7 @@
 package scraper_test
 
 import (
+	"encoding/json"
 	"net/http"
 	"net/http/httptest"
 	"testing"
@@ -274,7 +275,8 @@ func TestProvinceSpecificVoteCrawlerEntryPoints(t *testing.T) {
 // workflow API endpoint serves valid JSON, bills are parsed from it instead of
 // falling back to HTML scraping.
 func TestCrawlPrinceEdwardIslandBills_UsesWorkflowAPI(t *testing.T) {
-	const billsJSON = `{"processInstanceId":"t1","messages":{"error":[]},"data":[{"id":"1","type":"TableV2","data":{},"children":[{"id":"2","type":"TableV2Row","data":{},"children":[{"id":"3","type":"TableV2Cell","data":{},"children":[{"id":"4","type":"LinkV2","data":{"text":"Bill 1 - An Act to Amend the Highway Traffic Act","routerLink":"/bills/bill-1","queryParams":{}},"children":[]}]},{"id":"5","type":"TableV2Cell","data":{"text":"1"},"children":[]},{"id":"6","type":"TableV2Cell","data":{"text":"First Reading"},"children":[]},{"id":"7","type":"TableV2Cell","data":{"text":"March 15, 2026"},"children":[]}]}]}]}`
+	const billsJSON = `{"processInstanceId":"t1","messages":{"error":[]},"data":[{"id":"1","type":"TableV2","data":{},"children":[{"id":"2","type":"TableV2Row","data":{},"children":[{"id":"3","type":"TableV2Cell","data":{},"children":[{"id":"4","type":"LinkV2","data":{"text":"Bill 1 - An Act to Amend the Highway Traffic Act","routerLink":"../LegislativeAssemblyBillView","queryParams":{"id":"bill-doc-1"}},"children":[]}]},{"id":"5","type":"TableV2Cell","data":{"text":"1"},"children":[]},{"id":"6","type":"TableV2Cell","data":{"text":"First Reading"},"children":[]},{"id":"7","type":"TableV2Cell","data":{"text":"March 15, 2026"},"children":[]}]}]}]}`
+	const detailJSON = `{"processInstanceId":"t2","messages":{"error":[]},"data":[{"id":"10","type":"Heading","data":{"text":"Bill no. 1 - An Act to Amend the Highway Traffic Act","size":2},"children":[]},{"id":"11","type":"TableV2","data":{},"children":[{"id":"12","type":"TableV2Row","data":{},"children":[{"id":"13","type":"TableV2Header","data":{"text":"Read Original Bill Text* (PDF)"},"children":[]},{"id":"14","type":"TableV2Cell","data":{"text":null},"children":[{"id":"15","type":"LinkV2","data":{"text":"An Act to Amend the Highway Traffic Act","href":"https://docs.assembly.pe.ca/download/dms?objectId=bill-doc-1&fileName=bill-1.pdf"},"children":[]}]}]}]}]}`
 
 	mux := http.NewServeMux()
 	mux.HandleFunc("/legislative-assembly/services/api/workflow", func(w http.ResponseWriter, r *http.Request) {
@@ -282,7 +284,26 @@ func TestCrawlPrinceEdwardIslandBills_UsesWorkflowAPI(t *testing.T) {
 			http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
 			return
 		}
+		defer r.Body.Close()
+		var req struct {
+			QueryName string            `json:"queryName"`
+			QueryVars map[string]string `json:"queryVars"`
+		}
+		if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+			http.Error(w, err.Error(), http.StatusBadRequest)
+			return
+		}
 		w.Header().Set("Content-Type", "application/json")
+		if req.QueryName == "LegislativeAssemblyBillView" && req.QueryVars["id"] == "bill-doc-1" {
+			w.Write([]byte(detailJSON))
+			return
+		}
+		if req.QueryVars["search"] != "assembly" {
+			t.Fatalf("search=%q, want assembly", req.QueryVars["search"])
+		}
+		if req.QueryVars["general_assembly"] != "68" || req.QueryVars["session"] != "1" {
+			t.Fatalf("assembly/session=(%q,%q), want (68,1)", req.QueryVars["general_assembly"], req.QueryVars["session"])
+		}
 		w.Write([]byte(billsJSON))
 	})
 	srv := httptest.NewServer(mux)
@@ -300,6 +321,9 @@ func TestCrawlPrinceEdwardIslandBills_UsesWorkflowAPI(t *testing.T) {
 	}
 	if bills[0].ProvinceCode != "pe" {
 		t.Errorf("province: got %q, want %q", bills[0].ProvinceCode, "pe")
+	}
+	if bills[0].DetailURL != "https://docs.assembly.pe.ca/download/dms?objectId=bill-doc-1&fileName=bill-1.pdf" {
+		t.Errorf("detail url: got %q", bills[0].DetailURL)
 	}
 }
 
@@ -345,6 +369,20 @@ func TestCrawlPrinceEdwardIslandVotes_UsesWorkflowAPI(t *testing.T) {
 		if r.Method != http.MethodPost {
 			http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
 			return
+		}
+		defer r.Body.Close()
+		var req struct {
+			QueryVars map[string]string `json:"queryVars"`
+		}
+		if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+			http.Error(w, err.Error(), http.StatusBadRequest)
+			return
+		}
+		if req.QueryVars["search"] != "assembly" {
+			t.Fatalf("search=%q, want assembly", req.QueryVars["search"])
+		}
+		if req.QueryVars["general_assembly"] != "68" || req.QueryVars["session"] != "1" {
+			t.Fatalf("assembly/session=(%q,%q), want (68,1)", req.QueryVars["general_assembly"], req.QueryVars["session"])
 		}
 		w.Header().Set("Content-Type", "application/json")
 		w.Write([]byte(journalsJSON))
@@ -393,4 +431,3 @@ func TestCrawlPrinceEdwardIslandVotes_FallsBackOnWorkflowNon200(t *testing.T) {
 		t.Fatal("expected divisions from HTML fallback when WDF API returns non-200")
 	}
 }
-

@@ -344,9 +344,7 @@ func crawlBillsForSource(src ProvincialSource, legislature, session int, client 
 	case "on":
 		return CrawlOntarioBills(src.BillsURL, legislature, session, client)
 	case "pe":
-		// Pass nil so the callee creates a browser-header client to bypass
-		// the Radware bot-manager on assembly.pe.ca.
-		return CrawlPrinceEdwardIslandBills(src.BillsURL, legislature, session, nil)
+		return CrawlPrinceEdwardIslandBills(src.BillsURL, legislature, session, peiSourceClient(src.BillsURL, client))
 	case "qc":
 		return CrawlQuebecBills(src.BillsURL, legislature, session, client)
 	case "sk":
@@ -374,9 +372,7 @@ func crawlDivisionsForSource(src ProvincialSource, legislature, session int, cli
 	case "ns":
 		return CrawlNovaScotiaVotes(src.VotesURL, legislature, session, client)
 	case "pe":
-		// Pass nil so the callee creates a browser-header client to bypass
-		// the Radware bot-manager CAPTCHA on assembly.pe.ca.
-		return CrawlPrinceEdwardIslandVotes(src.VotesURL, legislature, session, nil)
+		return CrawlPrinceEdwardIslandVotes(src.VotesURL, legislature, session, peiSourceClient(src.VotesURL, client))
 	case "qc":
 		return CrawlQuebecVotes(src.VotesURL, legislature, session, client)
 	default:
@@ -384,12 +380,27 @@ func crawlDivisionsForSource(src ProvincialSource, legislature, session int, cli
 	}
 }
 
+func peiSourceClient(url string, client *http.Client) *http.Client {
+	if client == nil {
+		return nil
+	}
+	if strings.HasPrefix(url, "http://127.0.0.1") || strings.HasPrefix(url, "http://localhost") {
+		return client
+	}
+	return nil
+}
+
 // CrawlProvinceSource crawls bills and votes for one province source and upserts
 // normalized records into bills/divisions/member_votes tables.
 func CrawlProvinceSource(conn *sql.DB, client *http.Client, delay time.Duration, src ProvincialSource, enqueueSummary BillSummaryEnqueue) error {
 	log.Printf("[provincial] crawling %s", src.Province)
-	legislature, session := resolveProvincialLegislatureSession(conn, src, client)
-	log.Printf("[provincial][%s] detected legislature/session: %d/%d", src.Code, legislature, session)
+	legislature, currentSession := resolveProvincialLegislatureSession(conn, src, client)
+	sessions := sessionsToCrawlForSource(src, currentSession)
+	if len(sessions) == 1 {
+		log.Printf("[provincial][%s] detected legislature/session: %d/%d", src.Code, legislature, currentSession)
+	} else {
+		log.Printf("[provincial][%s] detected legislature/current session: %d/%d; crawling sessions %v", src.Code, legislature, currentSession, sessions)
+	}
 
 	stats := provincialCrawlStats{}
 	defer func() {
@@ -412,26 +423,46 @@ func CrawlProvinceSource(conn *sql.DB, client *http.Client, delay time.Duration,
 		)
 	}()
 
+	allowPreviousSessionFallback := len(sessions) == 1
+	for _, session := range sessions {
+		log.Printf("[provincial][%s] crawling legislature/session: %d/%d", src.Code, legislature, session)
+		if err := crawlProvinceSession(conn, client, delay, src, legislature, session, enqueueSummary, allowPreviousSessionFallback, &stats); err != nil {
+			return err
+		}
+	}
+
+	return nil
+}
+
+func sessionsToCrawlForSource(src ProvincialSource, currentSession int) []int {
+	if src.Code != "pe" || currentSession <= 1 {
+		return []int{currentSession}
+	}
+	sessions := make([]int, 0, currentSession)
+	for session := currentSession; session >= 1; session-- {
+		sessions = append(sessions, session)
+	}
+	return sessions
+}
+
+func crawlProvinceSession(conn *sql.DB, client *http.Client, delay time.Duration, src ProvincialSource, legislature, session int, enqueueSummary BillSummaryEnqueue, allowPreviousSessionFallback bool, stats *provincialCrawlStats) error {
 	var (
 		bills []ProvincialBillStub
 		berr  error
 	)
 	bills, berr = crawlBillsForSource(src, legislature, session, client)
-	// If the current session returned no bills and the DB has no bills at all for
-	// this province (fresh install or brand-new session), retry with the previous
-	// session so the database is seeded with the most recent available data.
-	if berr == nil && len(bills) == 0 && session > 1 && provinceBillCountInDB(conn, src.Code) == 0 {
+	if allowPreviousSessionFallback && berr == nil && len(bills) == 0 && session > 1 && provinceBillCountInDB(conn, src.Code) == 0 {
 		log.Printf("[provincial][%s] 0 bills for session %d; retrying with previous session %d to seed DB", src.Code, session, session-1)
 		bills, berr = crawlBillsForSource(src, legislature, session-1, client)
 		if berr == nil && len(bills) > 0 {
-			session = session - 1
+			session--
 		}
 	}
 	if berr != nil {
 		stats.Errors++
 		log.Printf("[provincial] %s bills error: %v", src.Code, berr)
 	} else {
-		stats.BillsSeen = len(bills)
+		stats.BillsSeen += len(bills)
 		for _, b := range bills {
 			if err := db.UpsertBill(conn, db.Bill{
 				ID:               b.ID,
@@ -483,8 +514,6 @@ func CrawlProvinceSource(conn *sql.DB, client *http.Client, delay time.Duration,
 	case "sk":
 		links, err := CrawlSaskatchewanMinutesLinks(src.VotesURL, client)
 		if err != nil {
-			// The SK archive URL may be temporarily unavailable or the site has changed.
-			// Log the error and continue with 0 divisions rather than aborting.
 			stats.Errors++
 			log.Printf("[provincial] sk: cannot discover minutes links (archive URL may have changed): %v", err)
 			break
@@ -509,10 +538,7 @@ func CrawlProvinceSource(conn *sql.DB, client *http.Client, delay time.Duration,
 			stats.Errors++
 			return err
 		}
-		// If no divisions were found for the current session and the DB has no
-		// divisions at all for this province, retry with the previous session to
-		// ensure the database is seeded with the most recent available data.
-		if len(parsed) == 0 && session > 1 && provinceDivisionCountInDB(conn, src.Code) == 0 {
+		if allowPreviousSessionFallback && len(parsed) == 0 && session > 1 && provinceDivisionCountInDB(conn, src.Code) == 0 {
 			log.Printf("[provincial][%s] 0 divisions for session %d; retrying with previous session %d to seed DB", src.Code, session, session-1)
 			prevParsed, prevErr := crawlDivisionsForSource(src, legislature, session-1, client)
 			if prevErr == nil && len(prevParsed) > 0 {
@@ -521,8 +547,8 @@ func CrawlProvinceSource(conn *sql.DB, client *http.Client, delay time.Duration,
 		}
 		divs = parsed
 	}
-	stats.DivisionsSeen = len(divs)
-	if count := provinceMemberCountInDB(conn, src.Province); stats.DivisionsSeen > 0 && count < 10 {
+	stats.DivisionsSeen += len(divs)
+	if count := provinceMemberCountInDB(conn, src.Province); len(divs) > 0 && count < 10 {
 		if err := ensureProvincialMembersForSource(conn, client, delay, src); err != nil {
 			log.Printf("[provincial][%s] member seed: %v", src.Code, err)
 		}
