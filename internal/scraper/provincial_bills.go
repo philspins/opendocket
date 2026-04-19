@@ -33,7 +33,7 @@ type ProvincialBillStub struct {
 	LastScraped      string
 }
 
-var provincialBillNumberRe = regexp.MustCompile(`(?i)\bbill(?:\s+no\.?)?\s+([a-z]?-?\d+[a-z]?)\b`)
+var provincialBillNumberRe = regexp.MustCompile(`(?i)\bbill(?:\s*\(\s*no\.?|\s+no\.?)?\s+([a-z]?(?:[\s-]?\d+)[a-z]?)\s*\)?\b`)
 var provincialBillURLNumberRe = regexp.MustCompile(`(?i)(?:/bill-|/bill/|/bills?/)(\d{1,4}[a-z]?)(?:[/?#-]|$)`)
 var provincialNestedBillURLNumberRe = regexp.MustCompile(`(?i)/\d{1,3}/\d{1,2}/(\d{1,4}[a-z]?)(?:/|$)`)
 var provincialLeadingBillNumberRe = regexp.MustCompile(`(?m)^\s*(\d{1,4}[a-z]?)\s*(?:[.)]|\|)`)
@@ -44,7 +44,7 @@ var albertaBillStatusPDFRe = regexp.MustCompile(`(?i)/LAO/Bills/bsr\d+-\d+\.pdf(
 var albertaBillStatusEntryRe = regexp.MustCompile(`(?i)Bill\s+(Pr?\d+[A-Z]?)\s+--\s+(.+?)\s+First Reading\s+--`)
 var manitobaCurrentSessionLinkRe = regexp.MustCompile(`(?i)\.\./\d+-\d+/index\.php$`)
 var saskatchewanProgressPDFRe = regexp.MustCompile(`(?i)progress(?:-of)?-bills.*\.pdf$`)
-var saskatchewanProgressEntryRe = regexp.MustCompile(`(?i)\b(\d{1,3}[A-Z]?)\s*(?:EN\s*)?(?:\*\s*)?((?:The|An|Loi).{1,260}?)(?:\s+(?:Member\s+)?[A-Z][A-Za-z'’.\-]+,\s+[A-Z][A-Za-z'’.\-]+(?:\s+[A-Z][A-Za-z'’.\-]+)?|\s+1st Reading|\s+Royal Rec\.)`)
+var saskatchewanProgressEntryRe = regexp.MustCompile(`(?i)\b(\d{1,3}[A-Z]?)\s+(?:EN\s+)?\*\s+(.{1,260}?)\s+[A-Z][A-Za-z'’.\-]+,\s+[A-Z][A-Za-z'’.\-]+(?:\s+[A-Z][A-Za-z'’.\-]+)?\s+[A-Z][a-z]{2}\s+\d{2},\s+\d{4}`)
 var genericBillLinkRe = regexp.MustCompile(`(?i)(bill|legislation|legislative-business|housebusiness|bills-and-legislation|legis)`)
 var albertaBillLinkRe = regexp.MustCompile(`(?i)(assembly-business|bill|bills)`)
 var bcBillLinkRe = regexp.MustCompile(`(?i)(bills-and-legislation|bill)`)
@@ -60,7 +60,8 @@ var saskatchewanBillLinkRe = regexp.MustCompile(`(?i)(legislative-business/bills
 // Examples: "Bill 12" -> "12", "bill a-23" -> "A-23".
 func ExtractProvincialBillNumber(text string) string {
 	if m := provincialBillNumberRe.FindStringSubmatch(text); len(m) == 2 {
-		return strings.ToUpper(strings.TrimSpace(m[1]))
+		billNumber := strings.ToUpper(strings.TrimSpace(m[1]))
+		return strings.Join(strings.Fields(billNumber), "-")
 	}
 	// Fall back to federal bill-number format (C-47 / S-209) when present.
 	return utils.ExtractBillNumber(text)
@@ -565,6 +566,7 @@ func CrawlQuebecBills(indexURL string, legislature, session int, client *http.Cl
 }
 
 func CrawlSaskatchewanBills(indexURL string, legislature, session int, client *http.Client) ([]ProvincialBillStub, error) {
+	indexURL = normalizeSaskatchewanBillsURL(indexURL)
 	if indexURL == "" {
 		indexURL = "https://www.legassembly.sk.ca/legislative-business/bills/"
 	}
@@ -576,6 +578,18 @@ func CrawlSaskatchewanBills(indexURL string, legislature, session int, client *h
 		return bills, nil
 	}
 	return crawlProvincialBillsFromIndexWithMatcher(indexURL, "sk", legislature, session, "saskatchewan", client, saskatchewanBillLinkRe)
+}
+
+func normalizeSaskatchewanBillsURL(indexURL string) string {
+	trimmed := strings.TrimSpace(indexURL)
+	if trimmed == "" {
+		return ""
+	}
+	lower := strings.ToLower(trimmed)
+	if lower == "https://www.legassembly.sk.ca/legislative-business" || lower == "https://www.legassembly.sk.ca/legislative-business/" {
+		return "https://www.legassembly.sk.ca/legislative-business/bills/"
+	}
+	return trimmed
 }
 
 type bcProgressBillFile struct {
@@ -917,16 +931,22 @@ func crawlSaskatchewanBillsFromProgressPDF(indexURL string, legislature, session
 	if err != nil {
 		return nil, err
 	}
+	return parseSaskatchewanBillsFromProgressText(text, pdfURL, legislature, session), nil
+}
+
+func parseSaskatchewanBillsFromProgressText(text, sourceURL string, legislature, session int) []ProvincialBillStub {
 	normalized := strings.TrimSpace(strings.Join(strings.Fields(text), " "))
 	matches := saskatchewanProgressEntryRe.FindAllStringSubmatch(normalized, -1)
 	if len(matches) == 0 {
-		return nil, nil
+		return nil
 	}
 	seen := make(map[string]bool)
 	out := make([]ProvincialBillStub, 0, len(matches))
 	for _, match := range matches {
 		billNumber := strings.TrimSpace(match[1])
 		title := strings.TrimSpace(match[2])
+		title = strings.ReplaceAll(title, `\`, " ")
+		title = strings.Join(strings.Fields(title), " ")
 		id := ProvincialBillID("sk", legislature, session, billNumber)
 		if id == "" || seen[id] {
 			continue
@@ -940,12 +960,12 @@ func crawlSaskatchewanBillsFromProgressPDF(indexURL string, legislature, session
 			Number:       billNumber,
 			Title:        title,
 			Chamber:      "saskatchewan",
-			DetailURL:    pdfURL,
-			SourceURL:    pdfURL,
+			DetailURL:    sourceURL,
+			SourceURL:    sourceURL,
 			LastScraped:  utils.NowISO(),
 		})
 	}
-	return out, nil
+	return out
 }
 
 func parseStructuredProvincialBillRows(doc *goquery.Document, sourceURL, provinceCode string, legislature, session int, chamber string) []ProvincialBillStub {
