@@ -77,7 +77,7 @@ func AuthPage(ps store.ParliamentStatus, mode string, googleClientID string, fac
 			if templ_7745c5c3_Err != nil {
 				return templ_7745c5c3_Err
 			}
-			if strings.EqualFold(mode, "signup") && recaptchaSiteKey != "" {
+			if signupRecaptchaEnabled(mode, recaptchaSiteKey) {
 				templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 4, "<div id=\"signup-recaptcha-gate\" class=\"surface-card p-4 space-y-3\"><h2 class=\"text-lg font-semibold\">Human verification</h2><p class=\"text-sm text-gray-600\">Complete reCAPTCHA to continue with Google or Facebook signup.</p><div class=\"g-recaptcha\" data-sitekey=\"")
 				if templ_7745c5c3_Err != nil {
 					return templ_7745c5c3_Err
@@ -187,8 +187,8 @@ func AuthPage(ps store.ParliamentStatus, mode string, googleClientID string, fac
 			if templ_7745c5c3_Err != nil {
 				return templ_7745c5c3_Err
 			}
-			if strings.EqualFold(mode, "signup") && recaptchaSiteKey != "" {
-				templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 17, "<script src=\"https://www.google.com/recaptcha/api.js\" async defer></script> <script>\n\t\t\t\twindow.odSignupRecaptchaComplete = function() {\n\t\t\t\t\tconst oauthOptions = document.getElementById(\"oauth-options\");\n\t\t\t\t\tif (oauthOptions) {\n\t\t\t\t\t\toauthOptions.classList.remove(\"hidden\");\n\t\t\t\t\t\toauthOptions.style.removeProperty(\"display\");\n\t\t\t\t\t}\n\t\t\t\t\tconst gate = document.getElementById(\"signup-recaptcha-gate\");\n\t\t\t\t\tif (gate) {\n\t\t\t\t\t\tgate.classList.add(\"hidden\");\n\t\t\t\t\t}\n\t\t\t\t};\n\t\t\t</script>")
+			if signupRecaptchaEnabled(mode, recaptchaSiteKey) {
+				templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 17, "<script src=\"https://www.google.com/recaptcha/api.js\" async defer></script> <script>\n\t\t\t\twindow.odSignupRecaptchaComplete = function() {\n\t\t\t\t\tconst oauthOptions = document.getElementById(\"oauth-options\");\n\t\t\t\t\tif (oauthOptions) {\n\t\t\t\t\t\toauthOptions.classList.remove(\"hidden\");\n\t\t\t\t\t\toauthOptions.removeAttribute(\"style\");\n\t\t\t\t\t}\n\t\t\t\t\tconst gate = document.getElementById(\"signup-recaptcha-gate\");\n\t\t\t\t\tif (gate) {\n\t\t\t\t\t\tgate.classList.add(\"hidden\");\n\t\t\t\t\t}\n\t\t\t\t};\n\t\t\t</script>")
 				if templ_7745c5c3_Err != nil {
 					return templ_7745c5c3_Err
 				}
@@ -265,17 +265,21 @@ func googleWidgetText(mode string) string {
 }
 
 func oauthOptionsClass(mode string, recaptchaSiteKey string) string {
-	if strings.EqualFold(mode, "signup") && strings.TrimSpace(recaptchaSiteKey) != "" {
+	if signupRecaptchaEnabled(mode, recaptchaSiteKey) {
 		return "grid gap-4 md:grid-cols-2 hidden"
 	}
 	return "grid gap-4 md:grid-cols-2"
 }
 
 func oauthOptionsStyle(mode string, recaptchaSiteKey string) string {
-	if strings.EqualFold(mode, "signup") && strings.TrimSpace(recaptchaSiteKey) != "" {
+	if signupRecaptchaEnabled(mode, recaptchaSiteKey) {
 		return "display:none;"
 	}
 	return ""
+}
+
+func signupRecaptchaEnabled(mode string, recaptchaSiteKey string) bool {
+	return strings.EqualFold(mode, "signup") && strings.TrimSpace(recaptchaSiteKey) != ""
 }
 
 var _ = templruntime.GeneratedTemplate

@@ -15,7 +15,7 @@ templ AuthPage(ps store.ParliamentStatus, mode string, googleClientID string, fa
 				<p class="section-lead">Use your Google or Facebook account to { modeVerb(mode) } Open Democracy.</p>
 			</div>
 
-			if strings.EqualFold(mode, "signup") && recaptchaSiteKey != "" {
+			if signupRecaptchaEnabled(mode, recaptchaSiteKey) {
 				<div id="signup-recaptcha-gate" class="surface-card p-4 space-y-3">
 					<h2 class="text-lg font-semibold">Human verification</h2>
 					<p class="text-sm text-gray-600">Complete reCAPTCHA to continue with Google or Facebook signup.</p>
@@ -50,14 +50,14 @@ templ AuthPage(ps store.ParliamentStatus, mode string, googleClientID string, fa
 			<p class="text-sm text-gray-600">By continuing, you agree to use this service for civic participation and policy engagement.</p>
 		</section>
 
-		if strings.EqualFold(mode, "signup") && recaptchaSiteKey != "" {
+		if signupRecaptchaEnabled(mode, recaptchaSiteKey) {
 			<script src="https://www.google.com/recaptcha/api.js" async defer></script>
 			<script>
 				window.odSignupRecaptchaComplete = function() {
 					const oauthOptions = document.getElementById("oauth-options");
 					if (oauthOptions) {
 						oauthOptions.classList.remove("hidden");
-						oauthOptions.style.removeProperty("display");
+						oauthOptions.removeAttribute("style");
 					}
 					const gate = document.getElementById("signup-recaptcha-gate");
 					if (gate) {
@@ -156,15 +156,19 @@ func googleWidgetText(mode string) string {
 }
 
 func oauthOptionsClass(mode string, recaptchaSiteKey string) string {
-	if strings.EqualFold(mode, "signup") && strings.TrimSpace(recaptchaSiteKey) != "" {
+	if signupRecaptchaEnabled(mode, recaptchaSiteKey) {
 		return "grid gap-4 md:grid-cols-2 hidden"
 	}
 	return "grid gap-4 md:grid-cols-2"
 }
 
 func oauthOptionsStyle(mode string, recaptchaSiteKey string) string {
-	if strings.EqualFold(mode, "signup") && strings.TrimSpace(recaptchaSiteKey) != "" {
+	if signupRecaptchaEnabled(mode, recaptchaSiteKey) {
 		return "display:none;"
 	}
 	return ""
+}
+
+func signupRecaptchaEnabled(mode string, recaptchaSiteKey string) bool {
+	return strings.EqualFold(mode, "signup") && strings.TrimSpace(recaptchaSiteKey) != ""
 }
