@@ -139,12 +139,23 @@ templ MemberProfile(ps store.ParliamentStatus, member store.MemberRow, votes []s
 				</div>
 				<div
 					id="member-votes-pagination"
-					class="flex items-center justify-center gap-2 mt-4 text-sm"
+					class="flex items-center justify-between gap-3 mt-4 text-sm"
 					data-page-size={ fmt.Sprint(MemberVotesPerPage) }
 				>
-					<button id="member-votes-prev" type="button" class="btn btn-secondary" disabled>Prev</button>
-					<div id="member-votes-pages" class="flex items-center gap-1"></div>
-					<button id="member-votes-next" type="button" class="btn btn-secondary" disabled>Next</button>
+					<div class="flex items-center gap-2">
+						<label for="member-votes-page-size" class="text-gray-600">Rows per page</label>
+						<select id="member-votes-page-size" class="input-field py-2 pr-8">
+							<option value="5">5</option>
+							<option value="10">10</option>
+							<option value="20" selected>20</option>
+							<option value="50">50</option>
+						</select>
+					</div>
+					<div class="flex items-center gap-2">
+						<button id="member-votes-prev" type="button" class="btn btn-secondary" disabled>Prev</button>
+						<div id="member-votes-pages" class="flex items-center gap-1"></div>
+						<button id="member-votes-next" type="button" class="btn btn-secondary" disabled>Next</button>
+					</div>
 				</div>
 			</section>
 
@@ -157,15 +168,17 @@ templ MemberProfile(ps store.ParliamentStatus, member store.MemberRow, votes []s
 					const prevBtn = document.getElementById("member-votes-prev");
 					const nextBtn = document.getElementById("member-votes-next");
 					const pagesEl = document.getElementById("member-votes-pages");
-					const pageSize = Number(pagination.dataset.pageSize) || 20;
-					const totalPages = Math.ceil(rows.length / pageSize);
+					const pageSizeSelect = document.getElementById("member-votes-page-size");
+					let pageSize = Number(pagination.dataset.pageSize) || 20;
 					let currentPage = 1;
 
-					if (!pagination || !prevBtn || !nextBtn || !pagesEl) return;
-					if (totalPages <= 1) {
+					if (!pagination || !prevBtn || !nextBtn || !pagesEl || !pageSizeSelect) return;
+					if (rows.length === 0) {
 						pagination.classList.add("hidden");
 						return;
 					}
+					pageSizeSelect.value = String(pageSize);
+					const totalPages = () => Math.max(1, Math.ceil(rows.length / pageSize));
 
 					const visiblePages = (total, current) => {
 						if (total <= 5) {
@@ -192,10 +205,11 @@ templ MemberProfile(ps store.ParliamentStatus, member store.MemberRow, votes []s
 					};
 
 					const updatePager = () => {
+						const pages = totalPages();
 						prevBtn.disabled = currentPage === 1;
-						nextBtn.disabled = currentPage === totalPages;
+						nextBtn.disabled = currentPage === pages;
 						pagesEl.innerHTML = "";
-						for (const item of visiblePages(totalPages, currentPage)) {
+						for (const item of visiblePages(pages, currentPage)) {
 							if (item === -1) {
 								const ellipsis = document.createElement("span");
 								ellipsis.className = "px-1 text-gray-500";
@@ -216,6 +230,10 @@ templ MemberProfile(ps store.ParliamentStatus, member store.MemberRow, votes []s
 					};
 
 					const renderPage = () => {
+						const pages = totalPages();
+						if (currentPage > pages) {
+							currentPage = pages;
+						}
 						rows.forEach((row, idx) => {
 							const rowPage = Math.floor(idx / pageSize) + 1;
 							row.classList.toggle("hidden", rowPage !== currentPage);
@@ -237,8 +255,15 @@ templ MemberProfile(ps store.ParliamentStatus, member store.MemberRow, votes []s
 						const target = event.target;
 						if (!(target instanceof HTMLButtonElement)) return;
 						const selected = Number(target.dataset.page);
-						if (!Number.isInteger(selected) || selected < 1 || selected > totalPages) return;
+						if (!Number.isInteger(selected) || selected < 1 || selected > totalPages()) return;
 						currentPage = selected;
+						renderPage();
+					});
+					pageSizeSelect.addEventListener("change", () => {
+						const selectedSize = Number(pageSizeSelect.value);
+						if (!Number.isInteger(selectedSize) || selectedSize <= 0) return;
+						pageSize = selectedSize;
+						currentPage = 1;
 						renderPage();
 					});
 

@@ -42,6 +42,14 @@ func TestMemberProfile_ReordersEngageAndAddsVotePagination(t *testing.T) {
 	if !strings.Contains(html, "id=\"member-votes-prev\"") || !strings.Contains(html, "id=\"member-votes-next\"") {
 		t.Fatalf("expected prev/next pagination buttons to be rendered")
 	}
+	if !strings.Contains(html, "id=\"member-votes-page-size\"") {
+		t.Fatalf("expected page-size selector to be rendered")
+	}
+	for _, size := range []string{"5", "10", "20", "50"} {
+		if !strings.Contains(html, "option value=\""+size+"\"") {
+			t.Fatalf("expected page-size option %s to be rendered", size)
+		}
+	}
 }
 
 func TestMemberProfile_UsesConsistentRedStylingForNaysAndRebel(t *testing.T) {
