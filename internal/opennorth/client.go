@@ -19,6 +19,7 @@ const (
 )
 
 var httpClient = utils.NewHTTPClient()
+
 // Office holds contact information for one of a representative's offices.
 type Office struct {
 	Type   string `json:"type"`

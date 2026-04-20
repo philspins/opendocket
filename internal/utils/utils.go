@@ -57,10 +57,10 @@ func (t *uaTransport) RoundTrip(req *http.Request) (*http.Response, error) {
 // ── URL / ID extraction helpers ───────────────────────────────────────────────
 
 var (
-	legisinfoRe  = regexp.MustCompile(`(?i)/legisinfo/en/bill/(\d+)-(\d+)/([A-Za-z]+-?\d+)`)
-	memberRe     = regexp.MustCompile(`(?i)/Members/en/(\d+)`)
+	legisinfoRe   = regexp.MustCompile(`(?i)/legisinfo/en/bill/(\d+)-(\d+)/([A-Za-z]+-?\d+)`)
+	memberRe      = regexp.MustCompile(`(?i)/Members/en/(\d+)`)
 	memberParenRe = regexp.MustCompile(`(?i)/Members/en/[^/(]+\((\d+)\)`)
-	billNumberRe = regexp.MustCompile(`(?i)\b([CS]-\d+)\b`)
+	billNumberRe  = regexp.MustCompile(`(?i)\b([CS]-\d+)\b`)
 )
 
 // ExtractBillID parses a canonical bill ID from a LEGISinfo URL.

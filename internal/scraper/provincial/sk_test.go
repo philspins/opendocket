@@ -2,6 +2,32 @@ package provincial
 
 import "testing"
 
+func TestNormalizeSaskatchewanBillsURL(t *testing.T) {
+	tests := []struct {
+		in   string
+		want string
+	}{
+		{
+			in:   "https://www.legassembly.sk.ca/legislative-business",
+			want: "https://www.legassembly.sk.ca/legislative-business/bills/",
+		},
+		{
+			in:   "https://www.legassembly.sk.ca/legislative-business/",
+			want: "https://www.legassembly.sk.ca/legislative-business/bills/",
+		},
+		{
+			in:   "https://www.legassembly.sk.ca/legislative-business/bills/",
+			want: "https://www.legassembly.sk.ca/legislative-business/bills/",
+		},
+	}
+
+	for _, tc := range tests {
+		if got := NormalizeSaskatchewanBillsURLForTest(tc.in); got != tc.want {
+			t.Fatalf("normalizeSaskatchewanBillsURL(%q)=%q, want %q", tc.in, got, tc.want)
+		}
+	}
+}
+
 func TestParseSaskatchewanBillsFromProgressText_CurrentLayout(t *testing.T) {
 	text := `30th Legislature 2nd Session Progress of Bills Government Bills No. EN * Title Member 1 st Reading Royal Rec. Comm. 2nd Reading Comm. Amend Date 3 rd Reading Royal Assent Comes Into Force On 24 * The Saskatchewan Internal Trade Promotion Act Kaeding, Warren Oct 28, 2025 Nov 03, 2025 Mar 30, 2026 ECO 25 EN * Miscellaneous\ Amendment Act, 2025 Reiter, Jim Oct 28, 2025 Nov 03, 2025 Nov 17, 2025 CCA Nov 24, 2025 Nov 25, 2025 Dec 04, 2025 A-SD 38 * The Building Schools Faster Act Hindley, Everett Nov 13, 2025 Nov 17, 2025 Apr 15, 2026 IAJ 39 * The Building Schools Faster Consequential Amendment Act, 2025 / Act Hindley, Everett Nov 13, 2025 Apr 15, 2026 IAJ 50 EN * The Financial Administration Amendment Act, 2026 Reiter, Jim Mar 23, 2026 Mar 30, 2026`
 
