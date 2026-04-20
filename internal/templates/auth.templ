@@ -15,7 +15,14 @@ templ AuthPage(ps store.ParliamentStatus, mode string, googleClientID string, fa
 				<p class="section-lead">Use your Google or Facebook account to { modeVerb(mode) } Open Democracy.</p>
 			</div>
 
-			<div class="grid gap-4 md:grid-cols-2">
+			if strings.EqualFold(mode, "signup") && recaptchaSiteKey != "" {
+				<div id="signup-recaptcha-gate" class="surface-card p-4 space-y-3">
+					<h2 class="text-lg font-semibold">Human verification</h2>
+					<p class="text-sm text-gray-600">Complete reCAPTCHA to continue with Google or Facebook signup.</p>
+					<div class="g-recaptcha" data-sitekey={ recaptchaSiteKey } data-callback="odSignupRecaptchaComplete"></div>
+				</div>
+			}
+			<div id="oauth-options" class={ oauthOptionsClass(mode, recaptchaSiteKey) } style={ oauthOptionsStyle(mode, recaptchaSiteKey) }>
 				<div class="surface-card p-4 space-y-3">
 					<h2 class="text-lg font-semibold">Google</h2>
 					if googleClientID != "" {
@@ -41,24 +48,23 @@ templ AuthPage(ps store.ParliamentStatus, mode string, googleClientID string, fa
 			</div>
 
 			<p class="text-sm text-gray-600">By continuing, you agree to use this service for civic participation and policy engagement.</p>
-
-			if strings.EqualFold(mode, "signup") {
-				<div class="surface-card p-4 space-y-3">
-					<h2 class="text-lg font-semibold">Email verification</h2>
-					<p class="text-sm text-gray-600">Request a verification code to complete signup if social login is unavailable.</p>
-					<form method="POST" action="/auth/request-verification" class="space-y-3">
-						<input type="email" name="email" class="input-field w-full" placeholder="you@example.com" required/>
-						if recaptchaSiteKey != "" {
-							<div class="g-recaptcha" data-sitekey={ recaptchaSiteKey }></div>
-						}
-						<button type="submit" class="btn btn-primary">Send verification code</button>
-					</form>
-				</div>
-			}
 		</section>
 
 		if strings.EqualFold(mode, "signup") && recaptchaSiteKey != "" {
 			<script src="https://www.google.com/recaptcha/api.js" async defer></script>
+			<script>
+				window.odSignupRecaptchaComplete = function() {
+					const oauthOptions = document.getElementById("oauth-options");
+					if (oauthOptions) {
+						oauthOptions.classList.remove("hidden");
+						oauthOptions.style.removeProperty("display");
+					}
+					const gate = document.getElementById("signup-recaptcha-gate");
+					if (gate) {
+						gate.classList.add("hidden");
+					}
+				};
+			</script>
 		}
 
 		if googleClientID != "" {
@@ -147,4 +153,18 @@ func googleWidgetText(mode string) string {
 		return "signup_with"
 	}
 	return "signin_with"
+}
+
+func oauthOptionsClass(mode string, recaptchaSiteKey string) string {
+	if strings.EqualFold(mode, "signup") && strings.TrimSpace(recaptchaSiteKey) != "" {
+		return "grid gap-4 md:grid-cols-2 hidden"
+	}
+	return "grid gap-4 md:grid-cols-2"
+}
+
+func oauthOptionsStyle(mode string, recaptchaSiteKey string) string {
+	if strings.EqualFold(mode, "signup") && strings.TrimSpace(recaptchaSiteKey) != "" {
+		return "display:none;"
+	}
+	return ""
 }
