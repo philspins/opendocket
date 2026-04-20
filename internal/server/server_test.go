@@ -536,6 +536,60 @@ func TestHandleHome_UnauthenticatedUsesCookiesFromRidingLookup(t *testing.T) {
 	}
 }
 
+func TestHandleHome_UnauthenticatedUsesUnicodeRidingCookiesFromLookup(t *testing.T) {
+	srv, _ := newTestServer(t)
+	const federalRiding = "Bonavista—Burin—Trinity"
+	const provincialRiding = "Charlottetown-Lewis Point"
+	srv.riding.SetLookups(
+		func(_ context.Context, _ string, _ string) (float64, float64, error) {
+			return 45.0, -75.0, nil
+		},
+		func(_ context.Context, _, _ float64) ([]opennorth.Representative, error) {
+			return []opennorth.Representative{
+				{Name: "Jane MP", ElectedOffice: "MP", DistrictName: federalRiding},
+				{Name: "John MLA", ElectedOffice: "MLA", DistrictName: provincialRiding},
+			}, nil
+		},
+	)
+
+	lookupReq := httptest.NewRequest(http.MethodGet, "/riding?address=123+Main+St,+St.+John's,+NL", nil)
+	lookupRR := httptest.NewRecorder()
+	srv.ServeHTTP(lookupRR, lookupReq)
+	if lookupRR.Code != http.StatusOK {
+		t.Fatalf("lookup status=%d want %d", lookupRR.Code, http.StatusOK)
+	}
+
+	var gotFederalCookie, gotProvincialCookie string
+	for _, c := range lookupRR.Result().Cookies() {
+		switch c.Name {
+		case testGuestFederalRidingCookie:
+			gotFederalCookie = c.Value
+		case testGuestProvincialRidingCookie:
+			gotProvincialCookie = c.Value
+		}
+	}
+	if gotFederalCookie != url.QueryEscape(federalRiding) {
+		t.Fatalf("federal cookie=%q want %q", gotFederalCookie, url.QueryEscape(federalRiding))
+	}
+	if gotProvincialCookie != url.QueryEscape(provincialRiding) {
+		t.Fatalf("provincial cookie=%q want %q", gotProvincialCookie, url.QueryEscape(provincialRiding))
+	}
+
+	homeReq := httptest.NewRequest(http.MethodGet, "/", nil)
+	for _, c := range lookupRR.Result().Cookies() {
+		homeReq.AddCookie(c)
+	}
+	homeRR := httptest.NewRecorder()
+	srv.ServeHTTP(homeRR, homeReq)
+	if homeRR.Code != http.StatusOK {
+		t.Fatalf("home status=%d want %d", homeRR.Code, http.StatusOK)
+	}
+	body := homeRR.Body.String()
+	if !strings.Contains(body, "for "+federalRiding) || !strings.Contains(body, "for "+provincialRiding) {
+		t.Fatalf("expected unicode riding context from lookup cookies in home page body")
+	}
+}
+
 func TestHandleHealth_Returns200OK(t *testing.T) {
 	srv, _ := newTestServer(t)
 	req := httptest.NewRequest(http.MethodGet, "/health", nil)
