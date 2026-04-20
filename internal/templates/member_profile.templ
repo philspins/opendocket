@@ -177,6 +177,7 @@ templ MemberProfile(ps store.ParliamentStatus, member store.MemberRow, votes []s
 						pagination.classList.add("hidden");
 						return;
 					}
+					const allowedPageSizes = new Set(Array.from(pageSizeSelect.options, (option) => Number(option.value)));
 					pageSizeSelect.value = String(pageSize);
 					const totalPages = () => Math.max(1, Math.ceil(rows.length / pageSize));
 
@@ -261,7 +262,7 @@ templ MemberProfile(ps store.ParliamentStatus, member store.MemberRow, votes []s
 					});
 					pageSizeSelect.addEventListener("change", () => {
 						const selectedSize = Number(pageSizeSelect.value);
-						if (![5, 10, 20, 50].includes(selectedSize)) return;
+						if (!allowedPageSizes.has(selectedSize)) return;
 						pageSize = selectedSize;
 						currentPage = 1;
 						renderPage();
