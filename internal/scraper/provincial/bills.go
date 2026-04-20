@@ -347,13 +347,6 @@ func crawlNovaScotiaBills(indexURL string, legislature, session int, client *htt
 	return crawlProvincialBillsFromIndexWithMatcher(indexURL, "ns", legislature, session, "nova_scotia", client, novaScotiaBillLinkRe)
 }
 
-func crawlOntarioBills(indexURL string, legislature, session int, client *http.Client) ([]ProvincialBillStub, error) {
-	if indexURL == "" {
-		indexURL = "https://www.ola.org/en/legislative-business"
-	}
-	return crawlProvincialBillsFromIndexWithMatcher(indexURL, "on", legislature, session, "ontario", client, genericBillLinkRe)
-}
-
 // peiWorkflowBills is the WDF workflow name for the PEI legislative bill search.
 // The name is taken from the default-service attribute on the <gpei-root> web
 // component on assembly.pe.ca/legislative-business/house-records/bills.
