@@ -203,6 +203,7 @@ templ MemberProfile(ps store.ParliamentStatus, member store.MemberRow, votes []s
 						pages.push(total);
 						return pages;
 					};
+					const clampPage = (page, maxPages) => Math.min(Math.max(page, 1), maxPages);
 
 					const updatePager = () => {
 						const pages = totalPages();
@@ -231,12 +232,7 @@ templ MemberProfile(ps store.ParliamentStatus, member store.MemberRow, votes []s
 
 					const renderPage = () => {
 						const pages = totalPages();
-						if (currentPage < 1) {
-							currentPage = 1;
-						}
-						if (currentPage > pages) {
-							currentPage = pages;
-						}
+						currentPage = clampPage(currentPage, pages);
 						rows.forEach((row, idx) => {
 							const rowPage = Math.floor(idx / pageSize) + 1;
 							row.classList.toggle("hidden", rowPage !== currentPage);
@@ -265,7 +261,7 @@ templ MemberProfile(ps store.ParliamentStatus, member store.MemberRow, votes []s
 					});
 					pageSizeSelect.addEventListener("change", () => {
 						const selectedSize = Number(pageSizeSelect.value);
-						if (!Number.isInteger(selectedSize) || selectedSize <= 0) return;
+						if (![5, 10, 20, 50].includes(selectedSize)) return;
 						pageSize = selectedSize;
 						currentPage = 1;
 						renderPage();
