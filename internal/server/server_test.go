@@ -443,7 +443,7 @@ func TestHandleRiding_UnauthenticatedSetsRidingCookies(t *testing.T) {
 			gotProvincial = c.Value
 		}
 	}
-	if gotFederal != "Ottawa Centre" || gotProvincial != "Ottawa South" {
+	if gotFederal != url.QueryEscape("Ottawa Centre") || gotProvincial != url.QueryEscape("Ottawa South") {
 		t.Fatalf("unexpected cookie riding ids: federal=%q provincial=%q", gotFederal, gotProvincial)
 	}
 }
@@ -483,8 +483,8 @@ func TestHandleHome_UsesSavedRepresentativesAndHidesLookupHero(t *testing.T) {
 func TestHandleHome_UnauthenticatedUsesRidingCookies(t *testing.T) {
 	srv, _ := newTestServer(t)
 	req := httptest.NewRequest(http.MethodGet, "/", nil)
-	req.AddCookie(&http.Cookie{Name: testGuestFederalRidingCookie, Value: "Ottawa Centre"})
-	req.AddCookie(&http.Cookie{Name: testGuestProvincialRidingCookie, Value: "Ottawa South"})
+	req.AddCookie(&http.Cookie{Name: testGuestFederalRidingCookie, Value: url.QueryEscape("Ottawa Centre")})
+	req.AddCookie(&http.Cookie{Name: testGuestProvincialRidingCookie, Value: url.QueryEscape("Ottawa South")})
 	rr := httptest.NewRecorder()
 
 	srv.ServeHTTP(rr, req)
@@ -497,6 +497,42 @@ func TestHandleHome_UnauthenticatedUsesRidingCookies(t *testing.T) {
 	}
 	if strings.Contains(body, "Find Your Riding") {
 		t.Fatalf("expected lookup hero to be hidden once riding cookies are set")
+	}
+}
+
+func TestHandleHome_UnauthenticatedUsesCookiesFromRidingLookup(t *testing.T) {
+	srv, _ := newTestServer(t)
+	srv.riding.SetLookups(
+		func(_ context.Context, _ string, _ string) (float64, float64, error) {
+			return 45.0, -75.0, nil
+		},
+		func(_ context.Context, _, _ float64) ([]opennorth.Representative, error) {
+			return []opennorth.Representative{
+				{Name: "Jane MP", ElectedOffice: "MP", DistrictName: "Ottawa Centre"},
+				{Name: "John MPP", ElectedOffice: "MPP", DistrictName: "Ottawa South"},
+			}, nil
+		},
+	)
+
+	lookupReq := httptest.NewRequest(http.MethodGet, "/riding?address=123+Main+St,+Ottawa,+ON", nil)
+	lookupRR := httptest.NewRecorder()
+	srv.ServeHTTP(lookupRR, lookupReq)
+	if lookupRR.Code != http.StatusOK {
+		t.Fatalf("lookup status=%d want %d", lookupRR.Code, http.StatusOK)
+	}
+
+	homeReq := httptest.NewRequest(http.MethodGet, "/", nil)
+	for _, c := range lookupRR.Result().Cookies() {
+		homeReq.AddCookie(c)
+	}
+	homeRR := httptest.NewRecorder()
+	srv.ServeHTTP(homeRR, homeReq)
+	if homeRR.Code != http.StatusOK {
+		t.Fatalf("home status=%d want %d", homeRR.Code, http.StatusOK)
+	}
+	body := homeRR.Body.String()
+	if !strings.Contains(body, "for Ottawa Centre") || !strings.Contains(body, "for Ottawa South") {
+		t.Fatalf("expected riding context from lookup cookies in home page body")
 	}
 }
 

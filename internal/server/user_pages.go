@@ -3,6 +3,7 @@ package server
 import (
 	"log"
 	"net/http"
+	"net/url"
 	"strings"
 	"time"
 
@@ -21,12 +22,25 @@ const (
 func localRidingUserFromCookies(r *http.Request) store.UserRow {
 	var user store.UserRow
 	if c, err := r.Cookie(guestFederalRidingCookie); err == nil {
-		user.FederalRidingID = strings.TrimSpace(c.Value)
+		user.FederalRidingID = decodeRidingCookieValue(c.Value)
 	}
 	if c, err := r.Cookie(guestProvincialRidingCookie); err == nil {
-		user.ProvincialRidingID = strings.TrimSpace(c.Value)
+		user.ProvincialRidingID = decodeRidingCookieValue(c.Value)
 	}
 	return user
+}
+
+func decodeRidingCookieValue(raw string) string {
+	raw = strings.TrimSpace(raw)
+	if raw == "" {
+		return ""
+	}
+	if decoded, err := url.QueryUnescape(raw); err == nil {
+		// Cookie values with spaces may be represented as quoted strings by clients.
+		cleaned := strings.TrimSpace(decoded)
+		return strings.Trim(cleaned, "\"")
+	}
+	return strings.Trim(raw, "\"")
 }
 
 func (s *Server) setLocalRidingCookies(w http.ResponseWriter, federalRidingID, provincialRidingID string) {
@@ -38,9 +52,10 @@ func (s *Server) setLocalRidingCookies(w http.ResponseWriter, federalRidingID, p
 		{name: guestProvincialRidingCookie, value: strings.TrimSpace(provincialRidingID)},
 	}
 	for _, c := range cookies {
+		cookieValue := url.QueryEscape(c.value)
 		cookie := &http.Cookie{
 			Name:     c.name,
-			Value:    c.value,
+			Value:    cookieValue,
 			Path:     "/",
 			HttpOnly: true,
 			SameSite: http.SameSiteLaxMode,
