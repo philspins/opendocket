@@ -246,7 +246,7 @@ templ MemberProfile(ps store.ParliamentStatus, member store.MemberRow, votes []s
 						renderPage();
 					});
 					nextBtn.addEventListener("click", () => {
-						if (currentPage >= totalPages) return;
+						if (currentPage >= totalPages()) return;
 						currentPage++;
 						renderPage();
 					});
