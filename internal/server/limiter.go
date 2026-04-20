@@ -43,6 +43,8 @@ func (r *simpleRateLimiter) allow(key string, limit int, window time.Duration, n
 	if rec.count >= limit {
 		return false
 	}
+	// rec is a copy from the map; this read-modify-write sequence remains safe
+	// because the limiter mutex is held for the entire method.
 	rec.count++
 	r.records[key] = rec
 	return true
