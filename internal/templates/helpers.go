@@ -33,6 +33,8 @@ var (
 	partyThemeCfg  PartyThemeConfig
 )
 
+const MemberVotesPerPage = 20
+
 func loadPartyTheme() PartyThemeConfig {
 	partyThemeOnce.Do(func() {
 		cfg := defaultPartyThemeConfig()

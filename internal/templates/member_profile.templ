@@ -108,7 +108,7 @@ templ MemberProfile(ps store.ParliamentStatus, member store.MemberRow, votes []s
 						<tbody class="divide-y divide-gray-100">
 							for i, v := range votes {
 								<tr
-									class={ "hover:bg-gray-50", templ.KV("hidden", i >= 20) }
+									class={ "hover:bg-gray-50", templ.KV("hidden", i >= MemberVotesPerPage) }
 									data-vote-row=""
 								>
 									<td class="px-4 py-2 text-gray-500 whitespace-nowrap">{ FormatDate(v.Date) }</td>
@@ -137,7 +137,11 @@ templ MemberProfile(ps store.ParliamentStatus, member store.MemberRow, votes []s
 						</tbody>
 					</table>
 				</div>
-				<div id="member-votes-pagination" class="flex items-center justify-center gap-2 mt-4 text-sm">
+				<div
+					id="member-votes-pagination"
+					class="flex items-center justify-center gap-2 mt-4 text-sm"
+					data-page-size={ fmt.Sprint(MemberVotesPerPage) }
+				>
 					<button id="member-votes-prev" type="button" class="btn btn-secondary" disabled>Prev</button>
 					<div id="member-votes-pages" class="flex items-center gap-1"></div>
 					<button id="member-votes-next" type="button" class="btn btn-secondary" disabled>Next</button>
@@ -153,7 +157,7 @@ templ MemberProfile(ps store.ParliamentStatus, member store.MemberRow, votes []s
 					const prevBtn = document.getElementById("member-votes-prev");
 					const nextBtn = document.getElementById("member-votes-next");
 					const pagesEl = document.getElementById("member-votes-pages");
-					const pageSize = 20;
+					const pageSize = Number(pagination.dataset.pageSize) || 20;
 					const totalPages = Math.ceil(rows.length / pageSize);
 					let currentPage = 1;
 

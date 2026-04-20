@@ -402,7 +402,7 @@ func MemberProfile(ps store.ParliamentStatus, member store.MemberRow, votes []st
 				return templ_7745c5c3_Err
 			}
 			for i, v := range votes {
-				var templ_7745c5c3_Var25 = []any{"hover:bg-gray-50", templ.KV("hidden", i >= 20)}
+				var templ_7745c5c3_Var25 = []any{"hover:bg-gray-50", templ.KV("hidden", i >= MemberVotesPerPage)}
 				templ_7745c5c3_Err = templ.RenderCSSItems(ctx, templ_7745c5c3_Buffer, templ_7745c5c3_Var25...)
 				if templ_7745c5c3_Err != nil {
 					return templ_7745c5c3_Err
@@ -556,46 +556,59 @@ func MemberProfile(ps store.ParliamentStatus, member store.MemberRow, votes []st
 					return templ_7745c5c3_Err
 				}
 			}
-			templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 53, "</tbody></table></div><div id=\"member-votes-pagination\" class=\"flex items-center justify-center gap-2 mt-4 text-sm\"><button id=\"member-votes-prev\" type=\"button\" class=\"btn btn-secondary\" disabled>Prev</button><div id=\"member-votes-pages\" class=\"flex items-center gap-1\"></div><button id=\"member-votes-next\" type=\"button\" class=\"btn btn-secondary\" disabled>Next</button></div></section><script>\n\t\t\t\t(() => {\n\t\t\t\t\tconst section = document.getElementById(\"member-votes-section\");\n\t\t\t\t\tif (!section) return;\n\t\t\t\t\tconst rows = Array.from(section.querySelectorAll(\"[data-vote-row]\"));\n\t\t\t\t\tconst pagination = document.getElementById(\"member-votes-pagination\");\n\t\t\t\t\tconst prevBtn = document.getElementById(\"member-votes-prev\");\n\t\t\t\t\tconst nextBtn = document.getElementById(\"member-votes-next\");\n\t\t\t\t\tconst pagesEl = document.getElementById(\"member-votes-pages\");\n\t\t\t\t\tconst pageSize = 20;\n\t\t\t\t\tconst totalPages = Math.ceil(rows.length / pageSize);\n\t\t\t\t\tlet currentPage = 1;\n\n\t\t\t\t\tif (!pagination || !prevBtn || !nextBtn || !pagesEl) return;\n\t\t\t\t\tif (totalPages <= 1) {\n\t\t\t\t\t\tpagination.classList.add(\"hidden\");\n\t\t\t\t\t\treturn;\n\t\t\t\t\t}\n\n\t\t\t\t\tconst visiblePages = (total, current) => {\n\t\t\t\t\t\tif (total <= 5) {\n\t\t\t\t\t\t\treturn Array.from({ length: total }, (_, i) => i + 1);\n\t\t\t\t\t\t}\n\t\t\t\t\t\tconst pages = [1];\n\t\t\t\t\t\tlet start = current - 1;\n\t\t\t\t\t\tlet end = current + 1;\n\t\t\t\t\t\tif (start < 2) {\n\t\t\t\t\t\t\tstart = 2;\n\t\t\t\t\t\t\tend = 4;\n\t\t\t\t\t\t}\n\t\t\t\t\t\tif (end > total - 1) {\n\t\t\t\t\t\t\tend = total - 1;\n\t\t\t\t\t\t\tstart = total - 3;\n\t\t\t\t\t\t}\n\t\t\t\t\t\tif (start > 2) pages.push(-1);\n\t\t\t\t\t\tfor (let p = start; p <= end; p++) {\n\t\t\t\t\t\t\tpages.push(p);\n\t\t\t\t\t\t}\n\t\t\t\t\t\tif (end < total - 1) pages.push(-1);\n\t\t\t\t\t\tpages.push(total);\n\t\t\t\t\t\treturn pages;\n\t\t\t\t\t};\n\n\t\t\t\t\tconst updatePager = () => {\n\t\t\t\t\t\tprevBtn.disabled = currentPage === 1;\n\t\t\t\t\t\tnextBtn.disabled = currentPage === totalPages;\n\t\t\t\t\t\tpagesEl.innerHTML = \"\";\n\t\t\t\t\t\tfor (const item of visiblePages(totalPages, currentPage)) {\n\t\t\t\t\t\t\tif (item === -1) {\n\t\t\t\t\t\t\t\tconst ellipsis = document.createElement(\"span\");\n\t\t\t\t\t\t\t\tellipsis.className = \"px-1 text-gray-500\";\n\t\t\t\t\t\t\t\tellipsis.textContent = \"...\";\n\t\t\t\t\t\t\t\tpagesEl.appendChild(ellipsis);\n\t\t\t\t\t\t\t\tcontinue;\n\t\t\t\t\t\t\t}\n\t\t\t\t\t\t\tconst pageBtn = document.createElement(\"button\");\n\t\t\t\t\t\t\tpageBtn.type = \"button\";\n\t\t\t\t\t\t\tpageBtn.className = \"px-2 py-1 text-gray-700 hover:underline\";\n\t\t\t\t\t\t\tpageBtn.dataset.page = String(item);\n\t\t\t\t\t\t\tpageBtn.textContent = String(item);\n\t\t\t\t\t\t\tif (item === currentPage) {\n\t\t\t\t\t\t\t\tpageBtn.classList.add(\"underline\", \"font-semibold\");\n\t\t\t\t\t\t\t}\n\t\t\t\t\t\t\tpagesEl.appendChild(pageBtn);\n\t\t\t\t\t\t}\n\t\t\t\t\t};\n\n\t\t\t\t\tconst renderPage = () => {\n\t\t\t\t\t\trows.forEach((row, idx) => {\n\t\t\t\t\t\t\tconst rowPage = Math.floor(idx / pageSize) + 1;\n\t\t\t\t\t\t\trow.classList.toggle(\"hidden\", rowPage !== currentPage);\n\t\t\t\t\t\t});\n\t\t\t\t\t\tupdatePager();\n\t\t\t\t\t};\n\n\t\t\t\t\tprevBtn.addEventListener(\"click\", () => {\n\t\t\t\t\t\tif (currentPage <= 1) return;\n\t\t\t\t\t\tcurrentPage--;\n\t\t\t\t\t\trenderPage();\n\t\t\t\t\t});\n\t\t\t\t\tnextBtn.addEventListener(\"click\", () => {\n\t\t\t\t\t\tif (currentPage >= totalPages) return;\n\t\t\t\t\t\tcurrentPage++;\n\t\t\t\t\t\trenderPage();\n\t\t\t\t\t});\n\t\t\t\t\tpagesEl.addEventListener(\"click\", (event) => {\n\t\t\t\t\t\tconst target = event.target;\n\t\t\t\t\t\tif (!(target instanceof HTMLButtonElement)) return;\n\t\t\t\t\t\tconst selected = Number(target.dataset.page);\n\t\t\t\t\t\tif (!Number.isInteger(selected) || selected < 1 || selected > totalPages) return;\n\t\t\t\t\t\tcurrentPage = selected;\n\t\t\t\t\t\trenderPage();\n\t\t\t\t\t});\n\n\t\t\t\t\trenderPage();\n\t\t\t\t})();\n\t\t\t</script><!-- Follow + policy actions --><section class=\"bg-white rounded-lg border border-gray-200 p-4 space-y-4\"><h2 class=\"text-lg font-semibold text-gray-800\">Engage With This MP</h2><form method=\"POST\" action=\"/api/follow\" class=\"grid sm:grid-cols-3 gap-3\"><input type=\"hidden\" name=\"member_id\" value=\"")
+			templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 53, "</tbody></table></div><div id=\"member-votes-pagination\" class=\"flex items-center justify-center gap-2 mt-4 text-sm\" data-page-size=\"")
 			if templ_7745c5c3_Err != nil {
 				return templ_7745c5c3_Err
 			}
 			var templ_7745c5c3_Var35 string
-			templ_7745c5c3_Var35, templ_7745c5c3_Err = templ.JoinStringErrs(member.ID)
+			templ_7745c5c3_Var35, templ_7745c5c3_Err = templ.JoinStringErrs(fmt.Sprint(MemberVotesPerPage))
 			if templ_7745c5c3_Err != nil {
-				return templ.Error{Err: templ_7745c5c3_Err, FileName: `internal/templates/member_profile.templ`, Line: 249, Col: 60}
+				return templ.Error{Err: templ_7745c5c3_Err, FileName: `internal/templates/member_profile.templ`, Line: 143, Col: 52}
 			}
 			_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var35))
 			if templ_7745c5c3_Err != nil {
 				return templ_7745c5c3_Err
 			}
-			templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 54, "\"> <input type=\"email\" name=\"email\" class=\"input-field\" placeholder=\"Your email\" required> <button type=\"submit\" class=\"btn btn-primary\">Follow ")
+			templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 54, "\"><button id=\"member-votes-prev\" type=\"button\" class=\"btn btn-secondary\" disabled>Prev</button><div id=\"member-votes-pages\" class=\"flex items-center gap-1\"></div><button id=\"member-votes-next\" type=\"button\" class=\"btn btn-secondary\" disabled>Next</button></div></section><script>\n\t\t\t\t(() => {\n\t\t\t\t\tconst section = document.getElementById(\"member-votes-section\");\n\t\t\t\t\tif (!section) return;\n\t\t\t\t\tconst rows = Array.from(section.querySelectorAll(\"[data-vote-row]\"));\n\t\t\t\t\tconst pagination = document.getElementById(\"member-votes-pagination\");\n\t\t\t\t\tconst prevBtn = document.getElementById(\"member-votes-prev\");\n\t\t\t\t\tconst nextBtn = document.getElementById(\"member-votes-next\");\n\t\t\t\t\tconst pagesEl = document.getElementById(\"member-votes-pages\");\n\t\t\t\t\tconst pageSize = Number(pagination.dataset.pageSize) || 20;\n\t\t\t\t\tconst totalPages = Math.ceil(rows.length / pageSize);\n\t\t\t\t\tlet currentPage = 1;\n\n\t\t\t\t\tif (!pagination || !prevBtn || !nextBtn || !pagesEl) return;\n\t\t\t\t\tif (totalPages <= 1) {\n\t\t\t\t\t\tpagination.classList.add(\"hidden\");\n\t\t\t\t\t\treturn;\n\t\t\t\t\t}\n\n\t\t\t\t\tconst visiblePages = (total, current) => {\n\t\t\t\t\t\tif (total <= 5) {\n\t\t\t\t\t\t\treturn Array.from({ length: total }, (_, i) => i + 1);\n\t\t\t\t\t\t}\n\t\t\t\t\t\tconst pages = [1];\n\t\t\t\t\t\tlet start = current - 1;\n\t\t\t\t\t\tlet end = current + 1;\n\t\t\t\t\t\tif (start < 2) {\n\t\t\t\t\t\t\tstart = 2;\n\t\t\t\t\t\t\tend = 4;\n\t\t\t\t\t\t}\n\t\t\t\t\t\tif (end > total - 1) {\n\t\t\t\t\t\t\tend = total - 1;\n\t\t\t\t\t\t\tstart = total - 3;\n\t\t\t\t\t\t}\n\t\t\t\t\t\tif (start > 2) pages.push(-1);\n\t\t\t\t\t\tfor (let p = start; p <= end; p++) {\n\t\t\t\t\t\t\tpages.push(p);\n\t\t\t\t\t\t}\n\t\t\t\t\t\tif (end < total - 1) pages.push(-1);\n\t\t\t\t\t\tpages.push(total);\n\t\t\t\t\t\treturn pages;\n\t\t\t\t\t};\n\n\t\t\t\t\tconst updatePager = () => {\n\t\t\t\t\t\tprevBtn.disabled = currentPage === 1;\n\t\t\t\t\t\tnextBtn.disabled = currentPage === totalPages;\n\t\t\t\t\t\tpagesEl.innerHTML = \"\";\n\t\t\t\t\t\tfor (const item of visiblePages(totalPages, currentPage)) {\n\t\t\t\t\t\t\tif (item === -1) {\n\t\t\t\t\t\t\t\tconst ellipsis = document.createElement(\"span\");\n\t\t\t\t\t\t\t\tellipsis.className = \"px-1 text-gray-500\";\n\t\t\t\t\t\t\t\tellipsis.textContent = \"...\";\n\t\t\t\t\t\t\t\tpagesEl.appendChild(ellipsis);\n\t\t\t\t\t\t\t\tcontinue;\n\t\t\t\t\t\t\t}\n\t\t\t\t\t\t\tconst pageBtn = document.createElement(\"button\");\n\t\t\t\t\t\t\tpageBtn.type = \"button\";\n\t\t\t\t\t\t\tpageBtn.className = \"px-2 py-1 text-gray-700 hover:underline\";\n\t\t\t\t\t\t\tpageBtn.dataset.page = String(item);\n\t\t\t\t\t\t\tpageBtn.textContent = String(item);\n\t\t\t\t\t\t\tif (item === currentPage) {\n\t\t\t\t\t\t\t\tpageBtn.classList.add(\"underline\", \"font-semibold\");\n\t\t\t\t\t\t\t}\n\t\t\t\t\t\t\tpagesEl.appendChild(pageBtn);\n\t\t\t\t\t\t}\n\t\t\t\t\t};\n\n\t\t\t\t\tconst renderPage = () => {\n\t\t\t\t\t\trows.forEach((row, idx) => {\n\t\t\t\t\t\t\tconst rowPage = Math.floor(idx / pageSize) + 1;\n\t\t\t\t\t\t\trow.classList.toggle(\"hidden\", rowPage !== currentPage);\n\t\t\t\t\t\t});\n\t\t\t\t\t\tupdatePager();\n\t\t\t\t\t};\n\n\t\t\t\t\tprevBtn.addEventListener(\"click\", () => {\n\t\t\t\t\t\tif (currentPage <= 1) return;\n\t\t\t\t\t\tcurrentPage--;\n\t\t\t\t\t\trenderPage();\n\t\t\t\t\t});\n\t\t\t\t\tnextBtn.addEventListener(\"click\", () => {\n\t\t\t\t\t\tif (currentPage >= totalPages) return;\n\t\t\t\t\t\tcurrentPage++;\n\t\t\t\t\t\trenderPage();\n\t\t\t\t\t});\n\t\t\t\t\tpagesEl.addEventListener(\"click\", (event) => {\n\t\t\t\t\t\tconst target = event.target;\n\t\t\t\t\t\tif (!(target instanceof HTMLButtonElement)) return;\n\t\t\t\t\t\tconst selected = Number(target.dataset.page);\n\t\t\t\t\t\tif (!Number.isInteger(selected) || selected < 1 || selected > totalPages) return;\n\t\t\t\t\t\tcurrentPage = selected;\n\t\t\t\t\t\trenderPage();\n\t\t\t\t\t});\n\n\t\t\t\t\trenderPage();\n\t\t\t\t})();\n\t\t\t</script><!-- Follow + policy actions --><section class=\"bg-white rounded-lg border border-gray-200 p-4 space-y-4\"><h2 class=\"text-lg font-semibold text-gray-800\">Engage With This MP</h2><form method=\"POST\" action=\"/api/follow\" class=\"grid sm:grid-cols-3 gap-3\"><input type=\"hidden\" name=\"member_id\" value=\"")
 			if templ_7745c5c3_Err != nil {
 				return templ_7745c5c3_Err
 			}
 			var templ_7745c5c3_Var36 string
-			templ_7745c5c3_Var36, templ_7745c5c3_Err = templ.JoinStringErrs(member.Name)
+			templ_7745c5c3_Var36, templ_7745c5c3_Err = templ.JoinStringErrs(member.ID)
 			if templ_7745c5c3_Err != nil {
-				return templ.Error{Err: templ_7745c5c3_Err, FileName: `internal/templates/member_profile.templ`, Line: 251, Col: 71}
+				return templ.Error{Err: templ_7745c5c3_Err, FileName: `internal/templates/member_profile.templ`, Line: 253, Col: 60}
 			}
 			_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var36))
 			if templ_7745c5c3_Err != nil {
 				return templ_7745c5c3_Err
 			}
-			templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 55, "</button></form><form method=\"POST\" action=\"/api/log-submission\" class=\"grid sm:grid-cols-2 gap-3 pt-3 border-t border-gray-100\"><input type=\"hidden\" name=\"member_id\" value=\"")
+			templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 55, "\"> <input type=\"email\" name=\"email\" class=\"input-field\" placeholder=\"Your email\" required> <button type=\"submit\" class=\"btn btn-primary\">Follow ")
 			if templ_7745c5c3_Err != nil {
 				return templ_7745c5c3_Err
 			}
 			var templ_7745c5c3_Var37 string
-			templ_7745c5c3_Var37, templ_7745c5c3_Err = templ.JoinStringErrs(member.ID)
+			templ_7745c5c3_Var37, templ_7745c5c3_Err = templ.JoinStringErrs(member.Name)
 			if templ_7745c5c3_Err != nil {
-				return templ.Error{Err: templ_7745c5c3_Err, FileName: `internal/templates/member_profile.templ`, Line: 255, Col: 60}
+				return templ.Error{Err: templ_7745c5c3_Err, FileName: `internal/templates/member_profile.templ`, Line: 255, Col: 71}
 			}
 			_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var37))
 			if templ_7745c5c3_Err != nil {
 				return templ_7745c5c3_Err
 			}
-			templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 56, "\"> <input type=\"email\" name=\"email\" class=\"input-field\" placeholder=\"Your email\" required> <input type=\"text\" name=\"category\" class=\"input-field\" placeholder=\"Category (e.g. Housing)\"> <input type=\"text\" name=\"subject\" class=\"input-field sm:col-span-2\" placeholder=\"Policy idea subject\"> <textarea name=\"body\" class=\"input-field sm:col-span-2\" rows=\"5\" placeholder=\"Describe your policy idea\"></textarea> <button type=\"submit\" class=\"btn btn-secondary sm:col-span-2\">Log Policy Submission</button></form></section></div>")
+			templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 56, "</button></form><form method=\"POST\" action=\"/api/log-submission\" class=\"grid sm:grid-cols-2 gap-3 pt-3 border-t border-gray-100\"><input type=\"hidden\" name=\"member_id\" value=\"")
+			if templ_7745c5c3_Err != nil {
+				return templ_7745c5c3_Err
+			}
+			var templ_7745c5c3_Var38 string
+			templ_7745c5c3_Var38, templ_7745c5c3_Err = templ.JoinStringErrs(member.ID)
+			if templ_7745c5c3_Err != nil {
+				return templ.Error{Err: templ_7745c5c3_Err, FileName: `internal/templates/member_profile.templ`, Line: 259, Col: 60}
+			}
+			_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var38))
+			if templ_7745c5c3_Err != nil {
+				return templ_7745c5c3_Err
+			}
+			templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 57, "\"> <input type=\"email\" name=\"email\" class=\"input-field\" placeholder=\"Your email\" required> <input type=\"text\" name=\"category\" class=\"input-field\" placeholder=\"Category (e.g. Housing)\"> <input type=\"text\" name=\"subject\" class=\"input-field sm:col-span-2\" placeholder=\"Policy idea subject\"> <textarea name=\"body\" class=\"input-field sm:col-span-2\" rows=\"5\" placeholder=\"Describe your policy idea\"></textarea> <button type=\"submit\" class=\"btn btn-secondary sm:col-span-2\">Log Policy Submission</button></form></section></div>")
 			if templ_7745c5c3_Err != nil {
 				return templ_7745c5c3_Err
 			}
