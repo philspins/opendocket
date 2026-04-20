@@ -193,9 +193,6 @@ func (s *Server) resolveRepresentativeMemberID(rep opennorth.Representative, fed
 		if nameMatch {
 			return member.ID
 		}
-		if anyLevelNameMatch == "" && nameMatch {
-			anyLevelNameMatch = member.ID
-		}
 	}
 	if fallback != "" {
 		return fallback
