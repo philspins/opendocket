@@ -6,10 +6,12 @@ import (
 	"log"
 	"net/http"
 	"strings"
+	"sync"
 	"time"
 
 	"github.com/PuerkitoBio/goquery"
 	"github.com/philspins/open-democracy/internal/db"
+	"golang.org/x/sync/errgroup"
 )
 
 // ProvincialSource defines one province-specific crawl configuration.
@@ -53,6 +55,53 @@ type provincialCrawlStats struct {
 	MemberVotesUpserted  int
 	MemberVotesUnmatched int
 	Errors               int
+}
+
+const provinceSubcrawlParallelism = 3
+
+// ProvinceCrawler defines a province-specific bills/votes crawler pair.
+type ProvinceCrawler interface {
+	CrawlBills(indexURL string, legislature, session int, client *http.Client) ([]ProvincialBillStub, error)
+	CrawlVotes(indexURL string, legislature, session int, client *http.Client) ([]ProvincialDivisionResult, error)
+}
+
+type provinceCrawlerFuncs struct {
+	bills func(indexURL string, legislature, session int, client *http.Client) ([]ProvincialBillStub, error)
+	votes func(indexURL string, legislature, session int, client *http.Client) ([]ProvincialDivisionResult, error)
+}
+
+func (c provinceCrawlerFuncs) CrawlBills(indexURL string, legislature, session int, client *http.Client) ([]ProvincialBillStub, error) {
+	if c.bills == nil {
+		return nil, nil
+	}
+	return c.bills(indexURL, legislature, session, client)
+}
+
+func (c provinceCrawlerFuncs) CrawlVotes(indexURL string, legislature, session int, client *http.Client) ([]ProvincialDivisionResult, error) {
+	if c.votes == nil {
+		return nil, nil
+	}
+	return c.votes(indexURL, legislature, session, client)
+}
+
+var provinceCrawlers = map[string]ProvinceCrawler{
+	"ab": provinceCrawlerFuncs{bills: CrawlAlbertaBills, votes: CrawlAlbertaVotes},
+	"bc": provinceCrawlerFuncs{bills: CrawlBritishColumbiaBills, votes: CrawlBritishColumbiaVotes},
+	"mb": provinceCrawlerFuncs{bills: CrawlManitobaBills, votes: CrawlManitobaVotes},
+	"nb": provinceCrawlerFuncs{bills: CrawlNewBrunswickBills, votes: CrawlNewBrunswickVotes},
+	"nl": provinceCrawlerFuncs{bills: CrawlNewfoundlandAndLabradorBills, votes: CrawlNewfoundlandAndLabradorVotes},
+	"ns": provinceCrawlerFuncs{bills: CrawlNovaScotiaBills, votes: CrawlNovaScotiaVotes},
+	"on": provinceCrawlerFuncs{bills: CrawlOntarioBills},
+	"pe": provinceCrawlerFuncs{
+		bills: func(indexURL string, legislature, session int, client *http.Client) ([]ProvincialBillStub, error) {
+			return CrawlPrinceEdwardIslandBills(indexURL, legislature, session, peiSourceClient(indexURL, client))
+		},
+		votes: func(indexURL string, legislature, session int, client *http.Client) ([]ProvincialDivisionResult, error) {
+			return CrawlPrinceEdwardIslandVotes(indexURL, legislature, session, peiSourceClient(indexURL, client))
+		},
+	},
+	"qc": provinceCrawlerFuncs{bills: CrawlQuebecBills, votes: CrawlQuebecVotes},
+	"sk": provinceCrawlerFuncs{bills: CrawlSaskatchewanBills},
 }
 
 // CrawlProvinceSource crawls bills and votes for one province source and upserts
@@ -163,21 +212,9 @@ func crawlProvinceSession(conn *sql.DB, client *http.Client, delay time.Duration
 			stats.Errors++
 			return fmt.Errorf("ontario dates: %w", err)
 		}
-		for _, d := range dates {
-			dayURL := OntarioVPDayURL(legislature, session, d)
-			dayDivs, derr := CrawlOntarioVPDay(dayURL, legislature, session, d, client)
-			if derr != nil {
-				if strings.Contains(derr.Error(), "status 404") {
-					log.Printf("[provincial] on day %s: no votes-proceedings page; skipping", d)
-					continue
-				}
-				stats.Errors++
-				log.Printf("[provincial] on day %s: %v", d, derr)
-				continue
-			}
-			divs = append(divs, dayDivs...)
-			time.Sleep(delay)
-		}
+		ontarioDivs, errCount := crawlOntarioDaysConcurrently(dates, legislature, session, client, delay)
+		stats.Errors += errCount
+		divs = append(divs, ontarioDivs...)
 	case "sk":
 		links, err := CrawlSaskatchewanMinutesLinks(src.VotesURL, client)
 		if err != nil {
@@ -185,16 +222,9 @@ func crawlProvinceSession(conn *sql.DB, client *http.Client, delay time.Duration
 			log.Printf("[provincial] sk: cannot discover minutes links (archive URL may have changed): %v", err)
 			break
 		}
-		for _, link := range links {
-			dayDivs, derr := CrawlSaskatchewanMinutes(link, legislature, session, client)
-			if derr != nil {
-				stats.Errors++
-				log.Printf("[provincial] sk minutes %s: %v", link, derr)
-				continue
-			}
-			divs = append(divs, dayDivs...)
-			time.Sleep(delay)
-		}
+		skDivs, errCount := crawlSaskatchewanMinutesConcurrently(links, legislature, session, client, delay)
+		stats.Errors += errCount
+		divs = append(divs, skDivs...)
 	default:
 		var (
 			parsed []ProvincialDivisionResult
@@ -217,6 +247,11 @@ func crawlProvinceSession(conn *sql.DB, client *http.Client, delay time.Duration
 	stats.DivisionsSeen += len(divs)
 	if count := provinceMemberCountInDB(conn, src.Province); len(divs) > 0 && count < 10 && seedMembers != nil {
 		seedMembers(conn, src.Code, src.Province, client, delay)
+	}
+	memberCandidates, err := loadProvincialMemberCandidates(conn, src.Province)
+	if err != nil {
+		stats.Errors++
+		return fmt.Errorf("load provincial members for %s: %w", src.Province, err)
 	}
 
 	for _, res := range divs {
@@ -245,11 +280,7 @@ func crawlProvinceSession(conn *sql.DB, client *http.Client, delay time.Duration
 
 		stats.MemberVotesSeen += len(res.Votes)
 		for _, mv := range res.Votes {
-			memberID, merr := resolveProvincialMemberID(conn, src.Province, mv.MemberName)
-			if merr != nil {
-				stats.Errors++
-				continue
-			}
+			memberID := resolveProvincialMemberIDFromCandidates(memberCandidates, mv.MemberName)
 			if memberID == "" {
 				stats.MemberVotesUnmatched++
 				continue
@@ -267,58 +298,104 @@ func crawlProvinceSession(conn *sql.DB, client *http.Client, delay time.Duration
 	return nil
 }
 
+func crawlOntarioDaysConcurrently(dates []string, legislature, session int, client *http.Client, delay time.Duration) ([]ProvincialDivisionResult, int) {
+	if len(dates) == 0 {
+		return nil, 0
+	}
+	limit := minInt(provinceSubcrawlParallelism, len(dates))
+	g := new(errgroup.Group)
+	g.SetLimit(limit)
+
+	divs := make([]ProvincialDivisionResult, 0, len(dates))
+	errCount := 0
+	var mu sync.Mutex
+
+	for _, date := range dates {
+		date := date
+		g.Go(func() error {
+			dayURL := OntarioVPDayURL(legislature, session, date)
+			dayDivs, err := CrawlOntarioVPDay(dayURL, legislature, session, date, client)
+			if err != nil {
+				if strings.Contains(err.Error(), "status 404") {
+					log.Printf("[provincial] on day %s: no votes-proceedings page; skipping", date)
+					return nil
+				}
+				mu.Lock()
+				errCount++
+				mu.Unlock()
+				log.Printf("[provincial] on day %s: %v", date, err)
+				return nil
+			}
+			mu.Lock()
+			divs = append(divs, dayDivs...)
+			mu.Unlock()
+			time.Sleep(delay)
+			return nil
+		})
+	}
+	_ = g.Wait()
+	return divs, errCount
+}
+
+func crawlSaskatchewanMinutesConcurrently(links []string, legislature, session int, client *http.Client, delay time.Duration) ([]ProvincialDivisionResult, int) {
+	if len(links) == 0 {
+		return nil, 0
+	}
+	limit := minInt(provinceSubcrawlParallelism, len(links))
+	g := new(errgroup.Group)
+	g.SetLimit(limit)
+
+	divs := make([]ProvincialDivisionResult, 0, len(links))
+	errCount := 0
+	var mu sync.Mutex
+
+	for _, link := range links {
+		link := link
+		g.Go(func() error {
+			dayDivs, err := CrawlSaskatchewanMinutes(link, legislature, session, client)
+			if err != nil {
+				mu.Lock()
+				errCount++
+				mu.Unlock()
+				log.Printf("[provincial] sk minutes %s: %v", link, err)
+				return nil
+			}
+			mu.Lock()
+			divs = append(divs, dayDivs...)
+			mu.Unlock()
+			time.Sleep(delay)
+			return nil
+		})
+	}
+	_ = g.Wait()
+	return divs, errCount
+}
+
+func minInt(a, b int) int {
+	if a < b {
+		return a
+	}
+	return b
+}
+
 // crawlBillsForSource dispatches to the correct province-specific bill crawler.
 func crawlBillsForSource(src ProvincialSource, legislature, session int, client *http.Client) ([]ProvincialBillStub, error) {
-	switch src.Code {
-	case "ab":
-		return CrawlAlbertaBills(src.BillsURL, legislature, session, client)
-	case "bc":
-		return CrawlBritishColumbiaBills(src.BillsURL, legislature, session, client)
-	case "mb":
-		return CrawlManitobaBills(src.BillsURL, legislature, session, client)
-	case "nb":
-		return CrawlNewBrunswickBills(src.BillsURL, legislature, session, client)
-	case "nl":
-		return CrawlNewfoundlandAndLabradorBills(src.BillsURL, legislature, session, client)
-	case "ns":
-		return CrawlNovaScotiaBills(src.BillsURL, legislature, session, client)
-	case "on":
-		return CrawlOntarioBills(src.BillsURL, legislature, session, client)
-	case "pe":
-		return CrawlPrinceEdwardIslandBills(src.BillsURL, legislature, session, peiSourceClient(src.BillsURL, client))
-	case "qc":
-		return CrawlQuebecBills(src.BillsURL, legislature, session, client)
-	case "sk":
-		return CrawlSaskatchewanBills(src.BillsURL, legislature, session, client)
-	default:
-		return CrawlProvincialBillsFromIndex(src.BillsURL, src.Code, legislature, session, src.Chamber, client)
+	if crawler, ok := provinceCrawlers[src.Code]; ok {
+		return crawler.CrawlBills(src.BillsURL, legislature, session, client)
 	}
+	return CrawlProvincialBillsFromIndex(src.BillsURL, src.Code, legislature, session, src.Chamber, client)
 }
 
 // crawlDivisionsForSource dispatches to the correct province-specific votes crawler
 // for all non-special provinces (i.e. excluding ON and SK which use their own multi-step
 // logic in CrawlProvinceSource).
 func crawlDivisionsForSource(src ProvincialSource, legislature, session int, client *http.Client) ([]ProvincialDivisionResult, error) {
-	switch src.Code {
-	case "ab":
-		return CrawlAlbertaVotes(src.VotesURL, legislature, session, client)
-	case "bc":
-		return CrawlBritishColumbiaVotes(src.VotesURL, legislature, session, client)
-	case "mb":
-		return CrawlManitobaVotes(src.VotesURL, legislature, session, client)
-	case "nb":
-		return CrawlNewBrunswickVotes(src.VotesURL, legislature, session, client)
-	case "nl":
-		return CrawlNewfoundlandAndLabradorVotes(src.VotesURL, legislature, session, client)
-	case "ns":
-		return CrawlNovaScotiaVotes(src.VotesURL, legislature, session, client)
-	case "pe":
-		return CrawlPrinceEdwardIslandVotes(src.VotesURL, legislature, session, peiSourceClient(src.VotesURL, client))
-	case "qc":
-		return CrawlQuebecVotes(src.VotesURL, legislature, session, client)
-	default:
-		return CrawlGenericProvincialVotes(src.VotesURL, src.Code, src.Chamber, legislature, session, client)
+	if crawler, ok := provinceCrawlers[src.Code]; ok && crawler != nil {
+		if votes, err := crawler.CrawlVotes(src.VotesURL, legislature, session, client); err != nil || votes != nil {
+			return votes, err
+		}
 	}
+	return CrawlGenericProvincialVotes(src.VotesURL, src.Code, src.Chamber, legislature, session, client)
 }
 
 func resolveProvincialLegislatureSession(conn *sql.DB, src ProvincialSource, client *http.Client) (int, int) {

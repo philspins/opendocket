@@ -2,6 +2,8 @@ package scraper
 
 import (
 	"database/sql"
+	"errors"
+	"fmt"
 	"log"
 	"net/http"
 	"os"
@@ -14,6 +16,7 @@ import (
 	"github.com/philspins/open-democracy/internal/db"
 	"github.com/philspins/open-democracy/internal/scraper/provincial"
 	"github.com/philspins/open-democracy/internal/utils"
+	"golang.org/x/sync/errgroup"
 )
 
 // ProvincialSource is an alias for provincial.ProvincialSource.
@@ -278,19 +281,32 @@ func CrawlProvincial(conn *sql.DB, client *http.Client, delay time.Duration, par
 		}
 		sources = filtered
 	}
-	fns := make([]func(), 0, len(sources))
+	if parallelism < 1 {
+		parallelism = 1
+	}
+	g := new(errgroup.Group)
+	g.SetLimit(parallelism)
+	errMu := sync.Mutex{}
+	errs := make([]error, 0)
 	for _, src := range sources {
 		src := src
-		fns = append(fns, func() {
+		g.Go(func() error {
 			seeder := func(conn *sql.DB, code, province string, c *http.Client, d time.Duration) {
 				_ = ensureProvincialMembersForSource(conn, c, d, ProvincialSource{Code: code, Province: province})
 			}
 			if err := provincial.CrawlProvinceSource(conn, client, delay, src, enqueueSummary, seeder); err != nil {
 				log.Printf("[provincial] %s: %v", src.Code, err)
+				errMu.Lock()
+				errs = append(errs, fmt.Errorf("%s: %w", src.Code, err))
+				errMu.Unlock()
 			}
+			return nil
 		})
 	}
-	RunParallel(parallelism, fns)
+	_ = g.Wait()
+	if len(errs) > 0 {
+		return errors.Join(errs...)
+	}
 	return nil
 }
 
@@ -337,10 +353,10 @@ func RunParallel(parallelism int, fns []func()) {
 	sem := make(chan struct{}, parallelism)
 	var wg sync.WaitGroup
 	for _, fn := range fns {
+		sem <- struct{}{}
 		wg.Add(1)
 		go func() {
 			defer wg.Done()
-			sem <- struct{}{}
 			defer func() { <-sem }()
 			fn()
 		}()

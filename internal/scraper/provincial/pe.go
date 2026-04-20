@@ -45,8 +45,8 @@ const (
 	peiDefaultDelay = 6 * time.Second
 )
 
-var peiGeneralAssembly = 67
-var peiAssemblySession = 3
+const peiGeneralAssembly = 67
+const peiAssemblySession = 3
 
 // ── WDF types (shared between PEI bills and votes) ────────────────────────────
 
@@ -94,10 +94,13 @@ func isPEICaptchaBody(body []byte) bool {
 	return strings.Contains(lower, peiCaptchaSignature) || strings.Contains(lower, peiBotManagerSignature)
 }
 
-func postPEIWorkflow(wdfBase, workflowName, activityName string, queryVars map[string]string, client *http.Client, delay time.Duration) ([]byte, error) {
+func postPEIWorkflow(ctx context.Context, wdfBase, workflowName, activityName string, queryVars map[string]string, client *http.Client, delay time.Duration) ([]byte, error) {
+	if ctx == nil {
+		ctx = context.Background()
+	}
 	isTestServer := strings.HasPrefix(wdfBase, "http://127.0.0.1") || strings.HasPrefix(wdfBase, "http://localhost")
 	if !isTestServer {
-		data, err := invokePEIFetchJS(workflowName, activityName, queryVars)
+		data, err := invokePEIFetchJS(ctx, workflowName, activityName, queryVars)
 		if err != nil {
 			log.Printf("[pe-wdf] pei_fetch.js error: %v; will fall back to HTML", err)
 			return nil, nil
@@ -107,10 +110,13 @@ func postPEIWorkflow(wdfBase, workflowName, activityName string, queryVars map[s
 		}
 		return data, nil
 	}
-	return postPEIWorkflowHTTP(wdfBase, workflowName, activityName, queryVars, delay)
+	return postPEIWorkflowHTTP(ctx, wdfBase, workflowName, activityName, queryVars, client, delay)
 }
 
-func invokePEIFetchJS(workflowName, activityName string, queryVars map[string]string) ([]byte, error) {
+func invokePEIFetchJS(ctx context.Context, workflowName, activityName string, queryVars map[string]string) ([]byte, error) {
+	if ctx == nil {
+		ctx = context.Background()
+	}
 	nodePath, err := exec.LookPath("node")
 	if err != nil {
 		return nil, nil
@@ -123,7 +129,7 @@ func invokePEIFetchJS(workflowName, activityName string, queryVars map[string]st
 	if err != nil {
 		return nil, fmt.Errorf("marshal queryVars: %w", err)
 	}
-	ctx, cancel := context.WithTimeout(context.Background(), 120*time.Second)
+	ctx, cancel := context.WithTimeout(ctx, 120*time.Second)
 	defer cancel()
 	cmd := exec.CommandContext(ctx, nodePath, scriptPath, workflowName, activityName, string(qvJSON))
 	var stdout, stderr bytes.Buffer
@@ -136,7 +142,10 @@ func invokePEIFetchJS(workflowName, activityName string, queryVars map[string]st
 	return stdout.Bytes(), nil
 }
 
-func postPEIWorkflowHTTP(wdfBase, workflowName, activityName string, queryVars map[string]string, delay time.Duration) ([]byte, error) {
+func postPEIWorkflowHTTP(ctx context.Context, wdfBase, workflowName, activityName string, queryVars map[string]string, client *http.Client, delay time.Duration) ([]byte, error) {
+	if ctx == nil {
+		ctx = context.Background()
+	}
 	apiURL := strings.TrimRight(wdfBase, "/") + "/legislative-assembly/services/api/workflow"
 
 	merged := make(map[string]interface{}, len(queryVars)+2)
@@ -156,7 +165,7 @@ func postPEIWorkflowHTTP(wdfBase, workflowName, activityName string, queryVars m
 	if err != nil {
 		return nil, fmt.Errorf("pe wdf marshal: %w", err)
 	}
-	req, err := http.NewRequest(http.MethodPost, apiURL, bytes.NewReader(bodyBytes))
+	req, err := http.NewRequestWithContext(ctx, http.MethodPost, apiURL, bytes.NewReader(bodyBytes))
 	if err != nil {
 		return nil, fmt.Errorf("pe wdf request: %w", err)
 	}
@@ -164,9 +173,17 @@ func postPEIWorkflowHTTP(wdfBase, workflowName, activityName string, queryVars m
 	req.Header.Set("Accept", "application/json")
 	req.Header.Set("Client-Show-Status", "true")
 
+	transport := http.RoundTripper(http.DefaultTransport)
+	if client != nil && client.Transport != nil {
+		transport = client.Transport
+	}
+	timeout := 20 * time.Second
+	if client != nil && client.Timeout > 0 {
+		timeout = client.Timeout
+	}
 	noRedirect := &http.Client{
-		Transport:     http.DefaultTransport,
-		Timeout:       20 * time.Second,
+		Transport:     transport,
+		Timeout:       timeout,
 		CheckRedirect: func(_ *http.Request, _ []*http.Request) error { return http.ErrUseLastResponse },
 	}
 	resp, err := noRedirect.Do(req)
@@ -232,7 +249,7 @@ func fetchPEICurrentAssemblySession() (int, int, bool) {
 		"search_bills":  "true",
 		"wdf_url_query": "true",
 	}
-	data, err := invokePEIFetchJS(peiWorkflowBills, peiWDFActivityBills, queryVars)
+	data, err := invokePEIFetchJS(context.Background(), peiWorkflowBills, peiWDFActivityBills, queryVars)
 	if err != nil || data == nil {
 		return 0, 0, false
 	}
@@ -327,7 +344,7 @@ func fetchPEIBillDetailURL(wdfBase, billDocID string, client *http.Client, delay
 	if strings.TrimSpace(billDocID) == "" {
 		return ""
 	}
-	body, err := postPEIWorkflow(wdfBase, peiWorkflowBills, peiWDFActivityBillView, map[string]string{
+	body, err := postPEIWorkflow(context.Background(), wdfBase, peiWorkflowBills, peiWDFActivityBillView, map[string]string{
 		"id": billDocID,
 	}, client, delay)
 	if err != nil || body == nil {
@@ -353,7 +370,7 @@ func crawlPEIBillsFromWorkflow(wdfBase string, year, legislature, session int, c
 		params["year"] = strconv.Itoa(year)
 		params["search"] = "year"
 	}
-	body, err := postPEIWorkflow(wdfBase, peiWorkflowBills, peiWDFActivityBills, params, client, delay)
+	body, err := postPEIWorkflow(context.Background(), wdfBase, peiWorkflowBills, peiWDFActivityBills, params, client, delay)
 	if err != nil || body == nil {
 		return nil, err
 	}
@@ -734,7 +751,7 @@ func crawlPEIVotesFromWorkflow(wdfBase string, year, legislature, session int, c
 		queryVars["year"] = strconv.Itoa(year)
 		queryVars["search"] = "year"
 	}
-	body, err := postPEIWorkflow(wdfBase, peiWorkflowJournals, peiWDFActivityJournals, queryVars, client, delay)
+	body, err := postPEIWorkflow(context.Background(), wdfBase, peiWorkflowJournals, peiWDFActivityJournals, queryVars, client, delay)
 	if err != nil || body == nil {
 		return nil, err
 	}

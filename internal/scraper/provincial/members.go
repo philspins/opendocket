@@ -2,8 +2,14 @@ package provincial
 
 import (
 	"database/sql"
+	"fmt"
 	"strings"
 )
+
+type provincialMemberCandidate struct {
+	ID   string
+	Name string
+}
 
 // NormalisePersonName strips titles and normalises whitespace/punctuation for name matching.
 func NormalisePersonName(s string) string { return normalisePersonName(s) }
@@ -46,36 +52,46 @@ func commonPrefixLen(a, b string) int {
 	return n
 }
 
-func resolveProvincialMemberID(conn *sql.DB, province, sourceName string) (string, error) {
-	want := normalisePersonName(sourceName)
-	if want == "" {
-		return "", nil
-	}
-
+func loadProvincialMemberCandidates(conn *sql.DB, province string) ([]provincialMemberCandidate, error) {
 	rows, err := conn.Query(`
 		SELECT id, name FROM members
 		WHERE government_level = 'provincial' AND lower(province) = lower(?)`, province)
 	if err != nil {
-		return "", err
+		return nil, err
 	}
 	defer rows.Close()
 
-	type candidate struct {
-		ID   string
-		Name string
-	}
-	list := make([]candidate, 0)
+	list := make([]provincialMemberCandidate, 0)
 	for rows.Next() {
-		var c candidate
+		var c provincialMemberCandidate
 		if err := rows.Scan(&c.ID, &c.Name); err != nil {
 			continue
 		}
 		list = append(list, c)
 	}
+	if err := rows.Err(); err != nil {
+		return nil, fmt.Errorf("scan provincial members: %w", err)
+	}
+	return list, nil
+}
+
+func resolveProvincialMemberID(conn *sql.DB, province, sourceName string) (string, error) {
+	list, err := loadProvincialMemberCandidates(conn, province)
+	if err != nil {
+		return "", err
+	}
+	return resolveProvincialMemberIDFromCandidates(list, sourceName), nil
+}
+
+func resolveProvincialMemberIDFromCandidates(list []provincialMemberCandidate, sourceName string) string {
+	want := normalisePersonName(sourceName)
+	if want == "" {
+		return ""
+	}
 
 	for _, c := range list {
 		if normalisePersonName(c.Name) == want {
-			return c.ID, nil
+			return c.ID
 		}
 	}
 
@@ -101,7 +117,7 @@ func resolveProvincialMemberID(conn *sql.DB, province, sourceName string) (strin
 			matchedID = c.ID
 		}
 		if matchedID != "" {
-			return matchedID, nil
+			return matchedID
 		}
 	}
 
@@ -111,7 +127,7 @@ func resolveProvincialMemberID(conn *sql.DB, province, sourceName string) (strin
 		for _, c := range list {
 			nameParts := strings.Fields(normalisePersonName(c.Name))
 			if len(nameParts) > 0 && nameParts[len(nameParts)-1] == last {
-				return c.ID, nil
+				return c.ID
 			}
 		}
 		bestID := ""
@@ -141,7 +157,7 @@ func resolveProvincialMemberID(conn *sql.DB, province, sourceName string) (strin
 			}
 		}
 		if bestID != "" && !tie {
-			return bestID, nil
+			return bestID
 		}
 	}
 
@@ -181,7 +197,7 @@ func resolveProvincialMemberID(conn *sql.DB, province, sourceName string) (strin
 		}
 
 		if bestID != "" && !tie {
-			return bestID, nil
+			return bestID
 		}
 
 		// Last-resort fallback: if the first name is OCR-corrupted, resolve by a
@@ -213,9 +229,9 @@ func resolveProvincialMemberID(conn *sql.DB, province, sourceName string) (strin
 			}
 		}
 		if bestID != "" && !tie {
-			return bestID, nil
+			return bestID
 		}
 	}
 
-	return "", nil
+	return ""
 }
