@@ -13,6 +13,7 @@ type rateRecord struct {
 type simpleRateLimiter struct {
 	mu      sync.Mutex
 	records map[string]rateRecord
+	calls   uint64
 }
 
 func newSimpleRateLimiter() *simpleRateLimiter {
@@ -22,6 +23,14 @@ func newSimpleRateLimiter() *simpleRateLimiter {
 func (r *simpleRateLimiter) allow(key string, limit int, window time.Duration, now time.Time) bool {
 	r.mu.Lock()
 	defer r.mu.Unlock()
+	r.calls++
+	if r.calls%256 == 0 {
+		for k, rec := range r.records {
+			if now.Sub(rec.windowStart) >= window {
+				delete(r.records, k)
+			}
+		}
+	}
 	rec, ok := r.records[key]
 	if !ok || now.Sub(rec.windowStart) >= window {
 		r.records[key] = rateRecord{windowStart: now, count: 1}

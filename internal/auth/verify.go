@@ -36,6 +36,7 @@ func (s *Service) HandleRequestVerification(w http.ResponseWriter, r *http.Reque
 		return
 	}
 	if err := s.verifyRecaptcha(r.Context(), strings.TrimSpace(r.FormValue("g-recaptcha-response")), s.clientIP(r)); err != nil {
+		log.Printf("recaptcha verification failed: %v", err)
 		http.Error(w, "captcha verification failed", http.StatusBadRequest)
 		return
 	}

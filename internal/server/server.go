@@ -275,7 +275,7 @@ func (s *Server) handleReact(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	if s.billInteractionRateLimit > 0 && s.billInteractionRateLimiter != nil &&
-		!s.billInteractionRateLimiter.allow("bill:react:"+strings.ToLower(strings.TrimSpace(u.Email)), s.billInteractionRateLimit, time.Minute, time.Now().UTC()) {
+		!s.billInteractionRateLimiter.allow(billInteractionRateKey(u.Email), s.billInteractionRateLimit, time.Minute, time.Now().UTC()) {
 		http.Error(w, "rate limit exceeded", http.StatusTooManyRequests)
 		return
 	}
@@ -348,4 +348,8 @@ func (s *Server) handleLogSubmission(w http.ResponseWriter, r *http.Request) {
 func (s *Server) handleHealth(w http.ResponseWriter, r *http.Request) {
 	w.Header().Set("Content-Type", "application/json")
 	_, _ = w.Write([]byte(`{"status":"ok"}`))
+}
+
+func billInteractionRateKey(email string) string {
+	return "bill:react:" + strings.ToLower(strings.TrimSpace(email))
 }
