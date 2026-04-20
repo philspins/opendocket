@@ -218,7 +218,7 @@ func (s *Server) handleMemberProfile(w http.ResponseWriter, r *http.Request) {
 		http.NotFound(w, r)
 		return
 	}
-	votes, _ := s.store.GetMemberVotes(id, 50)
+	votes, _ := s.store.GetMemberVotes(id, 500)
 	stats, _ := s.store.GetMemberStats(id)
 	catScores, _ := s.store.GetMemberCategoryScores(id)
 	_ = templates.MemberProfile(ps, member, votes, stats, catScores).Render(r.Context(), w)
