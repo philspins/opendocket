@@ -5,6 +5,10 @@ import (
 	"time"
 )
 
+// rateLimiterCleanupInterval controls how often stale limiter entries are
+// opportunistically evicted while processing requests.
+const rateLimiterCleanupInterval = 256
+
 type rateRecord struct {
 	windowStart time.Time
 	count       int
@@ -24,7 +28,7 @@ func (r *simpleRateLimiter) allow(key string, limit int, window time.Duration, n
 	r.mu.Lock()
 	defer r.mu.Unlock()
 	r.calls++
-	if r.calls%256 == 0 {
+	if r.calls%rateLimiterCleanupInterval == 0 {
 		for k, rec := range r.records {
 			if now.Sub(rec.windowStart) >= window {
 				delete(r.records, k)

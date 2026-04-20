@@ -48,7 +48,7 @@ func TestHandleSignupPage_RendersOAuthWidgetsAndFallbacks(t *testing.T) {
 	}
 }
 
-func TestHandleSignupPage_RendersRecaptchaWidgetWhenConfigured(t *testing.T) {
+func TestHandleSignupPage_RendersReCAPTCHAWidgetWhenConfigured(t *testing.T) {
 	svc, _ := newTestService(t)
 	t.Setenv("RECAPTCHA_SITE_KEY", "site-key")
 
@@ -336,7 +336,7 @@ func TestHandleVerifyEmail_ByCode_SetsSession(t *testing.T) {
 	}
 }
 
-func TestHandleRequestVerification_RequiresValidRecaptchaWhenConfigured(t *testing.T) {
+func TestHandleRequestVerification_RequiresValidReCAPTCHAWhenConfigured(t *testing.T) {
 	svc, _ := newTestService(t)
 	t.Setenv("RECAPTCHA_SECRET_KEY", "secret")
 
