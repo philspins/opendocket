@@ -178,24 +178,30 @@ func (s *Server) resolveRepresentativeMemberID(rep opennorth.Representative, fed
 	}
 	name := strings.TrimSpace(rep.Name)
 	fallback := ""
+	anyLevelNameMatch := ""
 	for _, member := range members {
+		nameMatch := name != "" && strings.EqualFold(strings.TrimSpace(member.Name), name)
 		if !strings.EqualFold(strings.TrimSpace(member.GovernmentLevel), targetLevel) {
+			if anyLevelNameMatch == "" && nameMatch {
+				anyLevelNameMatch = member.ID
+			}
 			continue
 		}
 		if fallback == "" {
 			fallback = member.ID
 		}
-		if name != "" && strings.EqualFold(strings.TrimSpace(member.Name), name) {
+		if nameMatch {
 			return member.ID
+		}
+		if anyLevelNameMatch == "" && nameMatch {
+			anyLevelNameMatch = member.ID
 		}
 	}
 	if fallback != "" {
 		return fallback
 	}
-	for _, member := range members {
-		if name != "" && strings.EqualFold(strings.TrimSpace(member.Name), name) {
-			return member.ID
-		}
+	if anyLevelNameMatch != "" {
+		return anyLevelNameMatch
 	}
 	return members[0].ID
 }
@@ -205,7 +211,7 @@ func recentBillVotes(votes []store.VoteRow, limit int) []store.VoteRow {
 		limit = 5
 	}
 	out := make([]store.VoteRow, 0, limit)
-	seen := make(map[string]struct{}, limit)
+	seen := make(map[string]struct{}, len(votes))
 	for _, vote := range votes {
 		billID := strings.TrimSpace(vote.BillID)
 		if billID == "" {
