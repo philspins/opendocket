@@ -88,7 +88,7 @@ func (s *Service) verifyRecaptcha(ctx context.Context, token, clientIP string) e
 		return err
 	}
 	if resp.StatusCode >= 400 {
-		return fmt.Errorf("recaptcha verify status %d", resp.StatusCode)
+		return fmt.Errorf("recaptcha API returned error status %d", resp.StatusCode)
 	}
 	var parsed struct {
 		Success bool `json:"success"`

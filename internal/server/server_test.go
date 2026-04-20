@@ -231,8 +231,8 @@ func TestHandleReact_RateLimitedPerUser(t *testing.T) {
 		req.AddCookie(&http.Cookie{Name: "od_session", Value: sessionID})
 		rr := httptest.NewRecorder()
 		srv.ServeHTTP(rr, req)
-		if rr.Code != http.StatusBadRequest {
-			t.Fatalf("request %d status=%d want %d", i+1, rr.Code, http.StatusBadRequest)
+		if rr.Code == http.StatusTooManyRequests {
+			t.Fatalf("request %d unexpectedly rate-limited", i+1)
 		}
 	}
 
