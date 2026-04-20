@@ -96,16 +96,21 @@ func AuthPage(ps store.ParliamentStatus, mode string, googleClientID string, fac
 					return templ_7745c5c3_Err
 				}
 			}
-			templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 6, "<div id=\"oauth-options\" class=\"grid gap-4 md:grid-cols-2\" style=\"")
+			var templ_7745c5c3_Var6 = []any{oauthOptionsClass(mode, recaptchaSiteKey)}
+			templ_7745c5c3_Err = templ.RenderCSSItems(ctx, templ_7745c5c3_Buffer, templ_7745c5c3_Var6...)
 			if templ_7745c5c3_Err != nil {
 				return templ_7745c5c3_Err
 			}
-			var templ_7745c5c3_Var6 string
-			templ_7745c5c3_Var6, templ_7745c5c3_Err = templruntime.SanitizeStyleAttributeValues(oauthOptionsStyle(mode, recaptchaSiteKey))
+			templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 6, "<div id=\"oauth-options\" class=\"")
 			if templ_7745c5c3_Err != nil {
-				return templ.Error{Err: templ_7745c5c3_Err, FileName: `internal/templates/auth.templ`, Line: 25, Col: 110}
+				return templ_7745c5c3_Err
 			}
-			_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var6))
+			var templ_7745c5c3_Var7 string
+			templ_7745c5c3_Var7, templ_7745c5c3_Err = templ.JoinStringErrs(templ.CSSClasses(templ_7745c5c3_Var6).String())
+			if templ_7745c5c3_Err != nil {
+				return templ.Error{Err: templ_7745c5c3_Err, FileName: `internal/templates/auth.templ`, Line: 1, Col: 0}
+			}
+			_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var7))
 			if templ_7745c5c3_Err != nil {
 				return templ_7745c5c3_Err
 			}
@@ -118,12 +123,12 @@ func AuthPage(ps store.ParliamentStatus, mode string, googleClientID string, fac
 				if templ_7745c5c3_Err != nil {
 					return templ_7745c5c3_Err
 				}
-				var templ_7745c5c3_Var7 string
-				templ_7745c5c3_Var7, templ_7745c5c3_Err = templ.JoinStringErrs(googleClientID)
+				var templ_7745c5c3_Var8 string
+				templ_7745c5c3_Var8, templ_7745c5c3_Err = templ.JoinStringErrs(googleClientID)
 				if templ_7745c5c3_Err != nil {
 					return templ.Error{Err: templ_7745c5c3_Err, FileName: `internal/templates/auth.templ`, Line: 29, Col: 96}
 				}
-				_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var7))
+				_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var8))
 				if templ_7745c5c3_Err != nil {
 					return templ_7745c5c3_Err
 				}
@@ -131,12 +136,12 @@ func AuthPage(ps store.ParliamentStatus, mode string, googleClientID string, fac
 				if templ_7745c5c3_Err != nil {
 					return templ_7745c5c3_Err
 				}
-				var templ_7745c5c3_Var8 string
-				templ_7745c5c3_Var8, templ_7745c5c3_Err = templ.JoinStringErrs(googleWidgetText(mode))
+				var templ_7745c5c3_Var9 string
+				templ_7745c5c3_Var9, templ_7745c5c3_Err = templ.JoinStringErrs(googleWidgetText(mode))
 				if templ_7745c5c3_Err != nil {
 					return templ.Error{Err: templ_7745c5c3_Err, FileName: `internal/templates/auth.templ`, Line: 29, Col: 140}
 				}
-				_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var8))
+				_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var9))
 				if templ_7745c5c3_Err != nil {
 					return templ_7745c5c3_Err
 				}
@@ -170,7 +175,7 @@ func AuthPage(ps store.ParliamentStatus, mode string, googleClientID string, fac
 				return templ_7745c5c3_Err
 			}
 			if signupRecaptchaEnabled(mode, recaptchaSiteKey) {
-				templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 16, "<script src=\"https://www.google.com/recaptcha/api.js\" async defer></script> <script>\n\t\t\t\twindow.odSignupRecaptchaComplete = function() {\n\t\t\t\t\tconst oauthOptions = document.getElementById(\"oauth-options\");\n\t\t\t\t\tif (oauthOptions) {\n\t\t\t\t\t\toauthOptions.removeAttribute(\"style\");\n\t\t\t\t\t}\n\t\t\t\t\tconst gate = document.getElementById(\"signup-recaptcha-gate\");\n\t\t\t\t\tif (gate) {\n\t\t\t\t\t\tgate.classList.add(\"hidden\");\n\t\t\t\t\t}\n\t\t\t\t};\n\t\t\t</script>")
+				templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 16, "<script src=\"https://www.google.com/recaptcha/api.js\" async defer></script> <script>\n\t\t\t\twindow.odSignupRecaptchaComplete = function() {\n\t\t\t\t\tconst oauthOptions = document.getElementById(\"oauth-options\");\n\t\t\t\t\tif (oauthOptions) {\n\t\t\t\t\t\toauthOptions.classList.remove(\"is-hidden\");\n\t\t\t\t\t}\n\t\t\t\t\tconst gate = document.getElementById(\"signup-recaptcha-gate\");\n\t\t\t\t\tif (gate) {\n\t\t\t\t\t\tgate.classList.add(\"hidden\");\n\t\t\t\t\t}\n\t\t\t\t};\n\t\t\t</script>")
 				if templ_7745c5c3_Err != nil {
 					return templ_7745c5c3_Err
 				}
@@ -194,12 +199,12 @@ func AuthPage(ps store.ParliamentStatus, mode string, googleClientID string, fac
 				if templ_7745c5c3_Err != nil {
 					return templ_7745c5c3_Err
 				}
-				var templ_7745c5c3_Var9 string
-				templ_7745c5c3_Var9, templ_7745c5c3_Err = templ.JoinStringErrs(facebookAppID)
+				var templ_7745c5c3_Var10 string
+				templ_7745c5c3_Var10, templ_7745c5c3_Err = templ.JoinStringErrs(facebookAppID)
 				if templ_7745c5c3_Err != nil {
 					return templ.Error{Err: templ_7745c5c3_Err, FileName: `internal/templates/auth.templ`, Line: 100, Col: 75}
 				}
-				_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var9))
+				_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var10))
 				if templ_7745c5c3_Err != nil {
 					return templ_7745c5c3_Err
 				}
@@ -246,11 +251,11 @@ func googleWidgetText(mode string) string {
 	return "signin_with"
 }
 
-func oauthOptionsStyle(mode string, recaptchaSiteKey string) string {
+func oauthOptionsClass(mode string, recaptchaSiteKey string) string {
 	if signupRecaptchaEnabled(mode, recaptchaSiteKey) {
-		return "display:none;"
+		return "grid gap-4 md:grid-cols-2 is-hidden"
 	}
-	return ""
+	return "grid gap-4 md:grid-cols-2"
 }
 
 func signupRecaptchaEnabled(mode string, recaptchaSiteKey string) bool {

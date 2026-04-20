@@ -22,7 +22,7 @@ templ AuthPage(ps store.ParliamentStatus, mode string, googleClientID string, fa
 					<div class="g-recaptcha" data-sitekey={ recaptchaSiteKey } data-callback="odSignupRecaptchaComplete"></div>
 				</div>
 			}
-			<div id="oauth-options" class="grid gap-4 md:grid-cols-2" style={ oauthOptionsStyle(mode, recaptchaSiteKey) }>
+			<div id="oauth-options" class={ oauthOptionsClass(mode, recaptchaSiteKey) }>
 				<div class="surface-card p-4 space-y-3">
 					<h2 class="text-lg font-semibold">Google</h2>
 					if googleClientID != "" {
@@ -56,7 +56,7 @@ templ AuthPage(ps store.ParliamentStatus, mode string, googleClientID string, fa
 				window.odSignupRecaptchaComplete = function() {
 					const oauthOptions = document.getElementById("oauth-options");
 					if (oauthOptions) {
-						oauthOptions.removeAttribute("style");
+						oauthOptions.classList.remove("is-hidden");
 					}
 					const gate = document.getElementById("signup-recaptcha-gate");
 					if (gate) {
@@ -154,11 +154,11 @@ func googleWidgetText(mode string) string {
 	return "signin_with"
 }
 
-func oauthOptionsStyle(mode string, recaptchaSiteKey string) string {
+func oauthOptionsClass(mode string, recaptchaSiteKey string) string {
 	if signupRecaptchaEnabled(mode, recaptchaSiteKey) {
-		return "display:none;"
+		return "grid gap-4 md:grid-cols-2 is-hidden"
 	}
-	return ""
+	return "grid gap-4 md:grid-cols-2"
 }
 
 func signupRecaptchaEnabled(mode string, recaptchaSiteKey string) bool {

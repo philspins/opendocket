@@ -69,11 +69,11 @@ func TestHandleSignupPage_RendersReCAPTCHAWidgetWhenConfigured(t *testing.T) {
 	if !strings.Contains(body, `class="g-recaptcha"`) || !strings.Contains(body, `data-sitekey="site-key"`) {
 		t.Fatalf("expected recaptcha widget on signup page")
 	}
-	if !strings.Contains(body, `id="oauth-options" class="grid gap-4 md:grid-cols-2"`) {
+	if !strings.Contains(body, `id="oauth-options" class="grid gap-4 md:grid-cols-2 is-hidden"`) {
 		t.Fatalf("expected oauth options to be hidden until recaptcha completion")
 	}
-	if !strings.Contains(body, `style="display:none;"`) {
-		t.Fatalf("expected oauth options to be inline-hidden until recaptcha completion")
+	if !strings.Contains(body, `classList.remove("is-hidden")`) {
+		t.Fatalf("expected recaptcha callback to reveal oauth options")
 	}
 	if !strings.Contains(body, `data-callback="odSignupRecaptchaComplete"`) {
 		t.Fatalf("expected recaptcha callback for unlocking oauth options")
