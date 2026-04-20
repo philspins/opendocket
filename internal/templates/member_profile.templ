@@ -231,6 +231,9 @@ templ MemberProfile(ps store.ParliamentStatus, member store.MemberRow, votes []s
 
 					const renderPage = () => {
 						const pages = totalPages();
+						if (currentPage < 1) {
+							currentPage = 1;
+						}
 						if (currentPage > pages) {
 							currentPage = pages;
 						}
@@ -255,7 +258,8 @@ templ MemberProfile(ps store.ParliamentStatus, member store.MemberRow, votes []s
 						const target = event.target;
 						if (!(target instanceof HTMLButtonElement)) return;
 						const selected = Number(target.dataset.page);
-						if (!Number.isInteger(selected) || selected < 1 || selected > totalPages()) return;
+						const pages = totalPages();
+						if (!Number.isInteger(selected) || selected < 1 || selected > pages) return;
 						currentPage = selected;
 						renderPage();
 					});
