@@ -636,7 +636,7 @@ templ Layout(title string, ps store.ParliamentStatus) {
 					}).then((user) => {
 						if (!user) return;
 						authActions.innerHTML = "<a href=\"/profile\" class=\"btn btn-secondary\">Profile</a><form method=\"POST\" action=\"/auth/logout\"><button type=\"submit\" class=\"btn btn-secondary\">Sign Out</button></form>";
-						if (searchForm && user.Address) {
+						if (searchForm && (user.FederalRidingID || user.ProvincialRidingID)) {
 							searchForm.style.display = "none";
 						}
 					}).catch(() => {

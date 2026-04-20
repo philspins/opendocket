@@ -4,6 +4,7 @@ import (
 	"log"
 	"net/http"
 	"strings"
+	"time"
 
 	"github.com/philspins/open-democracy/internal/opennorth"
 	"github.com/philspins/open-democracy/internal/riding"
@@ -11,23 +12,51 @@ import (
 	"github.com/philspins/open-democracy/internal/templates"
 )
 
-func preferredLookupAddress(user store.UserRow) string {
-	return strings.TrimSpace(user.Address)
+const (
+	guestFederalRidingCookie    = "od_guest_federal_riding_id"
+	guestProvincialRidingCookie = "od_guest_provincial_riding_id"
+	guestRidingCookieTTL        = 24 * time.Hour
+)
+
+func localRidingUserFromCookies(r *http.Request) store.UserRow {
+	var user store.UserRow
+	if c, err := r.Cookie(guestFederalRidingCookie); err == nil {
+		user.FederalRidingID = strings.TrimSpace(c.Value)
+	}
+	if c, err := r.Cookie(guestProvincialRidingCookie); err == nil {
+		user.ProvincialRidingID = strings.TrimSpace(c.Value)
+	}
+	return user
 }
 
-func (s *Server) loadRepresentativeContext(r *http.Request, user store.UserRow) (string, riding.LookupResult) {
-	address := preferredLookupAddress(user)
-	if address == "" {
-		return "", riding.LookupResult{}
+func (s *Server) setLocalRidingCookies(w http.ResponseWriter, federalRidingID, provincialRidingID string) {
+	cookies := []struct {
+		name  string
+		value string
+	}{
+		{name: guestFederalRidingCookie, value: strings.TrimSpace(federalRidingID)},
+		{name: guestProvincialRidingCookie, value: strings.TrimSpace(provincialRidingID)},
 	}
-
-	result, err := s.riding.Lookup(r.Context(), address)
-	if err == nil {
-		return address, result
+	for _, c := range cookies {
+		cookie := &http.Cookie{
+			Name:     c.name,
+			Value:    c.value,
+			Path:     "/",
+			HttpOnly: true,
+			SameSite: http.SameSiteLaxMode,
+			Secure:   strings.HasPrefix(strings.ToLower(s.baseURL), "https://"),
+		}
+		if c.value == "" {
+			cookie.MaxAge = -1
+		} else {
+			cookie.Expires = time.Now().Add(guestRidingCookieTTL)
+		}
+		http.SetCookie(w, cookie)
 	}
+}
 
-	log.Printf("loadRepresentativeContext lookup failed for %q: %v", address, err)
-	return address, fallbackLookupResult(user, s.store)
+func hasLocalRidingContext(result riding.LookupResult) bool {
+	return strings.TrimSpace(result.FederalRidingID) != "" || strings.TrimSpace(result.ProvincialRidingID) != ""
 }
 
 func fallbackLookupResult(user store.UserRow, st *store.Store) riding.LookupResult {
@@ -36,6 +65,11 @@ func fallbackLookupResult(user store.UserRow, st *store.Store) riding.LookupResu
 		ProvincialRidingID: strings.TrimSpace(user.ProvincialRidingID),
 	}
 	if result.FederalRidingID != "" {
+		result.FederalRepresentative = opennorth.Representative{
+			Name:          "Current federal representative",
+			ElectedOffice: "MP",
+			DistrictName:  result.FederalRidingID,
+		}
 		members, _ := st.GetMembersByRiding(result.FederalRidingID)
 		if len(members) > 0 {
 			member := members[0]
@@ -83,8 +117,9 @@ func (s *Server) handleRiding(w http.ResponseWriter, r *http.Request) {
 			}
 		} else {
 			reps = result.Representatives
+			s.setLocalRidingCookies(w, result.FederalRidingID, result.ProvincialRidingID)
 			if user, ok := s.auth.SessionUser(r); ok {
-				if _, saveErr := s.store.UpdateUserLocation(user.ID, address, result.FederalRidingID, result.ProvincialRidingID); saveErr != nil {
+				if _, saveErr := s.store.UpdateUserLocation(user.ID, result.FederalRidingID, result.ProvincialRidingID); saveErr != nil {
 					log.Printf("handleRiding save failed for user=%q: %v", user.ID, saveErr)
 				}
 			}
@@ -103,7 +138,7 @@ func (s *Server) handleProfile(w http.ResponseWriter, r *http.Request) {
 
 	switch r.Method {
 	case http.MethodGet:
-		s.renderProfile(w, r, user, preferredLookupAddress(user), "", r.URL.Query().Get("updated") == "1")
+		s.renderProfile(w, r, user, "", "", r.URL.Query().Get("updated") == "1")
 	case http.MethodPost:
 		if err := r.ParseForm(); err != nil {
 			http.Error(w, "bad request", http.StatusBadRequest)
@@ -111,10 +146,11 @@ func (s *Server) handleProfile(w http.ResponseWriter, r *http.Request) {
 		}
 		address := strings.TrimSpace(r.FormValue("address"))
 		if address == "" {
-			if _, err := s.store.UpdateUserLocation(user.ID, "", "", ""); err != nil {
+			if _, err := s.store.UpdateUserLocation(user.ID, "", ""); err != nil {
 				http.Error(w, "failed to clear address", http.StatusInternalServerError)
 				return
 			}
+			s.setLocalRidingCookies(w, "", "")
 			http.Redirect(w, r, "/profile?updated=1", http.StatusSeeOther)
 			return
 		}
@@ -131,10 +167,11 @@ func (s *Server) handleProfile(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 
-		if _, err := s.store.UpdateUserLocation(user.ID, address, result.FederalRidingID, result.ProvincialRidingID); err != nil {
+		if _, err := s.store.UpdateUserLocation(user.ID, result.FederalRidingID, result.ProvincialRidingID); err != nil {
 			http.Error(w, "failed to save profile", http.StatusInternalServerError)
 			return
 		}
+		s.setLocalRidingCookies(w, result.FederalRidingID, result.ProvincialRidingID)
 		http.Redirect(w, r, "/profile?updated=1", http.StatusSeeOther)
 	default:
 		w.WriteHeader(http.StatusMethodNotAllowed)

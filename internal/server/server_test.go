@@ -19,6 +19,11 @@ import (
 	"github.com/philspins/open-democracy/internal/store"
 )
 
+const (
+	testGuestFederalRidingCookie    = "od_guest_federal_riding_id"
+	testGuestProvincialRidingCookie = "od_guest_provincial_riding_id"
+)
+
 func newTestServer(t *testing.T) (*Server, *store.Store) {
 	t.Helper()
 	t.Setenv("SES_FROM_EMAIL", "")
@@ -314,7 +319,7 @@ func TestDeleteDataCallback_RejectsInvalidRequest(t *testing.T) {
 	}
 }
 
-func TestHandleRiding_PersistsLookupForSessionUser(t *testing.T) {
+func TestHandleRiding_PersistsOnlyRidingsForSessionUser(t *testing.T) {
 	srv, st := newTestServer(t)
 	u, err := st.UpsertUser("lookup@example.com")
 	if err != nil {
@@ -350,15 +355,15 @@ func TestHandleRiding_PersistsLookupForSessionUser(t *testing.T) {
 	if err != nil {
 		t.Fatalf("GetUserByEmail: %v", err)
 	}
-	if got.Address != "123 Main St, Ottawa, ON" {
-		t.Fatalf("Address=%q want %q", got.Address, "123 Main St, Ottawa, ON")
+	if got.Address != "" {
+		t.Fatalf("Address=%q want empty", got.Address)
 	}
 	if got.FederalRidingID != "Ottawa Centre" || got.ProvincialRidingID != "Ottawa South" {
 		t.Fatalf("unexpected riding ids: %+v", got)
 	}
 }
 
-func TestHandleProfile_PostSavesAddress(t *testing.T) {
+func TestHandleProfile_PostSavesOnlyRidings(t *testing.T) {
 	srv, st := newTestServer(t)
 	u, err := st.UpsertUser("profile-save@example.com")
 	if err != nil {
@@ -400,8 +405,46 @@ func TestHandleProfile_PostSavesAddress(t *testing.T) {
 	if err != nil {
 		t.Fatalf("GetUserByEmail: %v", err)
 	}
-	if got.Address != "456 Elm St, Ottawa, ON" {
-		t.Fatalf("Address=%q want %q", got.Address, "456 Elm St, Ottawa, ON")
+	if got.Address != "" {
+		t.Fatalf("Address=%q want empty", got.Address)
+	}
+	if got.FederalRidingID != "Ottawa Centre" || got.ProvincialRidingID != "Ottawa South" {
+		t.Fatalf("unexpected riding ids: %+v", got)
+	}
+}
+
+func TestHandleRiding_UnauthenticatedSetsRidingCookies(t *testing.T) {
+	srv, _ := newTestServer(t)
+	srv.riding.SetLookups(
+		func(_ context.Context, _ string, _ string) (float64, float64, error) {
+			return 45.0, -75.0, nil
+		},
+		func(_ context.Context, _, _ float64) ([]opennorth.Representative, error) {
+			return []opennorth.Representative{
+				{Name: "Jane MP", ElectedOffice: "MP", DistrictName: "Ottawa Centre"},
+				{Name: "John MPP", ElectedOffice: "MPP", DistrictName: "Ottawa South"},
+			}, nil
+		},
+	)
+
+	req := httptest.NewRequest(http.MethodGet, "/riding?address=123+Main+St,+Ottawa,+ON", nil)
+	rr := httptest.NewRecorder()
+	srv.ServeHTTP(rr, req)
+
+	if rr.Code != http.StatusOK {
+		t.Fatalf("status=%d want %d", rr.Code, http.StatusOK)
+	}
+	var gotFederal, gotProvincial string
+	for _, c := range rr.Result().Cookies() {
+		switch c.Name {
+		case testGuestFederalRidingCookie:
+			gotFederal = c.Value
+		case testGuestProvincialRidingCookie:
+			gotProvincial = c.Value
+		}
+	}
+	if gotFederal != "Ottawa Centre" || gotProvincial != "Ottawa South" {
+		t.Fatalf("unexpected cookie riding ids: federal=%q provincial=%q", gotFederal, gotProvincial)
 	}
 }
 
@@ -411,7 +454,7 @@ func TestHandleHome_UsesSavedRepresentativesAndHidesLookupHero(t *testing.T) {
 	if err != nil {
 		t.Fatalf("UpsertUser: %v", err)
 	}
-	_, err = st.UpdateUserLocation(u.ID, "789 Pine St, Ottawa, ON", "Ottawa Centre", "Ottawa South")
+	_, err = st.UpdateUserLocation(u.ID, "Ottawa Centre", "Ottawa South")
 	if err != nil {
 		t.Fatalf("UpdateUserLocation: %v", err)
 	}
@@ -419,18 +462,6 @@ func TestHandleHome_UsesSavedRepresentativesAndHidesLookupHero(t *testing.T) {
 	if err != nil {
 		t.Fatalf("CreateSession: %v", err)
 	}
-
-	srv.riding.SetLookups(
-		func(_ context.Context, _ string, _ string) (float64, float64, error) {
-			return 45.0, -75.0, nil
-		},
-		func(_ context.Context, _, _ float64) ([]opennorth.Representative, error) {
-			return []opennorth.Representative{
-				{Name: "Jane MP", ElectedOffice: "MP", DistrictName: "Ottawa Centre", PartyName: "Liberal"},
-				{Name: "John MPP", ElectedOffice: "MPP", DistrictName: "Ottawa South", PartyName: "Progressive Conservative"},
-			}, nil
-		},
-	)
 
 	req := httptest.NewRequest(http.MethodGet, "/", nil)
 	req.AddCookie(&http.Cookie{Name: "od_session", Value: sid})
@@ -441,11 +472,31 @@ func TestHandleHome_UsesSavedRepresentativesAndHidesLookupHero(t *testing.T) {
 		t.Fatalf("status=%d want %d", rr.Code, http.StatusOK)
 	}
 	body := rr.Body.String()
-	if !strings.Contains(body, "Jane MP") || !strings.Contains(body, "John MPP") {
-		t.Fatalf("expected saved representative names in home page body")
+	if !strings.Contains(body, "for Ottawa Centre") || !strings.Contains(body, "for Ottawa South") {
+		t.Fatalf("expected saved riding context in home page body")
 	}
 	if strings.Contains(body, "Find Your Riding") {
 		t.Fatalf("expected lookup hero to be hidden once address is saved")
+	}
+}
+
+func TestHandleHome_UnauthenticatedUsesRidingCookies(t *testing.T) {
+	srv, _ := newTestServer(t)
+	req := httptest.NewRequest(http.MethodGet, "/", nil)
+	req.AddCookie(&http.Cookie{Name: testGuestFederalRidingCookie, Value: "Ottawa Centre"})
+	req.AddCookie(&http.Cookie{Name: testGuestProvincialRidingCookie, Value: "Ottawa South"})
+	rr := httptest.NewRecorder()
+
+	srv.ServeHTTP(rr, req)
+	if rr.Code != http.StatusOK {
+		t.Fatalf("status=%d want %d", rr.Code, http.StatusOK)
+	}
+	body := rr.Body.String()
+	if !strings.Contains(body, "for Ottawa Centre") || !strings.Contains(body, "for Ottawa South") {
+		t.Fatalf("expected riding cookie context in home page body")
+	}
+	if strings.Contains(body, "Find Your Riding") {
+		t.Fatalf("expected lookup hero to be hidden once riding cookies are set")
 	}
 }
 
