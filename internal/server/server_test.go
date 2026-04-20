@@ -4,6 +4,7 @@ import (
 	"context"
 	"crypto/hmac"
 	"crypto/sha256"
+	"database/sql"
 	"encoding/base64"
 	"encoding/json"
 	"net/http"
@@ -20,6 +21,11 @@ import (
 )
 
 func newTestServer(t *testing.T) (*Server, *store.Store) {
+	srv, st, _ := newTestServerWithDB(t)
+	return srv, st
+}
+
+func newTestServerWithDB(t *testing.T) (*Server, *store.Store, *sql.DB) {
 	t.Helper()
 	t.Setenv("SES_FROM_EMAIL", "")
 	t.Setenv("OAUTH_BASE_URL", "http://127.0.0.1:8080")
@@ -33,7 +39,7 @@ func newTestServer(t *testing.T) (*Server, *store.Store) {
 
 	st := store.New(conn)
 	srv := New(st)
-	return srv, st
+	return srv, st, conn
 }
 
 func TestHandleRequestVerification_DoesNotLeakSecrets(t *testing.T) {
@@ -414,6 +420,154 @@ func TestHandleHome_UsesSavedRepresentativesAndHidesLookupHero(t *testing.T) {
 	}
 	if strings.Contains(body, "Find Your Riding") {
 		t.Fatalf("expected lookup hero to be hidden once address is saved")
+	}
+}
+
+func TestHandleHome_ShowsRecentBillVotesForSelectedRepresentatives(t *testing.T) {
+	srv, st, conn := newTestServerWithDB(t)
+
+	if err := db.UpsertMember(conn, db.Member{
+		ID:              "mp-1",
+		Name:            "Jane MP",
+		Riding:          "Ottawa Centre",
+		Chamber:         "commons",
+		Active:          true,
+		LastScraped:     "2026-01-01T00:00:00Z",
+		GovernmentLevel: "federal",
+	}); err != nil {
+		t.Fatalf("UpsertMember mp-1: %v", err)
+	}
+	if err := db.UpsertMember(conn, db.Member{
+		ID:              "mpp-1",
+		Name:            "John MPP",
+		Riding:          "Ottawa South",
+		Chamber:         "ontario",
+		Active:          true,
+		LastScraped:     "2026-01-01T00:00:00Z",
+		GovernmentLevel: "provincial",
+	}); err != nil {
+		t.Fatalf("UpsertMember mpp-1: %v", err)
+	}
+	if err := db.UpsertMember(conn, db.Member{
+		ID:              "other-1",
+		Name:            "Another MP",
+		Riding:          "Elsewhere",
+		Chamber:         "commons",
+		Active:          true,
+		LastScraped:     "2026-01-01T00:00:00Z",
+		GovernmentLevel: "federal",
+	}); err != nil {
+		t.Fatalf("UpsertMember other-1: %v", err)
+	}
+
+	for _, bill := range []db.Bill{
+		{ID: "bill-fed-1", Parliament: 45, Session: 1, Number: "C-1", Title: "Federal bill one", LastScraped: "2026-01-01T00:00:00Z"},
+		{ID: "bill-fed-2", Parliament: 45, Session: 1, Number: "C-2", Title: "Federal bill two", LastScraped: "2026-01-01T00:00:00Z"},
+		{ID: "bill-prov-1", Parliament: 1, Session: 1, Number: "ON-1", Title: "Provincial bill one", LastScraped: "2026-01-01T00:00:00Z"},
+		{ID: "bill-other", Parliament: 45, Session: 1, Number: "C-999", Title: "Other bill", LastScraped: "2026-01-01T00:00:00Z"},
+	} {
+		if err := db.UpsertBill(conn, bill); err != nil {
+			t.Fatalf("UpsertBill %s: %v", bill.ID, err)
+		}
+	}
+
+	for _, div := range []db.Division{
+		{ID: "div-fed-old", Parliament: 45, Session: 1, Number: 1, Date: "2026-01-01", BillID: "bill-fed-1", Description: "Federal bill one older vote", Result: "Passed", Chamber: "commons", LastScraped: "2026-01-01T00:00:00Z"},
+		{ID: "div-fed-new", Parliament: 45, Session: 1, Number: 2, Date: "2026-02-01", BillID: "bill-fed-1", Description: "Federal bill one latest vote", Result: "Passed", Chamber: "commons", LastScraped: "2026-01-01T00:00:00Z"},
+		{ID: "div-fed-two", Parliament: 45, Session: 1, Number: 3, Date: "2026-01-15", BillID: "bill-fed-2", Description: "Federal bill two vote", Result: "Passed", Chamber: "commons", LastScraped: "2026-01-01T00:00:00Z"},
+		{ID: "div-prov-one", Parliament: 1, Session: 1, Number: 1, Date: "2026-01-20", BillID: "bill-prov-1", Description: "Provincial bill vote", Result: "Passed", Chamber: "ontario", LastScraped: "2026-01-01T00:00:00Z"},
+		{ID: "div-other", Parliament: 45, Session: 1, Number: 4, Date: "2026-02-03", BillID: "bill-other", Description: "Unrelated member vote", Result: "Passed", Chamber: "commons", LastScraped: "2026-01-01T00:00:00Z"},
+	} {
+		if err := db.UpsertDivision(conn, div); err != nil {
+			t.Fatalf("UpsertDivision %s: %v", div.ID, err)
+		}
+	}
+
+	for _, mv := range []struct {
+		divID    string
+		memberID string
+		vote     string
+	}{
+		{divID: "div-fed-old", memberID: "mp-1", vote: "Yea"},
+		{divID: "div-fed-new", memberID: "mp-1", vote: "Nay"},
+		{divID: "div-fed-two", memberID: "mp-1", vote: "Yea"},
+		{divID: "div-prov-one", memberID: "mpp-1", vote: "Yea"},
+		{divID: "div-other", memberID: "other-1", vote: "Nay"},
+	} {
+		if err := db.UpsertMemberVote(conn, mv.divID, mv.memberID, mv.vote); err != nil {
+			t.Fatalf("UpsertMemberVote %+v: %v", mv, err)
+		}
+	}
+
+	u, err := st.UpsertUser("home-votes@example.com")
+	if err != nil {
+		t.Fatalf("UpsertUser: %v", err)
+	}
+	if _, err := st.UpdateUserLocation(u.ID, "123 Main St, Ottawa, ON", "Ottawa Centre", "Ottawa South"); err != nil {
+		t.Fatalf("UpdateUserLocation: %v", err)
+	}
+	sid, err := st.CreateSession(u.ID, time.Hour)
+	if err != nil {
+		t.Fatalf("CreateSession: %v", err)
+	}
+
+	srv.riding.SetLookups(
+		func(_ context.Context, _ string, _ string) (float64, float64, error) {
+			return 45.0, -75.0, nil
+		},
+		func(_ context.Context, _, _ float64) ([]opennorth.Representative, error) {
+			return []opennorth.Representative{
+				{Name: "Jane MP", ElectedOffice: "MP", DistrictName: "Ottawa Centre"},
+				{Name: "John MPP", ElectedOffice: "MPP", DistrictName: "Ottawa South"},
+			}, nil
+		},
+	)
+
+	req := httptest.NewRequest(http.MethodGet, "/", nil)
+	req.AddCookie(&http.Cookie{Name: "od_session", Value: sid})
+	rr := httptest.NewRecorder()
+	srv.ServeHTTP(rr, req)
+	if rr.Code != http.StatusOK {
+		t.Fatalf("status=%d want %d", rr.Code, http.StatusOK)
+	}
+	body := rr.Body.String()
+	for _, expected := range []string{
+		"Federal bill one latest vote",
+		"Federal bill two vote",
+		"Provincial bill vote",
+		">Nay<",
+		">Yea<",
+	} {
+		if !strings.Contains(body, expected) {
+			t.Fatalf("expected homepage to contain %q", expected)
+		}
+	}
+	for _, excluded := range []string{
+		"Federal bill one older vote",
+		"Unrelated member vote",
+	} {
+		if strings.Contains(body, excluded) {
+			t.Fatalf("did not expect homepage to contain %q", excluded)
+		}
+	}
+}
+
+func TestRecentBillVotes_DeduplicatesAndSkipsNonBillDivisions(t *testing.T) {
+	got := recentBillVotes([]store.VoteRow{
+		{BillID: "", Description: "No bill"},
+		{BillID: "b-1", Description: "Latest for b-1"},
+		{BillID: "b-1", Description: "Older for b-1"},
+		{BillID: "b-2", Description: "Only for b-2"},
+	}, 5)
+
+	if len(got) != 2 {
+		t.Fatalf("len=%d want 2", len(got))
+	}
+	if got[0].Description != "Latest for b-1" {
+		t.Fatalf("first description=%q want latest b-1 vote", got[0].Description)
+	}
+	if got[1].Description != "Only for b-2" {
+		t.Fatalf("second description=%q want b-2 vote", got[1].Description)
 	}
 }
 

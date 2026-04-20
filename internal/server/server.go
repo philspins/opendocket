@@ -134,20 +134,93 @@ func (s *Server) parliamentStatus() store.ParliamentStatus {
 
 func (s *Server) handleHome(w http.ResponseWriter, r *http.Request) {
 	ps := s.parliamentStatus()
-	bills, _ := s.store.GetRecentBills(5)
-	divs, _ := s.store.GetRecentDivisions(10)
 	var (
-		savedAddress  string
-		federalRep    opennorth.Representative
-		provincialRep opennorth.Representative
+		savedAddress    string
+		federalRep      opennorth.Representative
+		provincialRep   opennorth.Representative
+		federalVotes    []store.VoteRow
+		provincialVotes []store.VoteRow
 	)
 	if user, ok := s.auth.SessionUser(r); ok {
 		savedAddr, result := s.loadRepresentativeContext(r, user)
 		savedAddress = savedAddr
 		federalRep = result.FederalRepresentative
 		provincialRep = result.ProvincialRepresentative
+
+		if memberID := s.resolveRepresentativeMemberID(federalRep, true); memberID != "" {
+			votes, _ := s.store.GetMemberVotes(memberID, 100)
+			federalVotes = recentBillVotes(votes, 5)
+		}
+		if memberID := s.resolveRepresentativeMemberID(provincialRep, false); memberID != "" {
+			votes, _ := s.store.GetMemberVotes(memberID, 100)
+			provincialVotes = recentBillVotes(votes, 5)
+		}
 	}
-	_ = templates.Home(ps, bills, divs, savedAddress, federalRep, provincialRep).Render(r.Context(), w)
+	_ = templates.Home(ps, provincialVotes, federalVotes, savedAddress, federalRep, provincialRep).Render(r.Context(), w)
+}
+
+func (s *Server) resolveRepresentativeMemberID(rep opennorth.Representative, federal bool) string {
+	if id := strings.TrimSpace(rep.LocalMemberID); id != "" {
+		return id
+	}
+	ridingName := strings.TrimSpace(rep.DistrictName)
+	if ridingName == "" {
+		return ""
+	}
+	members, err := s.store.GetMembersByRiding(ridingName)
+	if err != nil || len(members) == 0 {
+		return ""
+	}
+
+	targetLevel := "provincial"
+	if federal {
+		targetLevel = "federal"
+	}
+	name := strings.TrimSpace(rep.Name)
+	fallback := ""
+	for _, member := range members {
+		if !strings.EqualFold(strings.TrimSpace(member.GovernmentLevel), targetLevel) {
+			continue
+		}
+		if fallback == "" {
+			fallback = member.ID
+		}
+		if name != "" && strings.EqualFold(strings.TrimSpace(member.Name), name) {
+			return member.ID
+		}
+	}
+	if fallback != "" {
+		return fallback
+	}
+	for _, member := range members {
+		if name != "" && strings.EqualFold(strings.TrimSpace(member.Name), name) {
+			return member.ID
+		}
+	}
+	return members[0].ID
+}
+
+func recentBillVotes(votes []store.VoteRow, limit int) []store.VoteRow {
+	if limit <= 0 {
+		limit = 5
+	}
+	out := make([]store.VoteRow, 0, limit)
+	seen := make(map[string]struct{}, limit)
+	for _, vote := range votes {
+		billID := strings.TrimSpace(vote.BillID)
+		if billID == "" {
+			continue
+		}
+		if _, ok := seen[billID]; ok {
+			continue
+		}
+		seen[billID] = struct{}{}
+		out = append(out, vote)
+		if len(out) == limit {
+			break
+		}
+	}
+	return out
 }
 
 func (s *Server) handleBills(w http.ResponseWriter, r *http.Request) {
