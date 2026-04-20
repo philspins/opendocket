@@ -146,8 +146,8 @@ templ MemberProfile(ps store.ParliamentStatus, member store.MemberRow, votes []s
 						<label for="member-votes-page-size" class="text-gray-600">Rows per page</label>
 						<select id="member-votes-page-size" class="input-field py-2 pr-8">
 							<option value="5">5</option>
-							<option value="10">10</option>
-							<option value="20" selected>20</option>
+							<option value="10" selected>10</option>
+							<option value="20">20</option>
 							<option value="50">50</option>
 						</select>
 					</div>
@@ -169,7 +169,7 @@ templ MemberProfile(ps store.ParliamentStatus, member store.MemberRow, votes []s
 					const nextBtn = document.getElementById("member-votes-next");
 					const pagesEl = document.getElementById("member-votes-pages");
 					const pageSizeSelect = document.getElementById("member-votes-page-size");
-					let pageSize = Number(pagination.dataset.pageSize) || 20;
+					let pageSize = Number(pagination.dataset.pageSize) || 10;
 					let currentPage = 1;
 
 					if (!pagination || !prevBtn || !nextBtn || !pagesEl || !pageSizeSelect) return;

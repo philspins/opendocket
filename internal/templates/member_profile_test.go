@@ -50,6 +50,9 @@ func TestMemberProfile_ReordersEngageAndAddsVotePagination(t *testing.T) {
 			t.Fatalf("expected page-size option %s to be rendered", size)
 		}
 	}
+	if !strings.Contains(html, "option value=\"10\" selected") {
+		t.Fatalf("expected 10 to be the default selected page-size option")
+	}
 }
 
 func TestMemberProfile_UsesConsistentRedStylingForNaysAndRebel(t *testing.T) {
