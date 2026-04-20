@@ -1,9 +1,15 @@
 package auth
 
 import (
+	"bytes"
+	"context"
 	"encoding/json"
+	"fmt"
+	"io"
 	"log"
 	"net/http"
+	"net/url"
+	"os"
 	"strings"
 	"time"
 
@@ -29,6 +35,10 @@ func (s *Service) HandleRequestVerification(w http.ResponseWriter, r *http.Reque
 		http.Error(w, "email required", http.StatusBadRequest)
 		return
 	}
+	if err := s.verifyRecaptcha(r.Context(), strings.TrimSpace(r.FormValue("g-recaptcha-response")), s.clientIP(r)); err != nil {
+		http.Error(w, "captcha verification failed", http.StatusBadRequest)
+		return
+	}
 	if !s.rateLimitAllowed("auth:request-verification:email:"+strings.ToLower(email), 3, 10*time.Minute) {
 		http.Error(w, "rate limit exceeded", http.StatusTooManyRequests)
 		return
@@ -46,6 +56,49 @@ func (s *Service) HandleRequestVerification(w http.ResponseWriter, r *http.Reque
 	}
 	w.Header().Set("Content-Type", "application/json")
 	_, _ = w.Write([]byte(`{"ok":true}`))
+}
+
+func (s *Service) verifyRecaptcha(ctx context.Context, token, clientIP string) error {
+	secret := strings.TrimSpace(os.Getenv("RECAPTCHA_SECRET_KEY"))
+	if secret == "" {
+		return nil
+	}
+	if token == "" {
+		return fmt.Errorf("missing recaptcha token")
+	}
+	form := url.Values{}
+	form.Set("secret", secret)
+	form.Set("response", token)
+	if clientIP != "" {
+		form.Set("remoteip", clientIP)
+	}
+	req, err := http.NewRequestWithContext(ctx, http.MethodPost, "https://www.google.com/recaptcha/api/siteverify", bytes.NewBufferString(form.Encode()))
+	if err != nil {
+		return err
+	}
+	req.Header.Set("Content-Type", "application/x-www-form-urlencoded")
+	resp, err := s.httpClient.Do(req)
+	if err != nil {
+		return err
+	}
+	defer resp.Body.Close()
+	body, err := io.ReadAll(resp.Body)
+	if err != nil {
+		return err
+	}
+	if resp.StatusCode >= 400 {
+		return fmt.Errorf("recaptcha verify status %d", resp.StatusCode)
+	}
+	var parsed struct {
+		Success bool `json:"success"`
+	}
+	if err := json.Unmarshal(body, &parsed); err != nil {
+		return err
+	}
+	if !parsed.Success {
+		return fmt.Errorf("recaptcha verification failed")
+	}
+	return nil
 }
 
 func (s *Service) HandleVerifyEmail(w http.ResponseWriter, r *http.Request) {

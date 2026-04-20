@@ -6,7 +6,7 @@ import (
 	"github.com/philspins/open-democracy/internal/store"
 )
 
-templ AuthPage(ps store.ParliamentStatus, mode string, googleClientID string, facebookAppID string) {
+templ AuthPage(ps store.ParliamentStatus, mode string, googleClientID string, facebookAppID string, recaptchaSiteKey string) {
 	@Layout(modeTitle(mode), ps) {
 		<section class="surface-card p-6 md:p-8 max-w-3xl mx-auto mt-6 space-y-6">
 			<div class="space-y-2">
@@ -41,7 +41,25 @@ templ AuthPage(ps store.ParliamentStatus, mode string, googleClientID string, fa
 			</div>
 
 			<p class="text-sm text-gray-600">By continuing, you agree to use this service for civic participation and policy engagement.</p>
+
+			if strings.EqualFold(mode, "signup") {
+				<div class="surface-card p-4 space-y-3">
+					<h2 class="text-lg font-semibold">Email verification</h2>
+					<p class="text-sm text-gray-600">Request a verification code to complete signup if social login is unavailable.</p>
+					<form method="POST" action="/auth/request-verification" class="space-y-3">
+						<input type="email" name="email" class="input-field w-full" placeholder="you@example.com" required/>
+						if recaptchaSiteKey != "" {
+							<div class="g-recaptcha" data-sitekey={ recaptchaSiteKey }></div>
+						}
+						<button type="submit" class="btn btn-primary">Send verification code</button>
+					</form>
+				</div>
+			}
 		</section>
+
+		if strings.EqualFold(mode, "signup") && recaptchaSiteKey != "" {
+			<script src="https://www.google.com/recaptcha/api.js" async defer></script>
+		}
 
 		if googleClientID != "" {
 			<script src="https://accounts.google.com/gsi/client" async defer></script>

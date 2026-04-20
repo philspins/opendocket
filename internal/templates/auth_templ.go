@@ -14,7 +14,7 @@ import (
 	"github.com/philspins/open-democracy/internal/store"
 )
 
-func AuthPage(ps store.ParliamentStatus, mode string, googleClientID string, facebookAppID string) templ.Component {
+func AuthPage(ps store.ParliamentStatus, mode string, googleClientID string, facebookAppID string, recaptchaSiteKey string) templ.Component {
 	return templruntime.GeneratedTemplate(func(templ_7745c5c3_Input templruntime.GeneratedComponentInput) (templ_7745c5c3_Err error) {
 		templ_7745c5c3_W, ctx := templ_7745c5c3_Input.Writer, templ_7745c5c3_Input.Context
 		if templ_7745c5c3_CtxErr := ctx.Err(); templ_7745c5c3_CtxErr != nil {
@@ -129,35 +129,78 @@ func AuthPage(ps store.ParliamentStatus, mode string, googleClientID string, fac
 					return templ_7745c5c3_Err
 				}
 			}
-			templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 11, "<a href=\"/auth/facebook/login\" class=\"btn btn-secondary w-full justify-center\">Continue with Facebook</a></div></div><p class=\"text-sm text-gray-600\">By continuing, you agree to use this service for civic participation and policy engagement.</p></section>")
+			templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 11, "<a href=\"/auth/facebook/login\" class=\"btn btn-secondary w-full justify-center\">Continue with Facebook</a></div></div><p class=\"text-sm text-gray-600\">By continuing, you agree to use this service for civic participation and policy engagement.</p>")
+			if templ_7745c5c3_Err != nil {
+				return templ_7745c5c3_Err
+			}
+			if strings.EqualFold(mode, "signup") {
+				templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 12, "<div class=\"surface-card p-4 space-y-3\"><h2 class=\"text-lg font-semibold\">Email verification</h2><p class=\"text-sm text-gray-600\">Request a verification code to complete signup if social login is unavailable.</p><form method=\"POST\" action=\"/auth/request-verification\" class=\"space-y-3\"><input type=\"email\" name=\"email\" class=\"input-field w-full\" placeholder=\"you@example.com\" required> ")
+				if templ_7745c5c3_Err != nil {
+					return templ_7745c5c3_Err
+				}
+				if recaptchaSiteKey != "" {
+					templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 13, "<div class=\"g-recaptcha\" data-sitekey=\"")
+					if templ_7745c5c3_Err != nil {
+						return templ_7745c5c3_Err
+					}
+					var templ_7745c5c3_Var7 string
+					templ_7745c5c3_Var7, templ_7745c5c3_Err = templ.JoinStringErrs(recaptchaSiteKey)
+					if templ_7745c5c3_Err != nil {
+						return templ.Error{Err: templ_7745c5c3_Err, FileName: `internal/templates/auth.templ`, Line: 52, Col: 63}
+					}
+					_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var7))
+					if templ_7745c5c3_Err != nil {
+						return templ_7745c5c3_Err
+					}
+					templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 14, "\"></div>")
+					if templ_7745c5c3_Err != nil {
+						return templ_7745c5c3_Err
+					}
+				}
+				templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 15, "<button type=\"submit\" class=\"btn btn-primary\">Send verification code</button></form></div>")
+				if templ_7745c5c3_Err != nil {
+					return templ_7745c5c3_Err
+				}
+			}
+			templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 16, "</section>")
+			if templ_7745c5c3_Err != nil {
+				return templ_7745c5c3_Err
+			}
+			if strings.EqualFold(mode, "signup") && recaptchaSiteKey != "" {
+				templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 17, "<script src=\"https://www.google.com/recaptcha/api.js\" async defer></script>")
+				if templ_7745c5c3_Err != nil {
+					return templ_7745c5c3_Err
+				}
+			}
+			templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 18, " ")
 			if templ_7745c5c3_Err != nil {
 				return templ_7745c5c3_Err
 			}
 			if googleClientID != "" {
-				templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 12, "<script src=\"https://accounts.google.com/gsi/client\" async defer></script> <script>\n\t\t\t\t(() => {\n\t\t\t\t\tconst el = document.getElementById(\"google-signin-widget\");\n\t\t\t\t\tif (!el || !window.google || !window.google.accounts || !window.google.accounts.id) {\n\t\t\t\t\t\treturn;\n\t\t\t\t\t}\n\t\t\t\t\tconst clientID = el.dataset.googleClientId || \"\";\n\t\t\t\t\tif (!clientID) {\n\t\t\t\t\t\treturn;\n\t\t\t\t\t}\n\t\t\t\t\twindow.google.accounts.id.initialize({\n\t\t\t\t\t\tclient_id: clientID,\n\t\t\t\t\t\tcallback: () => {\n\t\t\t\t\t\t\twindow.location.href = \"/auth/google/login\";\n\t\t\t\t\t\t},\n\t\t\t\t\t});\n\t\t\t\t\twindow.google.accounts.id.renderButton(el, {\n\t\t\t\t\t\ttheme: \"outline\",\n\t\t\t\t\t\tsize: \"large\",\n\t\t\t\t\t\tshape: \"pill\",\n\t\t\t\t\t\ttext: el.dataset.googleText || \"signin_with\",\n\t\t\t\t\t\twidth: 280,\n\t\t\t\t\t});\n\t\t\t\t})();\n\t\t\t</script>")
+				templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 19, "<script src=\"https://accounts.google.com/gsi/client\" async defer></script> <script>\n\t\t\t\t(() => {\n\t\t\t\t\tconst el = document.getElementById(\"google-signin-widget\");\n\t\t\t\t\tif (!el || !window.google || !window.google.accounts || !window.google.accounts.id) {\n\t\t\t\t\t\treturn;\n\t\t\t\t\t}\n\t\t\t\t\tconst clientID = el.dataset.googleClientId || \"\";\n\t\t\t\t\tif (!clientID) {\n\t\t\t\t\t\treturn;\n\t\t\t\t\t}\n\t\t\t\t\twindow.google.accounts.id.initialize({\n\t\t\t\t\t\tclient_id: clientID,\n\t\t\t\t\t\tcallback: () => {\n\t\t\t\t\t\t\twindow.location.href = \"/auth/google/login\";\n\t\t\t\t\t\t},\n\t\t\t\t\t});\n\t\t\t\t\twindow.google.accounts.id.renderButton(el, {\n\t\t\t\t\t\ttheme: \"outline\",\n\t\t\t\t\t\tsize: \"large\",\n\t\t\t\t\t\tshape: \"pill\",\n\t\t\t\t\t\ttext: el.dataset.googleText || \"signin_with\",\n\t\t\t\t\t\twidth: 280,\n\t\t\t\t\t});\n\t\t\t\t})();\n\t\t\t</script>")
 				if templ_7745c5c3_Err != nil {
 					return templ_7745c5c3_Err
 				}
 			}
-			templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 13, " ")
+			templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 20, " ")
 			if templ_7745c5c3_Err != nil {
 				return templ_7745c5c3_Err
 			}
 			if facebookAppID != "" {
-				templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 14, "<script async defer crossorigin=\"anonymous\" src=\"https://connect.facebook.net/en_US/sdk.js\"></script> <script id=\"facebook-widget-config\" data-facebook-app-id=\"")
+				templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 21, "<script async defer crossorigin=\"anonymous\" src=\"https://connect.facebook.net/en_US/sdk.js\"></script> <script id=\"facebook-widget-config\" data-facebook-app-id=\"")
 				if templ_7745c5c3_Err != nil {
 					return templ_7745c5c3_Err
 				}
-				var templ_7745c5c3_Var7 string
-				templ_7745c5c3_Var7, templ_7745c5c3_Err = templ.JoinStringErrs(facebookAppID)
+				var templ_7745c5c3_Var8 string
+				templ_7745c5c3_Var8, templ_7745c5c3_Err = templ.JoinStringErrs(facebookAppID)
 				if templ_7745c5c3_Err != nil {
-					return templ.Error{Err: templ_7745c5c3_Err, FileName: `internal/templates/auth.templ`, Line: 77, Col: 75}
+					return templ.Error{Err: templ_7745c5c3_Err, FileName: `internal/templates/auth.templ`, Line: 95, Col: 75}
 				}
-				_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var7))
+				_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var8))
 				if templ_7745c5c3_Err != nil {
 					return templ_7745c5c3_Err
 				}
-				templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 15, "\">\n\t\t\t\twindow.fbAsyncInit = function() {\n\t\t\t\t\tconst cfg = document.getElementById(\"facebook-widget-config\");\n\t\t\t\t\tconst appId = cfg ? cfg.dataset.facebookAppId : \"\";\n\t\t\t\t\tif (!appId) {\n\t\t\t\t\t\treturn;\n\t\t\t\t\t}\n\t\t\t\t\tFB.init({\n\t\t\t\t\t\tappId: appId,\n\t\t\t\t\t\tcookie: true,\n\t\t\t\t\t\txfbml: true,\n\t\t\t\t\t\tversion: \"v19.0\",\n\t\t\t\t\t});\n\t\t\t\t};\n\t\t\t\twindow.odFacebookWidgetLogin = function() {\n\t\t\t\t\tif (!window.FB) {\n\t\t\t\t\t\treturn;\n\t\t\t\t\t}\n\t\t\t\t\tFB.getLoginStatus(function(response) {\n\t\t\t\t\t\tif (response && response.status === \"connected\") {\n\t\t\t\t\t\t\twindow.location.href = \"/auth/facebook/login\";\n\t\t\t\t\t\t}\n\t\t\t\t\t});\n\t\t\t\t};\n\t\t\t</script>")
+				templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 22, "\">\n\t\t\t\twindow.fbAsyncInit = function() {\n\t\t\t\t\tconst cfg = document.getElementById(\"facebook-widget-config\");\n\t\t\t\t\tconst appId = cfg ? cfg.dataset.facebookAppId : \"\";\n\t\t\t\t\tif (!appId) {\n\t\t\t\t\t\treturn;\n\t\t\t\t\t}\n\t\t\t\t\tFB.init({\n\t\t\t\t\t\tappId: appId,\n\t\t\t\t\t\tcookie: true,\n\t\t\t\t\t\txfbml: true,\n\t\t\t\t\t\tversion: \"v19.0\",\n\t\t\t\t\t});\n\t\t\t\t};\n\t\t\t\twindow.odFacebookWidgetLogin = function() {\n\t\t\t\t\tif (!window.FB) {\n\t\t\t\t\t\treturn;\n\t\t\t\t\t}\n\t\t\t\t\tFB.getLoginStatus(function(response) {\n\t\t\t\t\t\tif (response && response.status === \"connected\") {\n\t\t\t\t\t\t\twindow.location.href = \"/auth/facebook/login\";\n\t\t\t\t\t\t}\n\t\t\t\t\t});\n\t\t\t\t};\n\t\t\t</script>")
 				if templ_7745c5c3_Err != nil {
 					return templ_7745c5c3_Err
 				}

@@ -1,6 +1,7 @@
 package auth
 
 import (
+	"io"
 	"net/http"
 	"net/http/httptest"
 	"net/url"
@@ -12,6 +13,12 @@ import (
 	"github.com/philspins/open-democracy/internal/db"
 	"github.com/philspins/open-democracy/internal/store"
 )
+
+type roundTripFunc func(*http.Request) (*http.Response, error)
+
+func (f roundTripFunc) RoundTrip(req *http.Request) (*http.Response, error) {
+	return f(req)
+}
 
 func TestHandleSignupPage_RendersOAuthWidgetsAndFallbacks(t *testing.T) {
 	svc, _ := newTestService(t)
@@ -38,6 +45,24 @@ func TestHandleSignupPage_RendersOAuthWidgetsAndFallbacks(t *testing.T) {
 	}
 	if !strings.Contains(body, "/auth/google/login") || !strings.Contains(body, "/auth/facebook/login") {
 		t.Fatalf("expected oauth fallback links")
+	}
+}
+
+func TestHandleSignupPage_RendersRecaptchaWidgetWhenConfigured(t *testing.T) {
+	svc, _ := newTestService(t)
+	t.Setenv("RECAPTCHA_SITE_KEY", "site-key")
+
+	req := httptest.NewRequest(http.MethodGet, "/auth/signup", nil)
+	rr := httptest.NewRecorder()
+
+	svc.HandleSignupPage(rr, req)
+
+	if rr.Code != http.StatusOK {
+		t.Fatalf("status=%d want %d", rr.Code, http.StatusOK)
+	}
+	body := rr.Body.String()
+	if !strings.Contains(body, `class="g-recaptcha"`) || !strings.Contains(body, `data-sitekey="site-key"`) {
+		t.Fatalf("expected recaptcha widget on signup page")
 	}
 }
 
@@ -308,5 +333,47 @@ func TestHandleVerifyEmail_ByCode_SetsSession(t *testing.T) {
 	}
 	if !found {
 		t.Fatalf("expected od_session cookie to be set")
+	}
+}
+
+func TestHandleRequestVerification_RequiresValidRecaptchaWhenConfigured(t *testing.T) {
+	svc, _ := newTestService(t)
+	t.Setenv("RECAPTCHA_SECRET_KEY", "secret")
+
+	form := url.Values{}
+	form.Set("email", "captcha-required@example.com")
+	req := httptest.NewRequest(http.MethodPost, "/auth/request-verification", strings.NewReader(form.Encode()))
+	req.Header.Set("Content-Type", "application/x-www-form-urlencoded")
+	rr := httptest.NewRecorder()
+
+	svc.HandleRequestVerification(rr, req)
+	if rr.Code != http.StatusBadRequest {
+		t.Fatalf("missing captcha token status=%d want %d", rr.Code, http.StatusBadRequest)
+	}
+
+	var sentBody string
+	svc.SetHTTPClient(&http.Client{
+		Transport: roundTripFunc(func(req *http.Request) (*http.Response, error) {
+			b, _ := io.ReadAll(req.Body)
+			sentBody = string(b)
+			return &http.Response{
+				StatusCode: http.StatusOK,
+				Body:       io.NopCloser(strings.NewReader(`{"success":true}`)),
+				Header:     make(http.Header),
+			}, nil
+		}),
+	})
+
+	form.Set("g-recaptcha-response", "test-token")
+	req = httptest.NewRequest(http.MethodPost, "/auth/request-verification", strings.NewReader(form.Encode()))
+	req.Header.Set("Content-Type", "application/x-www-form-urlencoded")
+	rr = httptest.NewRecorder()
+	svc.HandleRequestVerification(rr, req)
+
+	if rr.Code != http.StatusOK {
+		t.Fatalf("status=%d want %d", rr.Code, http.StatusOK)
+	}
+	if !strings.Contains(sentBody, "secret=secret") || !strings.Contains(sentBody, "response=test-token") {
+		t.Fatalf("unexpected recaptcha verification request body: %s", sentBody)
 	}
 }
