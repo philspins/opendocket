@@ -10,6 +10,7 @@ import templruntime "github.com/a-h/templ/runtime"
 
 import (
 	"net/url"
+	"regexp"
 	"strings"
 
 	"github.com/philspins/open-democracy/internal/store"
@@ -77,7 +78,7 @@ func AuthPage(ps store.ParliamentStatus, mode string, googleClientID string, fac
 			var templ_7745c5c3_Var5 string
 			templ_7745c5c3_Var5, templ_7745c5c3_Err = templ.JoinStringErrs(modeHeading(mode))
 			if templ_7745c5c3_Err != nil {
-				return templ.Error{Err: templ_7745c5c3_Err, FileName: `internal/templates/auth.templ`, Line: 17, Col: 48}
+				return templ.Error{Err: templ_7745c5c3_Err, FileName: `internal/templates/auth.templ`, Line: 18, Col: 48}
 			}
 			_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var5))
 			if templ_7745c5c3_Err != nil {
@@ -90,7 +91,7 @@ func AuthPage(ps store.ParliamentStatus, mode string, googleClientID string, fac
 			var templ_7745c5c3_Var6 string
 			templ_7745c5c3_Var6, templ_7745c5c3_Err = templ.JoinStringErrs(modeVerb(mode))
 			if templ_7745c5c3_Err != nil {
-				return templ.Error{Err: templ_7745c5c3_Err, FileName: `internal/templates/auth.templ`, Line: 18, Col: 85}
+				return templ.Error{Err: templ_7745c5c3_Err, FileName: `internal/templates/auth.templ`, Line: 19, Col: 85}
 			}
 			_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var6))
 			if templ_7745c5c3_Err != nil {
@@ -108,7 +109,7 @@ func AuthPage(ps store.ParliamentStatus, mode string, googleClientID string, fac
 				var templ_7745c5c3_Var7 string
 				templ_7745c5c3_Var7, templ_7745c5c3_Err = templ.JoinStringErrs(googleClientID)
 				if templ_7745c5c3_Err != nil {
-					return templ.Error{Err: templ_7745c5c3_Err, FileName: `internal/templates/auth.templ`, Line: 25, Col: 98}
+					return templ.Error{Err: templ_7745c5c3_Err, FileName: `internal/templates/auth.templ`, Line: 26, Col: 98}
 				}
 				_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var7))
 				if templ_7745c5c3_Err != nil {
@@ -121,7 +122,7 @@ func AuthPage(ps store.ParliamentStatus, mode string, googleClientID string, fac
 				var templ_7745c5c3_Var8 string
 				templ_7745c5c3_Var8, templ_7745c5c3_Err = templ.JoinStringErrs(googleWidgetText(mode))
 				if templ_7745c5c3_Err != nil {
-					return templ.Error{Err: templ_7745c5c3_Err, FileName: `internal/templates/auth.templ`, Line: 25, Col: 142}
+					return templ.Error{Err: templ_7745c5c3_Err, FileName: `internal/templates/auth.templ`, Line: 26, Col: 142}
 				}
 				_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var8))
 				if templ_7745c5c3_Err != nil {
@@ -174,7 +175,7 @@ func AuthPage(ps store.ParliamentStatus, mode string, googleClientID string, fac
 				var templ_7745c5c3_Var9 string
 				templ_7745c5c3_Var9, templ_7745c5c3_Err = templ.JoinStringErrs(recaptchaScriptSrc(recaptchaSiteKey))
 				if templ_7745c5c3_Err != nil {
-					return templ.Error{Err: templ_7745c5c3_Err, FileName: `internal/templates/auth.templ`, Line: 62, Col: 53}
+					return templ.Error{Err: templ_7745c5c3_Err, FileName: `internal/templates/auth.templ`, Line: 63, Col: 53}
 				}
 				_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var9))
 				if templ_7745c5c3_Err != nil {
@@ -187,7 +188,7 @@ func AuthPage(ps store.ParliamentStatus, mode string, googleClientID string, fac
 				var templ_7745c5c3_Var10 string
 				templ_7745c5c3_Var10, templ_7745c5c3_Err = templ.JoinStringErrs(recaptchaSiteKey)
 				if templ_7745c5c3_Err != nil {
-					return templ.Error{Err: templ_7745c5c3_Err, FileName: `internal/templates/auth.templ`, Line: 63, Col: 72}
+					return templ.Error{Err: templ_7745c5c3_Err, FileName: `internal/templates/auth.templ`, Line: 64, Col: 72}
 				}
 				_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var10))
 				if templ_7745c5c3_Err != nil {
@@ -220,7 +221,7 @@ func AuthPage(ps store.ParliamentStatus, mode string, googleClientID string, fac
 				var templ_7745c5c3_Var11 string
 				templ_7745c5c3_Var11, templ_7745c5c3_Err = templ.JoinStringErrs(facebookAppID)
 				if templ_7745c5c3_Err != nil {
-					return templ.Error{Err: templ_7745c5c3_Err, FileName: `internal/templates/auth.templ`, Line: 162, Col: 75}
+					return templ.Error{Err: templ_7745c5c3_Err, FileName: `internal/templates/auth.templ`, Line: 163, Col: 75}
 				}
 				_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var11))
 				if templ_7745c5c3_Err != nil {
@@ -282,26 +283,21 @@ func signupRecaptchaEnabled(mode string, recaptchaSiteKey string) bool {
 
 func recaptchaScriptSrc(recaptchaSiteKey string) string {
 	if isSafeRecaptchaSiteKey(recaptchaSiteKey) {
-		return "https://www.google.com/recaptcha/api.js?render=" + url.QueryEscape(strings.TrimSpace(recaptchaSiteKey))
+		query := url.Values{}
+		query.Set("render", strings.TrimSpace(recaptchaSiteKey))
+		return "https://www.google.com/recaptcha/api.js?" + query.Encode()
 	}
 	return "https://www.google.com/recaptcha/api.js"
 }
+
+var recaptchaSiteKeyPattern = regexp.MustCompile(`^[A-Za-z0-9_-]+$`)
 
 func isSafeRecaptchaSiteKey(recaptchaSiteKey string) bool {
 	key := strings.TrimSpace(recaptchaSiteKey)
 	if key == "" {
 		return false
 	}
-	for _, ch := range key {
-		if (ch >= 'a' && ch <= 'z') ||
-			(ch >= 'A' && ch <= 'Z') ||
-			(ch >= '0' && ch <= '9') ||
-			ch == '-' || ch == '_' {
-			continue
-		}
-		return false
-	}
-	return true
+	return recaptchaSiteKeyPattern.MatchString(key)
 }
 
 var _ = templruntime.GeneratedTemplate

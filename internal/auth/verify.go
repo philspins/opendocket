@@ -60,6 +60,7 @@ func (s *Service) HandleRequestVerification(w http.ResponseWriter, r *http.Reque
 }
 
 func (s *Service) HandleVerifyRecaptcha(w http.ResponseWriter, r *http.Request) {
+	// Keep this endpoint permissive enough for retries while still limiting abuse.
 	if !s.rateLimitAllowed("auth:verify-recaptcha:ip:"+s.clientIP(r), 20, time.Minute) {
 		http.Error(w, "rate limit exceeded", http.StatusTooManyRequests)
 		return
