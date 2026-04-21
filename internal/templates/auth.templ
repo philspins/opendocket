@@ -8,61 +8,104 @@ import (
 
 templ AuthPage(ps store.ParliamentStatus, mode string, googleClientID string, facebookAppID string, recaptchaSiteKey string) {
 	@Layout(modeTitle(mode), ps) {
-		<section class="surface-card p-6 md:p-8 max-w-3xl mx-auto mt-6 space-y-6">
-			<div class="space-y-2">
-				<p class="kicker">Account Access</p>
-				<h1 class="page-title">{ modeHeading(mode) }</h1>
-				<p class="section-lead">Use your Google or Facebook account to { modeVerb(mode) } Open Democracy.</p>
+		<section class="surface-card p-6 md:p-8 max-w-3xl mx-auto mt-6">
+			<div class="relative">
+				<div id="signup-account-access" class={ signupAccountAccessClass(mode, recaptchaSiteKey) }>
+					<div class="space-y-2">
+						<p class="kicker">Account Access</p>
+						<h1 class="page-title">{ modeHeading(mode) }</h1>
+						<p class="section-lead">Use your Google or Facebook account to { modeVerb(mode) } Open Democracy.</p>
+					</div>
+
+					<div id="oauth-options" class="grid gap-4 md:grid-cols-2">
+						<div class="surface-card p-4 space-y-3">
+							<h2 class="text-lg font-semibold">Google</h2>
+							if googleClientID != "" {
+								<div id="google-signin-widget" class="min-h-[44px]" data-google-client-id={ googleClientID } data-google-text={ googleWidgetText(mode) }></div>
+								<p class="text-xs text-gray-500">If the widget does not load, use the fallback button below.</p>
+							} else {
+								<p class="text-sm text-amber-700 bg-amber-50 border border-amber-200 rounded px-3 py-2">Google login is not configured.</p>
+							}
+							<a href="/auth/google/login" class="btn btn-secondary w-full justify-center">Continue with Google</a>
+						</div>
+
+						<div class="surface-card p-4 space-y-3">
+							<h2 class="text-lg font-semibold">Facebook</h2>
+							if facebookAppID != "" {
+								<div id="fb-root"></div>
+								<fb:login-button scope="public_profile,email" onlogin="odFacebookWidgetLogin();" size="large"></fb:login-button>
+								<p class="text-xs text-gray-500">If the widget does not load, use the fallback button below.</p>
+							} else {
+								<p class="text-sm text-amber-700 bg-amber-50 border border-amber-200 rounded px-3 py-2">Facebook login is not configured.</p>
+							}
+							<a href="/auth/facebook/login" class="btn btn-secondary w-full justify-center">Continue with Facebook</a>
+						</div>
+					</div>
+
+					<p class="text-sm text-gray-600">By continuing, you agree to use this service for civic participation and policy engagement.</p>
+				</div>
+
+				if signupRecaptchaEnabled(mode, recaptchaSiteKey) {
+					<div id="signup-recaptcha-gate" class="absolute inset-0 z-10 flex items-center justify-center">
+						<div class="surface-card p-4 space-y-3 max-w-md w-full">
+							<h2 class="text-lg font-semibold">Human verification</h2>
+							<p class="text-sm text-gray-600">Running reCAPTCHA check before enabling signup options.</p>
+							<p id="signup-recaptcha-status" class="text-sm text-gray-500">Verifying…</p>
+						</div>
+					</div>
+				}
 			</div>
-
-			if signupRecaptchaEnabled(mode, recaptchaSiteKey) {
-				<div id="signup-recaptcha-gate" class="surface-card p-4 space-y-3">
-					<h2 class="text-lg font-semibold">Human verification</h2>
-					<p class="text-sm text-gray-600">Complete reCAPTCHA to continue with Google or Facebook signup.</p>
-					<div class="g-recaptcha" data-sitekey={ recaptchaSiteKey } data-callback="odSignupRecaptchaComplete"></div>
-				</div>
-			}
-			<div id="oauth-options" class={ oauthOptionsClass(mode, recaptchaSiteKey) }>
-				<div class="surface-card p-4 space-y-3">
-					<h2 class="text-lg font-semibold">Google</h2>
-					if googleClientID != "" {
-						<div id="google-signin-widget" class="min-h-[44px]" data-google-client-id={ googleClientID } data-google-text={ googleWidgetText(mode) }></div>
-						<p class="text-xs text-gray-500">If the widget does not load, use the fallback button below.</p>
-					} else {
-						<p class="text-sm text-amber-700 bg-amber-50 border border-amber-200 rounded px-3 py-2">Google login is not configured.</p>
-					}
-					<a href="/auth/google/login" class="btn btn-secondary w-full justify-center">Continue with Google</a>
-				</div>
-
-				<div class="surface-card p-4 space-y-3">
-					<h2 class="text-lg font-semibold">Facebook</h2>
-					if facebookAppID != "" {
-						<div id="fb-root"></div>
-						<fb:login-button scope="public_profile,email" onlogin="odFacebookWidgetLogin();" size="large"></fb:login-button>
-						<p class="text-xs text-gray-500">If the widget does not load, use the fallback button below.</p>
-					} else {
-						<p class="text-sm text-amber-700 bg-amber-50 border border-amber-200 rounded px-3 py-2">Facebook login is not configured.</p>
-					}
-					<a href="/auth/facebook/login" class="btn btn-secondary w-full justify-center">Continue with Facebook</a>
-				</div>
-			</div>
-
-			<p class="text-sm text-gray-600">By continuing, you agree to use this service for civic participation and policy engagement.</p>
 		</section>
 
 		if signupRecaptchaEnabled(mode, recaptchaSiteKey) {
-			<script src="https://www.google.com/recaptcha/api.js" async defer></script>
+			<script src={ "https://www.google.com/recaptcha/api.js?render=" + recaptchaSiteKey } async defer></script>
+			<script id="signup-recaptcha-config" data-site-key={ recaptchaSiteKey }></script>
 			<script>
 				window.odSignupRecaptchaComplete = function() {
+					const accountAccess = document.getElementById("signup-account-access");
+					if (accountAccess) {
+						accountAccess.classList.remove("opacity-50", "pointer-events-none", "select-none");
+					}
 					const oauthOptions = document.getElementById("oauth-options");
 					if (oauthOptions) {
-						oauthOptions.classList.remove("is-hidden");
+						oauthOptions.classList.remove("pointer-events-none");
+					}
+					const status = document.getElementById("signup-recaptcha-status");
+					if (status) {
+						status.textContent = "Verification complete.";
 					}
 					const gate = document.getElementById("signup-recaptcha-gate");
 					if (gate) {
 						gate.classList.add("hidden");
 					}
 				};
+				window.odSignupRecaptchaFailed = function() {
+					const status = document.getElementById("signup-recaptcha-status");
+					if (status) {
+						status.textContent = "Verification failed. Please refresh and try again.";
+						status.classList.add("text-red-600");
+					}
+				};
+				window.odSignupRecaptchaRun = function() {
+					const config = document.getElementById("signup-recaptcha-config");
+					const siteKey = config ? (config.dataset.siteKey || "") : "";
+					if (!siteKey || !window.grecaptcha || !window.grecaptcha.ready) {
+						window.odSignupRecaptchaFailed();
+						return;
+					}
+					window.grecaptcha.ready(function() {
+						window.grecaptcha.execute(siteKey, { action: "signup" }).then(function(token) {
+							if (!token) {
+								window.odSignupRecaptchaFailed();
+								return;
+							}
+							window.odSignupRecaptchaComplete();
+						}).catch(function() {
+							window.odSignupRecaptchaFailed();
+						});
+					});
+				};
+				window.addEventListener("load", window.odSignupRecaptchaRun);
 			</script>
 		}
 
@@ -154,11 +197,11 @@ func googleWidgetText(mode string) string {
 	return "signin_with"
 }
 
-func oauthOptionsClass(mode string, recaptchaSiteKey string) string {
+func signupAccountAccessClass(mode string, recaptchaSiteKey string) string {
 	if signupRecaptchaEnabled(mode, recaptchaSiteKey) {
-		return "grid gap-4 md:grid-cols-2 is-hidden"
+		return "space-y-6 opacity-50 pointer-events-none select-none transition-opacity"
 	}
-	return "grid gap-4 md:grid-cols-2"
+	return "space-y-6"
 }
 
 func signupRecaptchaEnabled(mode string, recaptchaSiteKey string) bool {

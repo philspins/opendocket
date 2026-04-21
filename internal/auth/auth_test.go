@@ -66,17 +66,20 @@ func TestHandleSignupPage_RendersReCAPTCHAWidgetWhenConfigured(t *testing.T) {
 		t.Fatalf("status=%d want %d", rr.Code, http.StatusOK)
 	}
 	body := rr.Body.String()
-	if !strings.Contains(body, `class="g-recaptcha"`) || !strings.Contains(body, `data-sitekey="site-key"`) {
-		t.Fatalf("expected recaptcha widget on signup page")
+	if !strings.Contains(body, `https://www.google.com/recaptcha/api.js?render=site-key`) {
+		t.Fatalf("expected recaptcha v3 script with site key render parameter")
 	}
-	if !strings.Contains(body, `id="oauth-options" class="grid gap-4 md:grid-cols-2 is-hidden"`) {
-		t.Fatalf("expected oauth options to be hidden until recaptcha completion")
+	if !strings.Contains(body, `id="signup-account-access" class="space-y-6 opacity-50 pointer-events-none select-none transition-opacity"`) {
+		t.Fatalf("expected signup account section to be faded and disabled before recaptcha completion")
 	}
-	if !strings.Contains(body, `classList.remove("is-hidden")`) {
-		t.Fatalf("expected recaptcha callback to reveal oauth options")
+	if !strings.Contains(body, `id="signup-recaptcha-gate" class="absolute inset-0 z-10 flex items-center justify-center"`) {
+		t.Fatalf("expected recaptcha overlay gate on signup page")
 	}
-	if !strings.Contains(body, `data-callback="odSignupRecaptchaComplete"`) {
-		t.Fatalf("expected recaptcha callback for unlocking oauth options")
+	if !strings.Contains(body, `window.grecaptcha.execute(siteKey, { action: "signup" })`) {
+		t.Fatalf("expected recaptcha v3 execute call for signup action")
+	}
+	if !strings.Contains(body, `accountAccess.classList.remove("opacity-50", "pointer-events-none", "select-none")`) {
+		t.Fatalf("expected recaptcha callback to enable account section")
 	}
 }
 
