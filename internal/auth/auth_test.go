@@ -66,8 +66,11 @@ func TestHandleSignupPage_RendersReCAPTCHAWidgetWhenConfigured(t *testing.T) {
 		t.Fatalf("status=%d want %d", rr.Code, http.StatusOK)
 	}
 	body := rr.Body.String()
-	if !strings.Contains(body, `https://www.google.com/recaptcha/api.js?render=site-key`) {
-		t.Fatalf("expected recaptcha v3 script with site key render parameter")
+	if !strings.Contains(body, `https://www.google.com/recaptcha/api.js?render=explicit`) {
+		t.Fatalf("expected recaptcha v3 script")
+	}
+	if !strings.Contains(body, `id="signup-recaptcha-config" data-site-key="site-key"`) {
+		t.Fatalf("expected recaptcha site key config on signup page")
 	}
 	if !strings.Contains(body, `id="signup-account-access" class="space-y-6 opacity-50 pointer-events-none select-none transition-opacity"`) {
 		t.Fatalf("expected signup account section to be faded and disabled before recaptcha completion")

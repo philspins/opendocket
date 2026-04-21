@@ -58,7 +58,7 @@ templ AuthPage(ps store.ParliamentStatus, mode string, googleClientID string, fa
 		</section>
 
 		if signupRecaptchaEnabled(mode, recaptchaSiteKey) {
-			<script src={ "https://www.google.com/recaptcha/api.js?render=" + recaptchaSiteKey } async defer></script>
+			<script src="https://www.google.com/recaptcha/api.js?render=explicit" async defer></script>
 			<script id="signup-recaptcha-config" data-site-key={ recaptchaSiteKey }></script>
 			<script>
 				window.odSignupRecaptchaComplete = function() {
@@ -89,7 +89,11 @@ templ AuthPage(ps store.ParliamentStatus, mode string, googleClientID string, fa
 				window.odSignupRecaptchaRun = function() {
 					const config = document.getElementById("signup-recaptcha-config");
 					const siteKey = config ? (config.dataset.siteKey || "") : "";
-					if (!siteKey || !window.grecaptcha || !window.grecaptcha.ready) {
+					if (!siteKey) {
+						window.odSignupRecaptchaFailed();
+						return;
+					}
+					if (!window.grecaptcha || !window.grecaptcha.ready) {
 						window.odSignupRecaptchaFailed();
 						return;
 					}
