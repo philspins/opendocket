@@ -9,7 +9,7 @@ import (
 	"github.com/philspins/open-democracy/internal/store"
 )
 
-func TestBillDetail_ShowsInteractiveReactionsForAuthenticatedUsers(t *testing.T) {
+func TestBillDetail_RendersReactionFormsForAuthenticatedUsers(t *testing.T) {
 	var buf bytes.Buffer
 	err := BillDetail(
 		store.ParliamentStatus{},
@@ -32,7 +32,7 @@ func TestBillDetail_ShowsInteractiveReactionsForAuthenticatedUsers(t *testing.T)
 	}
 }
 
-func TestBillDetail_ShowsGreyedOutReactionsForGuests(t *testing.T) {
+func TestBillDetail_RendersLoginPromptForGuests(t *testing.T) {
 	var buf bytes.Buffer
 	err := BillDetail(
 		store.ParliamentStatus{},
