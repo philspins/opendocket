@@ -41,8 +41,16 @@ templ Home(ps store.ParliamentStatus, bills []store.BillRow, divs []store.Divisi
 
 			<section class="rep-grid">
 				<div>
-					<div class="px-5 py-3 text-sm font-semibold" style={ partyBannerStyle(provParty) }>
-						{ homeRepresentativeHeading(provincialRep, "Your current provincial representative") }
+					<div class="px-5 py-3 text-sm" style={ partyBannerStyle(provParty) }>
+						<div class="flex items-start justify-between gap-3">
+							<p class="font-semibold">{ homeRepresentativeHeading(provincialRep, "Your current provincial representative", "Provincial representative") }</p>
+							if strings.TrimSpace(provincialRep.DistrictName) != "" {
+								<p class="text-xs text-right">{ strings.TrimSpace(provincialRep.DistrictName) }</p>
+							}
+						</div>
+						if strings.TrimSpace(provParty) != "" {
+							<p class="mt-1 text-xs">{ strings.TrimSpace(provParty) }</p>
+						}
 					</div>
 					<div class="px-5 py-2 text-sm text-gray-700 border-b border-gray-100">
 						{ homeRepresentativeSummary(provincialRep, provParty, "Provincial representative") } · Parliament is currently: <strong>{ statusPhrase(ps.Status) }</strong>
@@ -73,8 +81,16 @@ templ Home(ps store.ParliamentStatus, bills []store.BillRow, divs []store.Divisi
 				</div>
 
 				<div>
-					<div class="px-5 py-3 text-sm font-semibold" style={ partyBannerStyle(federalParty) }>
-						{ homeRepresentativeHeading(federalRep, "Your current federal representative") }
+					<div class="px-5 py-3 text-sm" style={ partyBannerStyle(federalParty) }>
+						<div class="flex items-start justify-between gap-3">
+							<p class="font-semibold">{ homeRepresentativeHeading(federalRep, "Your current federal representative", "Federal representative") }</p>
+							if strings.TrimSpace(federalRep.DistrictName) != "" {
+								<p class="text-xs text-right">{ strings.TrimSpace(federalRep.DistrictName) }</p>
+							}
+						</div>
+						if strings.TrimSpace(federalParty) != "" {
+							<p class="mt-1 text-xs">{ strings.TrimSpace(federalParty) }</p>
+						}
 					</div>
 					<div class="px-5 py-2 text-sm text-gray-700 border-b border-gray-100">
 						{ homeRepresentativeSummary(federalRep, federalParty, "Federal representative") } · Parliament is currently: <strong>{ statusPhrase(ps.Status) }</strong>
@@ -150,11 +166,19 @@ templ Home(ps store.ParliamentStatus, bills []store.BillRow, divs []store.Divisi
 	}
 }
 
-func homeRepresentativeHeading(rep opennorth.Representative, fallback string) string {
-	if strings.TrimSpace(rep.Name) != "" {
-		return rep.Name
+func homeRepresentativeHeading(rep opennorth.Representative, fallbackName, fallbackRole string) string {
+	name := strings.TrimSpace(rep.Name)
+	if name == "" {
+		name = fallbackName
 	}
-	return fallback
+	role := strings.TrimSpace(rep.ElectedOffice)
+	if role == "" {
+		role = fallbackRole
+	}
+	if role == "" {
+		return name
+	}
+	return fmt.Sprintf("%s (%s)", name, role)
 }
 
 func homeRepresentativeSummary(rep opennorth.Representative, party string, fallbackRole string) string {
