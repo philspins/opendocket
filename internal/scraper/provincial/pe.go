@@ -42,7 +42,7 @@ const (
 	peiCaptchaSignature    = "captcha.perfdrive.com"
 	peiBotManagerSignature = "perfdrive.com"
 
-	peiDefaultDelay = 6 * time.Second
+	peiDefaultDelay = 1 * time.Second
 )
 
 const peiGeneralAssembly = 67
