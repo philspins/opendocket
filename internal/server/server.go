@@ -9,6 +9,7 @@ import (
 	"os"
 	"strconv"
 	"strings"
+	"time"
 
 	"github.com/philspins/open-democracy/internal/auth"
 	"github.com/philspins/open-democracy/internal/opennorth"
@@ -28,8 +29,10 @@ type Server struct {
 	// baseHost is the hostname extracted from baseURL at construction time.
 	// It is used for the HTTP→HTTPS redirect to prevent host-header injection.
 	// Empty when baseURL cannot be parsed or contains no host.
-	baseHost   string
-	trustProxy bool
+	baseHost                   string
+	trustProxy                 bool
+	billInteractionRateLimit   int
+	billInteractionRateLimiter *simpleRateLimiter
 }
 
 // New creates a Server and registers all routes.
@@ -49,13 +52,15 @@ func New(st *store.Store) *Server {
 	}
 
 	s := &Server{
-		store:      st,
-		mux:        http.NewServeMux(),
-		auth:       auth.New(st, baseURL),
-		riding:     riding.New(st, googleMapsKey),
-		baseURL:    baseURL,
-		baseHost:   baseHost,
-		trustProxy: strings.ToLower(strings.TrimSpace(os.Getenv("TRUST_PROXY"))) == "true",
+		store:                      st,
+		mux:                        http.NewServeMux(),
+		auth:                       auth.New(st, baseURL),
+		riding:                     riding.New(st, googleMapsKey),
+		baseURL:                    baseURL,
+		baseHost:                   baseHost,
+		trustProxy:                 strings.ToLower(strings.TrimSpace(os.Getenv("TRUST_PROXY"))) == "true",
+		billInteractionRateLimit:   envInt("BILL_INTERACTION_RATE_LIMIT_PER_MINUTE", 10),
+		billInteractionRateLimiter: newSimpleRateLimiter(),
 	}
 
 	s.mux.HandleFunc("GET /health", s.handleHealth)
@@ -110,12 +115,13 @@ func (s *Server) applySecurityHeaders(w http.ResponseWriter, r *http.Request) {
 		"base-uri 'self'",
 		"form-action 'self'",
 		"frame-ancestors 'none'",
+		"frame-src 'self' https://www.google.com/recaptcha/",
 		"object-src 'none'",
 		"img-src 'self' data: https:",
 		"style-src 'self' 'unsafe-inline' https://fonts.googleapis.com",
 		"font-src 'self' https://fonts.gstatic.com",
-		"script-src 'self' 'unsafe-inline' https://cdn.tailwindcss.com https://accounts.google.com https://connect.facebook.net https://maps.googleapis.com https://maps.gstatic.com",
-		"connect-src 'self' https://graph.facebook.com https://www.googleapis.com https://oauth2.googleapis.com https://maps.googleapis.com",
+		"script-src 'self' 'unsafe-inline' https://cdn.tailwindcss.com https://accounts.google.com https://connect.facebook.net https://maps.googleapis.com https://maps.gstatic.com https://www.google.com/recaptcha/ https://www.gstatic.com/recaptcha/",
+		"connect-src 'self' https://graph.facebook.com https://www.googleapis.com https://oauth2.googleapis.com https://maps.googleapis.com https://www.google.com/recaptcha/",
 	}, "; "))
 
 	isHTTPS := r.TLS != nil
@@ -268,6 +274,11 @@ func (s *Server) handleReact(w http.ResponseWriter, r *http.Request) {
 	if !ok {
 		return
 	}
+	if s.billInteractionRateLimit > 0 && s.billInteractionRateLimiter != nil &&
+		!s.billInteractionRateLimiter.allow(billInteractionRateKey(u.Email), s.billInteractionRateLimit, time.Minute, time.Now().UTC()) {
+		http.Error(w, "rate limit exceeded", http.StatusTooManyRequests)
+		return
+	}
 	if err := r.ParseForm(); err != nil {
 		http.Error(w, "bad request", http.StatusBadRequest)
 		return
@@ -337,4 +348,8 @@ func (s *Server) handleLogSubmission(w http.ResponseWriter, r *http.Request) {
 func (s *Server) handleHealth(w http.ResponseWriter, r *http.Request) {
 	w.Header().Set("Content-Type", "application/json")
 	_, _ = w.Write([]byte(`{"status":"ok"}`))
+}
+
+func billInteractionRateKey(email string) string {
+	return "bill:react:" + strings.ToLower(strings.TrimSpace(email))
 }

@@ -214,6 +214,38 @@ func TestHandleFollow_RequiresAuthenticatedSession(t *testing.T) {
 	}
 }
 
+func TestHandleReact_RateLimitedPerUser(t *testing.T) {
+	t.Setenv("BILL_INTERACTION_RATE_LIMIT_PER_MINUTE", "2")
+	srv, st := newTestServer(t)
+	u, err := st.AuthenticateOAuth("google", "rate-user", "rate-react@example.com", true)
+	if err != nil {
+		t.Fatalf("AuthenticateOAuth: %v", err)
+	}
+	sessionID, err := st.CreateSession(u.ID, time.Hour)
+	if err != nil {
+		t.Fatalf("CreateSession: %v", err)
+	}
+
+	for i := 0; i < 2; i++ {
+		req := httptest.NewRequest(http.MethodPost, "/api/react", nil)
+		req.AddCookie(&http.Cookie{Name: "od_session", Value: sessionID})
+		rr := httptest.NewRecorder()
+		srv.ServeHTTP(rr, req)
+		if rr.Code == http.StatusTooManyRequests {
+			t.Fatalf("request %d unexpectedly rate-limited", i+1)
+		}
+	}
+
+	req := httptest.NewRequest(http.MethodPost, "/api/react", nil)
+	req.AddCookie(&http.Cookie{Name: "od_session", Value: sessionID})
+	rr := httptest.NewRecorder()
+	srv.ServeHTTP(rr, req)
+
+	if rr.Code != http.StatusTooManyRequests {
+		t.Fatalf("status=%d want %d", rr.Code, http.StatusTooManyRequests)
+	}
+}
+
 func TestLegalPages_Render(t *testing.T) {
 	srv, _ := newTestServer(t)
 
