@@ -575,7 +575,7 @@ func TestAuthenticateOAuthMarksVerified(t *testing.T) {
 	}
 }
 
-func TestUpdateUserLocationPersistsAddressAndRidings(t *testing.T) {
+func TestUpdateUserLocationPersistsOnlyRidings(t *testing.T) {
 	conn := tempDB(t)
 	st := store.New(conn)
 
@@ -584,12 +584,12 @@ func TestUpdateUserLocationPersistsAddressAndRidings(t *testing.T) {
 		t.Fatalf("UpsertUser: %v", err)
 	}
 
-	updated, err := st.UpdateUserLocation(u.ID, "123 Main St, Ottawa, ON", "Ottawa Centre", "Ottawa South")
+	updated, err := st.UpdateUserLocation(u.ID, "Ottawa Centre", "Ottawa South")
 	if err != nil {
 		t.Fatalf("UpdateUserLocation: %v", err)
 	}
-	if updated.Address != "123 Main St, Ottawa, ON" {
-		t.Fatalf("Address=%q want %q", updated.Address, "123 Main St, Ottawa, ON")
+	if updated.Address != "" {
+		t.Fatalf("Address=%q want empty", updated.Address)
 	}
 	if updated.FederalRidingID != "Ottawa Centre" || updated.ProvincialRidingID != "Ottawa South" {
 		t.Fatalf("unexpected riding ids: %+v", updated)
@@ -599,7 +599,7 @@ func TestUpdateUserLocationPersistsAddressAndRidings(t *testing.T) {
 	if err != nil {
 		t.Fatalf("GetUserByEmail: %v", err)
 	}
-	if reloaded.Address != updated.Address || reloaded.FederalRidingID != updated.FederalRidingID || reloaded.ProvincialRidingID != updated.ProvincialRidingID {
+	if reloaded.Address != "" || reloaded.FederalRidingID != updated.FederalRidingID || reloaded.ProvincialRidingID != updated.ProvincialRidingID {
 		t.Fatalf("reloaded user mismatch: %+v vs %+v", reloaded, updated)
 	}
 }
