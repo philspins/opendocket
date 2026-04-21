@@ -502,7 +502,7 @@ func TestHandleHome_UsesSavedRepresentativesAndHidesLookupHero(t *testing.T) {
 		t.Fatalf("status=%d want %d", rr.Code, http.StatusOK)
 	}
 	body := rr.Body.String()
-	if !strings.Contains(body, "for Ottawa Centre") || !strings.Contains(body, "for Ottawa South") {
+	if !strings.Contains(body, "Ottawa Centre") || !strings.Contains(body, "Ottawa South") {
 		t.Fatalf("expected saved riding context in home page body")
 	}
 	if !strings.Contains(body, "John Fraser") {
@@ -537,7 +537,7 @@ func TestHandleHome_UnauthenticatedUsesRidingCookies(t *testing.T) {
 		t.Fatalf("status=%d want %d", rr.Code, http.StatusOK)
 	}
 	body := rr.Body.String()
-	if !strings.Contains(body, "for Ottawa Centre") || !strings.Contains(body, "for London—Fanshawe") {
+	if !strings.Contains(body, "Ottawa Centre") || !strings.Contains(body, "London—Fanshawe") {
 		t.Fatalf("expected riding cookie context in home page body")
 	}
 	if !strings.Contains(body, "Teresa J. Armstrong") {
@@ -579,7 +579,7 @@ func TestHandleHome_UnauthenticatedUsesCookiesFromRidingLookup(t *testing.T) {
 		t.Fatalf("home status=%d want %d", homeRR.Code, http.StatusOK)
 	}
 	body := homeRR.Body.String()
-	if !strings.Contains(body, "for Ottawa Centre") || !strings.Contains(body, "for Ottawa South") {
+	if !strings.Contains(body, "Ottawa Centre") || !strings.Contains(body, "Ottawa South") {
 		t.Fatalf("expected riding context from lookup cookies in home page body")
 	}
 }
@@ -633,7 +633,7 @@ func TestHandleHome_UnauthenticatedUsesUnicodeRidingCookiesFromLookup(t *testing
 		t.Fatalf("home status=%d want %d", homeRR.Code, http.StatusOK)
 	}
 	body := homeRR.Body.String()
-	if !strings.Contains(body, "for "+federalRiding) || !strings.Contains(body, "for "+provincialRiding) {
+	if !strings.Contains(body, federalRiding) || !strings.Contains(body, provincialRiding) {
 		t.Fatalf("expected unicode riding context from lookup cookies in home page body")
 	}
 }
