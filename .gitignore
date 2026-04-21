@@ -22,6 +22,9 @@ vendor/
 *.swp
 *.swo
 .claude/*
+.claude/settings.json
+.claude/settings.local.json
+
 
 *.db-shm
 *.db-wal
@@ -37,6 +40,8 @@ vendor/
 # ignore sensitive files
 sshlogin.sh
 upload_db.sh
+scripts/sshlogin.sh
+scripts/upload_db.sh
 
 # Node.js stuff
 node_modules/
