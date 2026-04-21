@@ -4,6 +4,7 @@ import (
 	"context"
 	"crypto/hmac"
 	"crypto/sha256"
+	"database/sql"
 	"encoding/base64"
 	"encoding/json"
 	"net/http"
@@ -25,6 +26,11 @@ const (
 )
 
 func newTestServer(t *testing.T) (*Server, *store.Store) {
+	srv, st, _ := newTestServerWithConn(t)
+	return srv, st
+}
+
+func newTestServerWithConn(t *testing.T) (*Server, *store.Store, *sql.DB) {
 	t.Helper()
 	t.Setenv("SES_FROM_EMAIL", "")
 	t.Setenv("OAUTH_BASE_URL", "http://127.0.0.1:8080")
@@ -38,7 +44,7 @@ func newTestServer(t *testing.T) (*Server, *store.Store) {
 
 	st := store.New(conn)
 	srv := New(st)
-	return srv, st
+	return srv, st, conn
 }
 
 func TestHandleRequestVerification_DoesNotLeakSecrets(t *testing.T) {
@@ -449,7 +455,31 @@ func TestHandleRiding_UnauthenticatedSetsRidingCookies(t *testing.T) {
 }
 
 func TestHandleHome_UsesSavedRepresentativesAndHidesLookupHero(t *testing.T) {
-	srv, st := newTestServer(t)
+	srv, st, conn := newTestServerWithConn(t)
+	if err := db.UpsertMember(conn, db.Member{
+		ID:              "mp-ottawa-centre",
+		Name:            "Yasir Naqvi",
+		Party:           "Liberal",
+		Riding:          "Ottawa Centre",
+		Chamber:         "commons",
+		Active:          true,
+		LastScraped:     "2026-01-01T00:00:00Z",
+		GovernmentLevel: "federal",
+	}); err != nil {
+		t.Fatalf("UpsertMember federal: %v", err)
+	}
+	if err := db.UpsertMember(conn, db.Member{
+		ID:              "mpp-ottawa-south",
+		Name:            "John Fraser",
+		Party:           "Ontario Liberal Party",
+		Riding:          "Ottawa South",
+		Chamber:         "ontario",
+		Active:          true,
+		LastScraped:     "2026-01-01T00:00:00Z",
+		GovernmentLevel: "provincial",
+	}); err != nil {
+		t.Fatalf("UpsertMember provincial: %v", err)
+	}
 	u, err := st.UpsertUser("home@example.com")
 	if err != nil {
 		t.Fatalf("UpsertUser: %v", err)
@@ -475,16 +505,31 @@ func TestHandleHome_UsesSavedRepresentativesAndHidesLookupHero(t *testing.T) {
 	if !strings.Contains(body, "for Ottawa Centre") || !strings.Contains(body, "for Ottawa South") {
 		t.Fatalf("expected saved riding context in home page body")
 	}
+	if !strings.Contains(body, "John Fraser") {
+		t.Fatalf("expected provincial representative name from local member in home page body")
+	}
 	if strings.Contains(body, "Find Your Riding") {
 		t.Fatalf("expected lookup hero to be hidden once address is saved")
 	}
 }
 
 func TestHandleHome_UnauthenticatedUsesRidingCookies(t *testing.T) {
-	srv, _ := newTestServer(t)
+	srv, _, conn := newTestServerWithConn(t)
+	if err := db.UpsertMember(conn, db.Member{
+		ID:              "mpp-london-fanshawe",
+		Name:            "Teresa J. Armstrong",
+		Party:           "Ontario NDP",
+		Riding:          "London—Fanshawe",
+		Chamber:         "ontario",
+		Active:          true,
+		LastScraped:     "2026-01-01T00:00:00Z",
+		GovernmentLevel: "provincial",
+	}); err != nil {
+		t.Fatalf("UpsertMember provincial: %v", err)
+	}
 	req := httptest.NewRequest(http.MethodGet, "/", nil)
 	req.AddCookie(&http.Cookie{Name: testGuestFederalRidingCookie, Value: url.QueryEscape("Ottawa Centre")})
-	req.AddCookie(&http.Cookie{Name: testGuestProvincialRidingCookie, Value: url.QueryEscape("Ottawa South")})
+	req.AddCookie(&http.Cookie{Name: testGuestProvincialRidingCookie, Value: url.QueryEscape("London—Fanshawe")})
 	rr := httptest.NewRecorder()
 
 	srv.ServeHTTP(rr, req)
@@ -492,8 +537,11 @@ func TestHandleHome_UnauthenticatedUsesRidingCookies(t *testing.T) {
 		t.Fatalf("status=%d want %d", rr.Code, http.StatusOK)
 	}
 	body := rr.Body.String()
-	if !strings.Contains(body, "for Ottawa Centre") || !strings.Contains(body, "for Ottawa South") {
+	if !strings.Contains(body, "for Ottawa Centre") || !strings.Contains(body, "for London—Fanshawe") {
 		t.Fatalf("expected riding cookie context in home page body")
+	}
+	if !strings.Contains(body, "Teresa J. Armstrong") {
+		t.Fatalf("expected provincial representative name from local member in home page body")
 	}
 	if strings.Contains(body, "Find Your Riding") {
 		t.Fatalf("expected lookup hero to be hidden once riding cookies are set")

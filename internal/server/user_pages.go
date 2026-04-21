@@ -86,8 +86,7 @@ func fallbackLookupResult(user store.UserRow, st *store.Store) riding.LookupResu
 			DistrictName:  result.FederalRidingID,
 		}
 		members, _ := st.GetMembersByRiding(result.FederalRidingID)
-		if len(members) > 0 {
-			member := members[0]
+		if member, ok := selectLocalMemberByLevel(members, result.FederalRidingID, "federal"); ok {
 			result.FederalRepresentative = opennorth.Representative{
 				Name:          member.Name,
 				ElectedOffice: "MP",
@@ -106,8 +105,56 @@ func fallbackLookupResult(user store.UserRow, st *store.Store) riding.LookupResu
 			ElectedOffice: "Provincial representative",
 			DistrictName:  result.ProvincialRidingID,
 		}
+		members, _ := st.GetMembersByRiding(result.ProvincialRidingID)
+		if member, ok := selectLocalMemberByLevel(members, result.ProvincialRidingID, "provincial"); ok {
+			result.ProvincialRepresentative = opennorth.Representative{
+				Name:          member.Name,
+				ElectedOffice: member.Role,
+				PartyName:     member.Party,
+				DistrictName:  member.Riding,
+				Email:         member.Email,
+				URL:           member.Website,
+				PhotoURL:      member.PhotoURL,
+				LocalMemberID: member.ID,
+			}
+		}
 	}
 	return result
+}
+
+func selectLocalMemberByLevel(members []store.MemberRow, ridingID, level string) (store.MemberRow, bool) {
+	ridingID = strings.TrimSpace(ridingID)
+	for _, member := range members {
+		if !memberMatchesLevel(member, level) {
+			continue
+		}
+		if strings.EqualFold(strings.TrimSpace(member.Riding), ridingID) {
+			return member, true
+		}
+	}
+	for _, member := range members {
+		if memberMatchesLevel(member, level) {
+			return member, true
+		}
+	}
+	return store.MemberRow{}, false
+}
+
+func memberMatchesLevel(member store.MemberRow, level string) bool {
+	switch strings.ToLower(strings.TrimSpace(level)) {
+	case "provincial":
+		if strings.EqualFold(member.GovernmentLevel, "provincial") {
+			return true
+		}
+		chamber := strings.ToLower(strings.TrimSpace(member.Chamber))
+		return chamber != "" && chamber != "commons" && chamber != "senate"
+	default:
+		if strings.EqualFold(member.GovernmentLevel, "federal") {
+			return true
+		}
+		chamber := strings.ToLower(strings.TrimSpace(member.Chamber))
+		return chamber == "" || chamber == "commons" || chamber == "senate"
+	}
 }
 
 func (s *Server) handleRiding(w http.ResponseWriter, r *http.Request) {
