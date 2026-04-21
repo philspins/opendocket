@@ -259,6 +259,30 @@ func TestLegalPages_Render(t *testing.T) {
 	}
 }
 
+func TestHandleCompare_RendersDropdownFiltersAndSelectedValues(t *testing.T) {
+	srv, _ := newTestServer(t)
+
+	req := httptest.NewRequest(http.MethodGet, "/compare?level=provincial&province=Ontario&party=NDP", nil)
+	rr := httptest.NewRecorder()
+	srv.ServeHTTP(rr, req)
+
+	if rr.Code != http.StatusOK {
+		t.Fatalf("status=%d want %d", rr.Code, http.StatusOK)
+	}
+	body := rr.Body.String()
+	if !strings.Contains(body, `name="province"`) {
+		t.Fatalf("expected province filter for provincial compare view")
+	}
+	if strings.Contains(body, `type="text" name="a"`) || strings.Contains(body, `type="text" name="b"`) {
+		t.Fatalf("expected compare page to use dropdown selectors for both representatives")
+	}
+	for _, needle := range []string{`name="a"`, `name="b"`, `name="party"`, `value="provincial" selected`} {
+		if !strings.Contains(body, needle) {
+			t.Fatalf("expected compare page body to contain %q", needle)
+		}
+	}
+}
+
 func TestDeleteDataCallback_ValidSignedRequest(t *testing.T) {
 	srv, _ := newTestServer(t)
 	t.Setenv("FACEBOOK_CLIENT_ID", "123456789")

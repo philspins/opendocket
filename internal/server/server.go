@@ -235,6 +235,18 @@ func (s *Server) handleCompare(w http.ResponseWriter, r *http.Request) {
 	ps := s.parliamentStatus()
 	var m1, m2 store.MemberRow
 	var overlap, total int
+	level := q.Get("level")
+	if level == "" {
+		level = "federal"
+	}
+	province := q.Get("province")
+	if level != "provincial" {
+		province = ""
+	}
+	party := q.Get("party")
+	members, _ := s.store.ListMembers("", party, province, "", level)
+	parties, _ := s.store.ListDistinctParties()
+	provinces, _ := s.store.ListDistinctProvinces()
 	idA, idB := q.Get("a"), q.Get("b")
 	if idA != "" {
 		m1, _ = s.store.GetMember(idA)
@@ -245,7 +257,7 @@ func (s *Server) handleCompare(w http.ResponseWriter, r *http.Request) {
 	if m1.ID != "" && m2.ID != "" {
 		overlap, total, _ = s.store.CompareMemberVotes(m1.ID, m2.ID)
 	}
-	_ = templates.CompareMPs(ps, m1, m2, overlap, total).Render(r.Context(), w)
+	_ = templates.CompareMPs(ps, members, m1, m2, level, province, party, provinces, parties, overlap, total).Render(r.Context(), w)
 }
 
 func (s *Server) handleFollow(w http.ResponseWriter, r *http.Request) {
