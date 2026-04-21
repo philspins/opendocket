@@ -9,6 +9,7 @@ import "github.com/a-h/templ"
 import templruntime "github.com/a-h/templ/runtime"
 
 import (
+	"net/url"
 	"strings"
 
 	"github.com/philspins/open-democracy/internal/store"
@@ -76,7 +77,7 @@ func AuthPage(ps store.ParliamentStatus, mode string, googleClientID string, fac
 			var templ_7745c5c3_Var5 string
 			templ_7745c5c3_Var5, templ_7745c5c3_Err = templ.JoinStringErrs(modeHeading(mode))
 			if templ_7745c5c3_Err != nil {
-				return templ.Error{Err: templ_7745c5c3_Err, FileName: `internal/templates/auth.templ`, Line: 16, Col: 48}
+				return templ.Error{Err: templ_7745c5c3_Err, FileName: `internal/templates/auth.templ`, Line: 17, Col: 48}
 			}
 			_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var5))
 			if templ_7745c5c3_Err != nil {
@@ -89,7 +90,7 @@ func AuthPage(ps store.ParliamentStatus, mode string, googleClientID string, fac
 			var templ_7745c5c3_Var6 string
 			templ_7745c5c3_Var6, templ_7745c5c3_Err = templ.JoinStringErrs(modeVerb(mode))
 			if templ_7745c5c3_Err != nil {
-				return templ.Error{Err: templ_7745c5c3_Err, FileName: `internal/templates/auth.templ`, Line: 17, Col: 85}
+				return templ.Error{Err: templ_7745c5c3_Err, FileName: `internal/templates/auth.templ`, Line: 18, Col: 85}
 			}
 			_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var6))
 			if templ_7745c5c3_Err != nil {
@@ -107,7 +108,7 @@ func AuthPage(ps store.ParliamentStatus, mode string, googleClientID string, fac
 				var templ_7745c5c3_Var7 string
 				templ_7745c5c3_Var7, templ_7745c5c3_Err = templ.JoinStringErrs(googleClientID)
 				if templ_7745c5c3_Err != nil {
-					return templ.Error{Err: templ_7745c5c3_Err, FileName: `internal/templates/auth.templ`, Line: 24, Col: 98}
+					return templ.Error{Err: templ_7745c5c3_Err, FileName: `internal/templates/auth.templ`, Line: 25, Col: 98}
 				}
 				_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var7))
 				if templ_7745c5c3_Err != nil {
@@ -120,7 +121,7 @@ func AuthPage(ps store.ParliamentStatus, mode string, googleClientID string, fac
 				var templ_7745c5c3_Var8 string
 				templ_7745c5c3_Var8, templ_7745c5c3_Err = templ.JoinStringErrs(googleWidgetText(mode))
 				if templ_7745c5c3_Err != nil {
-					return templ.Error{Err: templ_7745c5c3_Err, FileName: `internal/templates/auth.templ`, Line: 24, Col: 142}
+					return templ.Error{Err: templ_7745c5c3_Err, FileName: `internal/templates/auth.templ`, Line: 25, Col: 142}
 				}
 				_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var8))
 				if templ_7745c5c3_Err != nil {
@@ -166,53 +167,66 @@ func AuthPage(ps store.ParliamentStatus, mode string, googleClientID string, fac
 				return templ_7745c5c3_Err
 			}
 			if signupRecaptchaEnabled(mode, recaptchaSiteKey) {
-				templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 16, "<script src=\"https://www.google.com/recaptcha/api.js?render=explicit\" async defer></script> <script id=\"signup-recaptcha-config\" data-site-key=\"")
+				templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 16, "<script src=\"")
 				if templ_7745c5c3_Err != nil {
 					return templ_7745c5c3_Err
 				}
 				var templ_7745c5c3_Var9 string
-				templ_7745c5c3_Var9, templ_7745c5c3_Err = templ.JoinStringErrs(recaptchaSiteKey)
+				templ_7745c5c3_Var9, templ_7745c5c3_Err = templ.JoinStringErrs(recaptchaScriptSrc(recaptchaSiteKey))
 				if templ_7745c5c3_Err != nil {
-					return templ.Error{Err: templ_7745c5c3_Err, FileName: `internal/templates/auth.templ`, Line: 62, Col: 72}
+					return templ.Error{Err: templ_7745c5c3_Err, FileName: `internal/templates/auth.templ`, Line: 62, Col: 53}
 				}
 				_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var9))
 				if templ_7745c5c3_Err != nil {
 					return templ_7745c5c3_Err
 				}
-				templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 17, "\"></script> <script>\n\t\t\t\twindow.odSignupRecaptchaComplete = function() {\n\t\t\t\t\tconst accountAccess = document.getElementById(\"signup-account-access\");\n\t\t\t\t\tif (accountAccess) {\n\t\t\t\t\t\taccountAccess.classList.remove(\"opacity-50\", \"pointer-events-none\", \"select-none\");\n\t\t\t\t\t}\n\t\t\t\t\tconst oauthOptions = document.getElementById(\"oauth-options\");\n\t\t\t\t\tif (oauthOptions) {\n\t\t\t\t\t\toauthOptions.classList.remove(\"pointer-events-none\");\n\t\t\t\t\t}\n\t\t\t\t\tconst status = document.getElementById(\"signup-recaptcha-status\");\n\t\t\t\t\tif (status) {\n\t\t\t\t\t\tstatus.textContent = \"Verification complete.\";\n\t\t\t\t\t}\n\t\t\t\t\tconst gate = document.getElementById(\"signup-recaptcha-gate\");\n\t\t\t\t\tif (gate) {\n\t\t\t\t\t\tgate.classList.add(\"hidden\");\n\t\t\t\t\t}\n\t\t\t\t};\n\t\t\t\twindow.odSignupRecaptchaFailed = function() {\n\t\t\t\t\tconst status = document.getElementById(\"signup-recaptcha-status\");\n\t\t\t\t\tif (status) {\n\t\t\t\t\t\tstatus.textContent = \"Verification failed. Please refresh and try again.\";\n\t\t\t\t\t\tstatus.classList.add(\"text-red-600\");\n\t\t\t\t\t}\n\t\t\t\t};\n\t\t\t\twindow.odSignupRecaptchaRun = function() {\n\t\t\t\t\tconst config = document.getElementById(\"signup-recaptcha-config\");\n\t\t\t\t\tconst siteKey = config ? (config.dataset.siteKey || \"\") : \"\";\n\t\t\t\t\tif (!siteKey) {\n\t\t\t\t\t\twindow.odSignupRecaptchaFailed();\n\t\t\t\t\t\treturn;\n\t\t\t\t\t}\n\t\t\t\t\tif (!window.grecaptcha || !window.grecaptcha.ready) {\n\t\t\t\t\t\twindow.odSignupRecaptchaFailed();\n\t\t\t\t\t\treturn;\n\t\t\t\t\t}\n\t\t\t\t\twindow.grecaptcha.ready(function() {\n\t\t\t\t\t\twindow.grecaptcha.execute(siteKey, { action: \"signup\" }).then(function(token) {\n\t\t\t\t\t\t\tif (!token) {\n\t\t\t\t\t\t\t\twindow.odSignupRecaptchaFailed();\n\t\t\t\t\t\t\t\treturn;\n\t\t\t\t\t\t\t}\n\t\t\t\t\t\t\twindow.odSignupRecaptchaComplete();\n\t\t\t\t\t\t}).catch(function() {\n\t\t\t\t\t\t\twindow.odSignupRecaptchaFailed();\n\t\t\t\t\t\t});\n\t\t\t\t\t});\n\t\t\t\t};\n\t\t\t\twindow.addEventListener(\"load\", window.odSignupRecaptchaRun);\n\t\t\t</script>")
-				if templ_7745c5c3_Err != nil {
-					return templ_7745c5c3_Err
-				}
-			}
-			templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 18, " ")
-			if templ_7745c5c3_Err != nil {
-				return templ_7745c5c3_Err
-			}
-			if googleClientID != "" {
-				templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 19, "<script src=\"https://accounts.google.com/gsi/client\" async defer></script> <script>\n\t\t\t\t(() => {\n\t\t\t\t\tconst el = document.getElementById(\"google-signin-widget\");\n\t\t\t\t\tif (!el || !window.google || !window.google.accounts || !window.google.accounts.id) {\n\t\t\t\t\t\treturn;\n\t\t\t\t\t}\n\t\t\t\t\tconst clientID = el.dataset.googleClientId || \"\";\n\t\t\t\t\tif (!clientID) {\n\t\t\t\t\t\treturn;\n\t\t\t\t\t}\n\t\t\t\t\twindow.google.accounts.id.initialize({\n\t\t\t\t\t\tclient_id: clientID,\n\t\t\t\t\t\tcallback: () => {\n\t\t\t\t\t\t\twindow.location.href = \"/auth/google/login\";\n\t\t\t\t\t\t},\n\t\t\t\t\t});\n\t\t\t\t\twindow.google.accounts.id.renderButton(el, {\n\t\t\t\t\t\ttheme: \"outline\",\n\t\t\t\t\t\tsize: \"large\",\n\t\t\t\t\t\tshape: \"pill\",\n\t\t\t\t\t\ttext: el.dataset.googleText || \"signin_with\",\n\t\t\t\t\t\twidth: 280,\n\t\t\t\t\t});\n\t\t\t\t})();\n\t\t\t</script>")
-				if templ_7745c5c3_Err != nil {
-					return templ_7745c5c3_Err
-				}
-			}
-			templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 20, " ")
-			if templ_7745c5c3_Err != nil {
-				return templ_7745c5c3_Err
-			}
-			if facebookAppID != "" {
-				templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 21, "<script async defer crossorigin=\"anonymous\" src=\"https://connect.facebook.net/en_US/sdk.js\"></script> <script id=\"facebook-widget-config\" data-facebook-app-id=\"")
+				templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 17, "\" async defer></script> <script id=\"signup-recaptcha-config\" data-site-key=\"")
 				if templ_7745c5c3_Err != nil {
 					return templ_7745c5c3_Err
 				}
 				var templ_7745c5c3_Var10 string
-				templ_7745c5c3_Var10, templ_7745c5c3_Err = templ.JoinStringErrs(facebookAppID)
+				templ_7745c5c3_Var10, templ_7745c5c3_Err = templ.JoinStringErrs(recaptchaSiteKey)
 				if templ_7745c5c3_Err != nil {
-					return templ.Error{Err: templ_7745c5c3_Err, FileName: `internal/templates/auth.templ`, Line: 147, Col: 75}
+					return templ.Error{Err: templ_7745c5c3_Err, FileName: `internal/templates/auth.templ`, Line: 63, Col: 72}
 				}
 				_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var10))
 				if templ_7745c5c3_Err != nil {
 					return templ_7745c5c3_Err
 				}
-				templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 22, "\">\n\t\t\t\twindow.fbAsyncInit = function() {\n\t\t\t\t\tconst cfg = document.getElementById(\"facebook-widget-config\");\n\t\t\t\t\tconst appId = cfg ? cfg.dataset.facebookAppId : \"\";\n\t\t\t\t\tif (!appId) {\n\t\t\t\t\t\treturn;\n\t\t\t\t\t}\n\t\t\t\t\tFB.init({\n\t\t\t\t\t\tappId: appId,\n\t\t\t\t\t\tcookie: true,\n\t\t\t\t\t\txfbml: true,\n\t\t\t\t\t\tversion: \"v19.0\",\n\t\t\t\t\t});\n\t\t\t\t};\n\t\t\t\twindow.odFacebookWidgetLogin = function() {\n\t\t\t\t\tif (!window.FB) {\n\t\t\t\t\t\treturn;\n\t\t\t\t\t}\n\t\t\t\t\tFB.getLoginStatus(function(response) {\n\t\t\t\t\t\tif (response && response.status === \"connected\") {\n\t\t\t\t\t\t\twindow.location.href = \"/auth/facebook/login\";\n\t\t\t\t\t\t}\n\t\t\t\t\t});\n\t\t\t\t};\n\t\t\t</script>")
+				templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 18, "\"></script> <script>\n\t\t\t\twindow.odSignupRecaptchaComplete = function() {\n\t\t\t\t\tconst accountAccess = document.getElementById(\"signup-account-access\");\n\t\t\t\t\tif (accountAccess) {\n\t\t\t\t\t\taccountAccess.classList.remove(\"opacity-50\", \"pointer-events-none\", \"select-none\");\n\t\t\t\t\t}\n\t\t\t\t\tconst oauthOptions = document.getElementById(\"oauth-options\");\n\t\t\t\t\tif (oauthOptions) {\n\t\t\t\t\t\toauthOptions.classList.remove(\"pointer-events-none\");\n\t\t\t\t\t}\n\t\t\t\t\tconst status = document.getElementById(\"signup-recaptcha-status\");\n\t\t\t\t\tif (status) {\n\t\t\t\t\t\tstatus.textContent = \"Verification complete.\";\n\t\t\t\t\t}\n\t\t\t\t\tconst gate = document.getElementById(\"signup-recaptcha-gate\");\n\t\t\t\t\tif (gate) {\n\t\t\t\t\t\tgate.classList.add(\"hidden\");\n\t\t\t\t\t}\n\t\t\t\t};\n\t\t\t\twindow.odSignupRecaptchaFailed = function() {\n\t\t\t\t\tconst status = document.getElementById(\"signup-recaptcha-status\");\n\t\t\t\t\tif (status) {\n\t\t\t\t\t\tstatus.textContent = \"Verification failed. Please refresh and try again.\";\n\t\t\t\t\t\tstatus.classList.add(\"text-red-600\");\n\t\t\t\t\t}\n\t\t\t\t};\n\t\t\t\twindow.odSignupRecaptchaRun = function() {\n\t\t\t\t\tconst config = document.getElementById(\"signup-recaptcha-config\");\n\t\t\t\t\tconst siteKey = config ? (config.dataset.siteKey || \"\") : \"\";\n\t\t\t\t\tif (!siteKey) {\n\t\t\t\t\t\twindow.odSignupRecaptchaFailed();\n\t\t\t\t\t\treturn;\n\t\t\t\t\t}\n\t\t\t\t\tif (!window.grecaptcha || !window.grecaptcha.ready) {\n\t\t\t\t\t\twindow.odSignupRecaptchaFailed();\n\t\t\t\t\t\treturn;\n\t\t\t\t\t}\n\t\t\t\t\twindow.grecaptcha.ready(function() {\n\t\t\t\t\t\twindow.grecaptcha.execute(siteKey, { action: \"signup\" }).then(function(token) {\n\t\t\t\t\t\t\tif (!token) {\n\t\t\t\t\t\t\t\twindow.odSignupRecaptchaFailed();\n\t\t\t\t\t\t\t\treturn;\n\t\t\t\t\t\t\t}\n\t\t\t\t\t\t\tfetch(\"/auth/verify-recaptcha\", {\n\t\t\t\t\t\t\t\tmethod: \"POST\",\n\t\t\t\t\t\t\t\theaders: {\n\t\t\t\t\t\t\t\t\t\"Content-Type\": \"application/x-www-form-urlencoded\",\n\t\t\t\t\t\t\t\t},\n\t\t\t\t\t\t\t\tbody: \"g-recaptcha-response=\" + encodeURIComponent(token),\n\t\t\t\t\t\t\t}).then(function(response) {\n\t\t\t\t\t\t\t\tif (!response.ok) {\n\t\t\t\t\t\t\t\t\twindow.odSignupRecaptchaFailed();\n\t\t\t\t\t\t\t\t\treturn;\n\t\t\t\t\t\t\t\t}\n\t\t\t\t\t\t\t\twindow.odSignupRecaptchaComplete();\n\t\t\t\t\t\t\t}).catch(function() {\n\t\t\t\t\t\t\t\twindow.odSignupRecaptchaFailed();\n\t\t\t\t\t\t\t});\n\t\t\t\t\t\t}).catch(function() {\n\t\t\t\t\t\t\twindow.odSignupRecaptchaFailed();\n\t\t\t\t\t\t});\n\t\t\t\t\t});\n\t\t\t\t};\n\t\t\t\twindow.addEventListener(\"load\", window.odSignupRecaptchaRun);\n\t\t\t</script>")
+				if templ_7745c5c3_Err != nil {
+					return templ_7745c5c3_Err
+				}
+			}
+			templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 19, " ")
+			if templ_7745c5c3_Err != nil {
+				return templ_7745c5c3_Err
+			}
+			if googleClientID != "" {
+				templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 20, "<script src=\"https://accounts.google.com/gsi/client\" async defer></script> <script>\n\t\t\t\t(() => {\n\t\t\t\t\tconst el = document.getElementById(\"google-signin-widget\");\n\t\t\t\t\tif (!el || !window.google || !window.google.accounts || !window.google.accounts.id) {\n\t\t\t\t\t\treturn;\n\t\t\t\t\t}\n\t\t\t\t\tconst clientID = el.dataset.googleClientId || \"\";\n\t\t\t\t\tif (!clientID) {\n\t\t\t\t\t\treturn;\n\t\t\t\t\t}\n\t\t\t\t\twindow.google.accounts.id.initialize({\n\t\t\t\t\t\tclient_id: clientID,\n\t\t\t\t\t\tcallback: () => {\n\t\t\t\t\t\t\twindow.location.href = \"/auth/google/login\";\n\t\t\t\t\t\t},\n\t\t\t\t\t});\n\t\t\t\t\twindow.google.accounts.id.renderButton(el, {\n\t\t\t\t\t\ttheme: \"outline\",\n\t\t\t\t\t\tsize: \"large\",\n\t\t\t\t\t\tshape: \"pill\",\n\t\t\t\t\t\ttext: el.dataset.googleText || \"signin_with\",\n\t\t\t\t\t\twidth: 280,\n\t\t\t\t\t});\n\t\t\t\t})();\n\t\t\t</script>")
+				if templ_7745c5c3_Err != nil {
+					return templ_7745c5c3_Err
+				}
+			}
+			templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 21, " ")
+			if templ_7745c5c3_Err != nil {
+				return templ_7745c5c3_Err
+			}
+			if facebookAppID != "" {
+				templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 22, "<script async defer crossorigin=\"anonymous\" src=\"https://connect.facebook.net/en_US/sdk.js\"></script> <script id=\"facebook-widget-config\" data-facebook-app-id=\"")
+				if templ_7745c5c3_Err != nil {
+					return templ_7745c5c3_Err
+				}
+				var templ_7745c5c3_Var11 string
+				templ_7745c5c3_Var11, templ_7745c5c3_Err = templ.JoinStringErrs(facebookAppID)
+				if templ_7745c5c3_Err != nil {
+					return templ.Error{Err: templ_7745c5c3_Err, FileName: `internal/templates/auth.templ`, Line: 162, Col: 75}
+				}
+				_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var11))
+				if templ_7745c5c3_Err != nil {
+					return templ_7745c5c3_Err
+				}
+				templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 23, "\">\n\t\t\t\twindow.fbAsyncInit = function() {\n\t\t\t\t\tconst cfg = document.getElementById(\"facebook-widget-config\");\n\t\t\t\t\tconst appId = cfg ? cfg.dataset.facebookAppId : \"\";\n\t\t\t\t\tif (!appId) {\n\t\t\t\t\t\treturn;\n\t\t\t\t\t}\n\t\t\t\t\tFB.init({\n\t\t\t\t\t\tappId: appId,\n\t\t\t\t\t\tcookie: true,\n\t\t\t\t\t\txfbml: true,\n\t\t\t\t\t\tversion: \"v19.0\",\n\t\t\t\t\t});\n\t\t\t\t};\n\t\t\t\twindow.odFacebookWidgetLogin = function() {\n\t\t\t\t\tif (!window.FB) {\n\t\t\t\t\t\treturn;\n\t\t\t\t\t}\n\t\t\t\t\tFB.getLoginStatus(function(response) {\n\t\t\t\t\t\tif (response && response.status === \"connected\") {\n\t\t\t\t\t\t\twindow.location.href = \"/auth/facebook/login\";\n\t\t\t\t\t\t}\n\t\t\t\t\t});\n\t\t\t\t};\n\t\t\t</script>")
 				if templ_7745c5c3_Err != nil {
 					return templ_7745c5c3_Err
 				}
@@ -264,6 +278,30 @@ func signupAccountAccessClass(mode string, recaptchaSiteKey string) string {
 
 func signupRecaptchaEnabled(mode string, recaptchaSiteKey string) bool {
 	return strings.EqualFold(mode, "signup") && recaptchaSiteKey != ""
+}
+
+func recaptchaScriptSrc(recaptchaSiteKey string) string {
+	if isSafeRecaptchaSiteKey(recaptchaSiteKey) {
+		return "https://www.google.com/recaptcha/api.js?render=" + url.QueryEscape(strings.TrimSpace(recaptchaSiteKey))
+	}
+	return "https://www.google.com/recaptcha/api.js"
+}
+
+func isSafeRecaptchaSiteKey(recaptchaSiteKey string) bool {
+	key := strings.TrimSpace(recaptchaSiteKey)
+	if key == "" {
+		return false
+	}
+	for _, ch := range key {
+		if (ch >= 'a' && ch <= 'z') ||
+			(ch >= 'A' && ch <= 'Z') ||
+			(ch >= '0' && ch <= '9') ||
+			ch == '-' || ch == '_' {
+			continue
+		}
+		return false
+	}
+	return true
 }
 
 var _ = templruntime.GeneratedTemplate

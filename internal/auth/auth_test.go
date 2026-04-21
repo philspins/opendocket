@@ -66,7 +66,7 @@ func TestHandleSignupPage_RendersReCAPTCHAWidgetWhenConfigured(t *testing.T) {
 		t.Fatalf("status=%d want %d", rr.Code, http.StatusOK)
 	}
 	body := rr.Body.String()
-	if !strings.Contains(body, `https://www.google.com/recaptcha/api.js?render=explicit`) {
+	if !strings.Contains(body, `https://www.google.com/recaptcha/api.js?render=site-key`) {
 		t.Fatalf("expected recaptcha v3 script")
 	}
 	if !strings.Contains(body, `id="signup-recaptcha-config" data-site-key="site-key"`) {
@@ -80,6 +80,9 @@ func TestHandleSignupPage_RendersReCAPTCHAWidgetWhenConfigured(t *testing.T) {
 	}
 	if !strings.Contains(body, `window.grecaptcha.execute(siteKey, { action: "signup" })`) {
 		t.Fatalf("expected recaptcha v3 execute call for signup action")
+	}
+	if !strings.Contains(body, `fetch("/auth/verify-recaptcha", {`) {
+		t.Fatalf("expected recaptcha token verification request")
 	}
 	if !strings.Contains(body, `accountAccess.classList.remove("opacity-50", "pointer-events-none", "select-none")`) {
 		t.Fatalf("expected recaptcha callback to enable account section")
@@ -394,6 +397,45 @@ func TestHandleRequestVerification_RequiresValidReCAPTCHAWhenConfigured(t *testi
 		t.Fatalf("status=%d want %d", rr.Code, http.StatusOK)
 	}
 	if !strings.Contains(sentBody, "secret=secret") || !strings.Contains(sentBody, "response=test-token") {
+		t.Fatalf("unexpected recaptcha verification request body: %s", sentBody)
+	}
+}
+
+func TestHandleVerifyRecaptcha_RequiresValidTokenWhenConfigured(t *testing.T) {
+	svc, _ := newTestService(t)
+	t.Setenv("RECAPTCHA_SECRET_KEY", "secret")
+
+	req := httptest.NewRequest(http.MethodPost, "/auth/verify-recaptcha", nil)
+	rr := httptest.NewRecorder()
+	svc.HandleVerifyRecaptcha(rr, req)
+	if rr.Code != http.StatusBadRequest {
+		t.Fatalf("missing captcha token status=%d want %d", rr.Code, http.StatusBadRequest)
+	}
+
+	var sentBody string
+	svc.SetHTTPClient(&http.Client{
+		Transport: roundTripFunc(func(req *http.Request) (*http.Response, error) {
+			b, _ := io.ReadAll(req.Body)
+			sentBody = string(b)
+			return &http.Response{
+				StatusCode: http.StatusOK,
+				Body:       io.NopCloser(strings.NewReader(`{"success":true}`)),
+				Header:     make(http.Header),
+			}, nil
+		}),
+	})
+
+	form := url.Values{}
+	form.Set("g-recaptcha-response", "signup-token")
+	req = httptest.NewRequest(http.MethodPost, "/auth/verify-recaptcha", strings.NewReader(form.Encode()))
+	req.Header.Set("Content-Type", "application/x-www-form-urlencoded")
+	rr = httptest.NewRecorder()
+	svc.HandleVerifyRecaptcha(rr, req)
+
+	if rr.Code != http.StatusOK {
+		t.Fatalf("status=%d want %d", rr.Code, http.StatusOK)
+	}
+	if !strings.Contains(sentBody, "secret=secret") || !strings.Contains(sentBody, "response=signup-token") {
 		t.Fatalf("unexpected recaptcha verification request body: %s", sentBody)
 	}
 }

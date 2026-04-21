@@ -59,6 +59,25 @@ func (s *Service) HandleRequestVerification(w http.ResponseWriter, r *http.Reque
 	_, _ = w.Write([]byte(`{"ok":true}`))
 }
 
+func (s *Service) HandleVerifyRecaptcha(w http.ResponseWriter, r *http.Request) {
+	if !s.rateLimitAllowed("auth:verify-recaptcha:ip:"+s.clientIP(r), 20, time.Minute) {
+		http.Error(w, "rate limit exceeded", http.StatusTooManyRequests)
+		return
+	}
+	if err := r.ParseForm(); err != nil {
+		http.Error(w, "bad request", http.StatusBadRequest)
+		return
+	}
+	token := strings.TrimSpace(r.FormValue("g-recaptcha-response"))
+	if err := s.verifyRecaptcha(r.Context(), token, s.clientIP(r)); err != nil {
+		log.Printf("signup recaptcha verification failed: %v", err)
+		http.Error(w, "captcha verification failed", http.StatusBadRequest)
+		return
+	}
+	w.Header().Set("Content-Type", "application/json")
+	_, _ = w.Write([]byte(`{"ok":true}`))
+}
+
 func (s *Service) verifyRecaptcha(ctx context.Context, token, clientIP string) error {
 	secret := strings.TrimSpace(os.Getenv("RECAPTCHA_SECRET_KEY"))
 	if secret == "" {
