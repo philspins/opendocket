@@ -16,6 +16,8 @@ import (
 	"github.com/philspins/open-democracy/internal/store"
 )
 
+const verifyRecaptchaRateLimitKeyPrefix = "auth:verify-recaptcha:ip:"
+
 func (s *Service) HandleRequestVerification(w http.ResponseWriter, r *http.Request) {
 	if !s.rateLimitAllowed("auth:request-verification:ip:"+s.clientIP(r), 10, time.Minute) {
 		http.Error(w, "rate limit exceeded", http.StatusTooManyRequests)
@@ -61,7 +63,7 @@ func (s *Service) HandleRequestVerification(w http.ResponseWriter, r *http.Reque
 
 func (s *Service) HandleVerifyRecaptcha(w http.ResponseWriter, r *http.Request) {
 	// Keep this endpoint permissive enough for retries while still limiting abuse.
-	if !s.rateLimitAllowed("auth:verify-recaptcha:ip:"+s.clientIP(r), 20, time.Minute) {
+	if !s.rateLimitAllowed(verifyRecaptchaRateLimitKeyPrefix+s.clientIP(r), 20, time.Minute) {
 		http.Error(w, "rate limit exceeded", http.StatusTooManyRequests)
 		return
 	}

@@ -229,20 +229,21 @@ func signupRecaptchaEnabled(mode string, recaptchaSiteKey string) bool {
 }
 
 func recaptchaScriptSrc(recaptchaSiteKey string) string {
-	if isSafeRecaptchaSiteKey(recaptchaSiteKey) {
+	key := strings.TrimSpace(recaptchaSiteKey)
+	if isSafeRecaptchaSiteKey(key) {
 		query := url.Values{}
-		query.Set("render", strings.TrimSpace(recaptchaSiteKey))
+		query.Set("render", key)
 		return "https://www.google.com/recaptcha/api.js?" + query.Encode()
 	}
 	return "https://www.google.com/recaptcha/api.js"
 }
 
+// reCAPTCHA site keys contain only URL-safe letters, digits, '_' and '-'.
 var recaptchaSiteKeyPattern = regexp.MustCompile(`^[A-Za-z0-9_-]+$`)
 
 func isSafeRecaptchaSiteKey(recaptchaSiteKey string) bool {
-	key := strings.TrimSpace(recaptchaSiteKey)
-	if key == "" {
+	if recaptchaSiteKey == "" {
 		return false
 	}
-	return recaptchaSiteKeyPattern.MatchString(key)
+	return recaptchaSiteKeyPattern.MatchString(recaptchaSiteKey)
 }
