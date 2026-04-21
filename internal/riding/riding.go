@@ -119,8 +119,12 @@ func (s *Service) attachLocalMemberIDs(reps []opennorth.Representative) []openno
 
 func isProvincialOffice(office string) bool {
 	office = strings.ToLower(strings.TrimSpace(office))
-	switch office {
-	case "mla", "mpp", "mna", "mha", "mha (nl)", "member of the legislative assembly", "member of provincial parliament", "member of the national assembly", "member of the house of assembly":
+	baseOffice := office
+	if parenStartIndex := strings.Index(baseOffice, "("); parenStartIndex >= 0 {
+		baseOffice = strings.TrimSpace(baseOffice[:parenStartIndex])
+	}
+	switch baseOffice {
+	case "mla", "mpp", "mna", "mha", "member of the legislative assembly", "member of provincial parliament", "member of the national assembly", "member of the house of assembly":
 		return true
 	}
 	return strings.Contains(office, "legislative assembly") || strings.Contains(office, "national assembly") || strings.Contains(office, "provincial parliament") || strings.Contains(office, "house of assembly")

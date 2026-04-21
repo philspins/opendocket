@@ -337,7 +337,7 @@ func TestHandleRiding_PersistsOnlyRidingsForSessionUser(t *testing.T) {
 		func(_ context.Context, _, _ float64) ([]opennorth.Representative, error) {
 			return []opennorth.Representative{
 				{Name: "Jane MP", ElectedOffice: "MP", DistrictName: "Ottawa Centre"},
-				{Name: "John MPP", ElectedOffice: "MPP", DistrictName: "Ottawa South"},
+				{Name: "John MPP", ElectedOffice: "MPP (ON)", DistrictName: "Ottawa South"},
 			}, nil
 		},
 	)
@@ -381,7 +381,7 @@ func TestHandleProfile_PostSavesOnlyRidings(t *testing.T) {
 		func(_ context.Context, _, _ float64) ([]opennorth.Representative, error) {
 			return []opennorth.Representative{
 				{Name: "Jane MP", ElectedOffice: "MP", DistrictName: "Ottawa Centre"},
-				{Name: "John MPP", ElectedOffice: "MPP", DistrictName: "Ottawa South"},
+				{Name: "John MPP", ElectedOffice: "MPP (ON)", DistrictName: "Ottawa South"},
 			}, nil
 		},
 	)
@@ -422,7 +422,7 @@ func TestHandleRiding_UnauthenticatedSetsRidingCookies(t *testing.T) {
 		func(_ context.Context, _, _ float64) ([]opennorth.Representative, error) {
 			return []opennorth.Representative{
 				{Name: "Jane MP", ElectedOffice: "MP", DistrictName: "Ottawa Centre"},
-				{Name: "John MPP", ElectedOffice: "MPP", DistrictName: "Ottawa South"},
+				{Name: "John MPP", ElectedOffice: "MPP (ON)", DistrictName: "Ottawa South"},
 			}, nil
 		},
 	)
@@ -509,7 +509,7 @@ func TestHandleHome_UnauthenticatedUsesCookiesFromRidingLookup(t *testing.T) {
 		func(_ context.Context, _, _ float64) ([]opennorth.Representative, error) {
 			return []opennorth.Representative{
 				{Name: "Jane MP", ElectedOffice: "MP", DistrictName: "Ottawa Centre"},
-				{Name: "John MPP", ElectedOffice: "MPP", DistrictName: "Ottawa South"},
+				{Name: "John MPP", ElectedOffice: "MPP (ON)", DistrictName: "Ottawa South"},
 			}, nil
 		},
 	)
