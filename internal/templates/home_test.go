@@ -22,4 +22,3 @@ func TestHomeRepresentativeHeading_FallsBackWhenMissingData(t *testing.T) {
 		t.Fatalf("homeRepresentativeHeading() = %q, want %q", got, "Your current provincial representative (Provincial representative)")
 	}
 }
-
