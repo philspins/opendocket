@@ -46,7 +46,7 @@ func CompareMPs(ps store.ParliamentStatus, members []store.MemberRow, m1, m2 sto
 				}()
 			}
 			ctx = templ.InitializeContext(ctx)
-			templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 1, "<div class=\"space-y-6\"><h1 class=\"text-2xl font-bold text-gray-900\">Compare MPs</h1><form method=\"GET\" action=\"/compare\" class=\"bg-white rounded-lg border border-gray-200 p-4 space-y-3\" style=\"max-width:56rem;margin:0 auto;\"><div style=\"display:grid;grid-template-columns:repeat(auto-fit,minmax(220px,1fr));gap:0.75rem;\"><div><label class=\"text-xs text-gray-500 block mb-1\">Government level</label> <select name=\"level\" class=\"border border-gray-300 rounded px-3 py-1.5 text-sm w-full\"><option value=\"federal\"")
+			templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 1, "<div class=\"space-y-6\"><h1 class=\"text-2xl font-bold text-gray-900\">Compare MPs</h1><form method=\"GET\" action=\"/compare\" class=\"bg-white rounded-lg border border-gray-200 p-4 space-y-3 max-w-4xl mx-auto\"><div class=\"grid grid-cols-1 md:grid-cols-2 gap-3\"><div><label class=\"text-xs text-gray-500 block mb-1\">Government level</label> <select name=\"level\" class=\"border border-gray-300 rounded px-3 py-1.5 text-sm w-full\"><option value=\"federal\"")
 			if templ_7745c5c3_Err != nil {
 				return templ_7745c5c3_Err
 			}
@@ -127,7 +127,7 @@ func CompareMPs(ps store.ParliamentStatus, members []store.MemberRow, m1, m2 sto
 				return templ_7745c5c3_Err
 			}
 			if level == "provincial" {
-				templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 14, "<div style=\"max-width:26rem;margin:0 auto;\"><label class=\"text-xs text-gray-500 block mb-1\">Province</label> <select name=\"province\" class=\"border border-gray-300 rounded px-3 py-1.5 text-sm w-full\"><option value=\"\"")
+				templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 14, "<div class=\"max-w-md mx-auto w-full\"><label class=\"text-xs text-gray-500 block mb-1\">Province</label> <select name=\"province\" class=\"border border-gray-300 rounded px-3 py-1.5 text-sm w-full\"><option value=\"\"")
 				if templ_7745c5c3_Err != nil {
 					return templ_7745c5c3_Err
 				}
@@ -188,7 +188,7 @@ func CompareMPs(ps store.ParliamentStatus, members []store.MemberRow, m1, m2 sto
 					return templ_7745c5c3_Err
 				}
 			}
-			templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 23, "<div style=\"display:grid;grid-template-columns:repeat(auto-fit,minmax(260px,1fr));gap:0.75rem;\"><div><label class=\"text-xs text-gray-500 block mb-1\">Representative 1</label> <select name=\"a\" class=\"border border-gray-300 rounded px-3 py-1.5 text-sm w-full\"><option value=\"\">Select a representative</option> ")
+			templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 23, "<div class=\"grid grid-cols-1 md:grid-cols-2 gap-3\"><div><label class=\"text-xs text-gray-500 block mb-1\">Representative 1</label> <select name=\"a\" class=\"border border-gray-300 rounded px-3 py-1.5 text-sm w-full\"><option value=\"\">Select a representative</option> ")
 			if templ_7745c5c3_Err != nil {
 				return templ_7745c5c3_Err
 			}
@@ -306,7 +306,7 @@ func CompareMPs(ps store.ParliamentStatus, members []store.MemberRow, m1, m2 sto
 					return templ_7745c5c3_Err
 				}
 			}
-			templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 37, "</select></div></div><div style=\"display:flex;align-items:center;justify-content:center;gap:0.75rem;\"><button type=\"submit\" class=\"bg-blue-600 text-white px-4 py-2 rounded text-sm hover:bg-blue-700\">Compare</button> <a href=\"/compare\" class=\"text-sm text-gray-500 hover:underline\">Clear</a></div></form>")
+			templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 37, "</select></div></div><div class=\"flex items-center justify-center gap-3\"><button type=\"submit\" class=\"bg-blue-600 text-white px-4 py-2 rounded text-sm hover:bg-blue-700\">Compare</button> <a href=\"/compare\" class=\"text-sm text-gray-500 hover:underline\">Clear</a></div></form>")
 			if templ_7745c5c3_Err != nil {
 				return templ_7745c5c3_Err
 			}
