@@ -5,7 +5,7 @@ import (
 	"github.com/philspins/open-democracy/internal/store"
 )
 
-templ BillDetail(ps store.ParliamentStatus, bill store.BillRow, stages []store.BillStageRow, divs []store.DivisionRow, reactions store.BillReactionCounts) {
+templ BillDetail(ps store.ParliamentStatus, bill store.BillRow, stages []store.BillStageRow, divs []store.DivisionRow, reactions store.BillReactionCounts, isAuthenticated bool) {
 	@Layout(bill.Number+" — "+ShortOrFullTitle(bill), ps) {
 		<div class="space-y-6">
 			<!-- Header -->
@@ -145,24 +145,7 @@ templ BillDetail(ps store.ParliamentStatus, bill store.BillRow, stages []store.B
 									<span class="ml-auto font-medium" style="color:var(--ink-900)">{ fmt.Sprint(reactions.OpposeCount) }</span>
 								</div>
 							</div>
-							<!-- Reaction buttons aligned with legend rows -->
-							<div class="flex flex-col gap-1 shrink-0">
-								<form method="POST" action="/api/react" class="inline">
-									<input type="hidden" name="bill_id" value={ bill.ID }/>
-									<input type="hidden" name="reaction" value="support"/>
-									<button type="submit" title="Support" class="text-base hover:scale-110 transition-transform" aria-label="Support this bill">👍</button>
-								</form>
-								<form method="POST" action="/api/react" class="inline">
-									<input type="hidden" name="bill_id" value={ bill.ID }/>
-									<input type="hidden" name="reaction" value="neutral"/>
-									<button type="submit" title="Neutral" class="text-base hover:scale-110 transition-transform" aria-label="Neutral on this bill">🤔</button>
-								</form>
-								<form method="POST" action="/api/react" class="inline">
-									<input type="hidden" name="bill_id" value={ bill.ID }/>
-									<input type="hidden" name="reaction" value="oppose"/>
-									<button type="submit" title="Oppose" class="text-base hover:scale-110 transition-transform" aria-label="Oppose this bill">👎</button>
-								</form>
-							</div>
+							@billInteractionControls(bill.ID, isAuthenticated)
 						</div>
 					</div>
 					if len(aiSummary.NotableConsiderations) > 0 {
@@ -222,24 +205,7 @@ templ BillDetail(ps store.ParliamentStatus, bill store.BillRow, stages []store.B
 							<span class="ml-auto font-medium" style="color:var(--ink-900)">{ fmt.Sprint(reactions.OpposeCount) }</span>
 						</div>
 					</div>
-					<!-- Reaction buttons aligned with legend rows -->
-					<div class="flex flex-col gap-1 shrink-0">
-						<form method="POST" action="/api/react" class="inline">
-							<input type="hidden" name="bill_id" value={ bill.ID }/>
-							<input type="hidden" name="reaction" value="support"/>
-							<button type="submit" title="Support" class="text-base hover:scale-110 transition-transform" aria-label="Support this bill">👍</button>
-						</form>
-						<form method="POST" action="/api/react" class="inline">
-							<input type="hidden" name="bill_id" value={ bill.ID }/>
-							<input type="hidden" name="reaction" value="neutral"/>
-							<button type="submit" title="Neutral" class="text-base hover:scale-110 transition-transform" aria-label="Neutral on this bill">🤔</button>
-						</form>
-						<form method="POST" action="/api/react" class="inline">
-							<input type="hidden" name="bill_id" value={ bill.ID }/>
-							<input type="hidden" name="reaction" value="oppose"/>
-							<button type="submit" title="Oppose" class="text-base hover:scale-110 transition-transform" aria-label="Oppose this bill">👎</button>
-						</form>
-					</div>
+					@billInteractionControls(bill.ID, isAuthenticated)
 				</div>
 			</div>
 
@@ -285,6 +251,39 @@ templ BillDetail(ps store.ParliamentStatus, bill store.BillRow, stages []store.B
 					</div>
 				</section>
 			}
+		</div>
+	}
+}
+
+templ billInteractionControls(billID string, isAuthenticated bool) {
+	if isAuthenticated {
+		<div class="flex flex-col gap-1 shrink-0">
+			<form method="POST" action="/api/react" class="inline">
+				<input type="hidden" name="bill_id" value={ billID }/>
+				<input type="hidden" name="reaction" value="support"/>
+				<button type="submit" title="Support" class="text-base hover:scale-110 transition-transform" aria-label="Support this bill">👍</button>
+			</form>
+			<form method="POST" action="/api/react" class="inline">
+				<input type="hidden" name="bill_id" value={ billID }/>
+				<input type="hidden" name="reaction" value="neutral"/>
+				<button type="submit" title="Neutral" class="text-base hover:scale-110 transition-transform" aria-label="Neutral on this bill">🤔</button>
+			</form>
+			<form method="POST" action="/api/react" class="inline">
+				<input type="hidden" name="bill_id" value={ billID }/>
+				<input type="hidden" name="reaction" value="oppose"/>
+				<button type="submit" title="Oppose" class="text-base hover:scale-110 transition-transform" aria-label="Oppose this bill">👎</button>
+			</form>
+		</div>
+	} else {
+		<div class="relative flex flex-col gap-1 shrink-0">
+			<div class="flex flex-col gap-1 opacity-40">
+				<button type="button" class="text-base" aria-hidden="true" tabindex="-1" disabled>👍</button>
+				<button type="button" class="text-base" aria-hidden="true" tabindex="-1" disabled>🤔</button>
+				<button type="button" class="text-base" aria-hidden="true" tabindex="-1" disabled>👎</button>
+			</div>
+			<div class="absolute inset-0 flex items-center justify-center text-[10px] text-center font-semibold text-gray-500">
+				login to share your opinion
+			</div>
 		</div>
 	}
 }
