@@ -13,6 +13,7 @@ import (
 	"strings"
 
 	"github.com/PuerkitoBio/goquery"
+	"github.com/philspins/open-democracy/internal/scraper/provincial"
 	"github.com/philspins/open-democracy/internal/utils"
 )
 
@@ -629,7 +630,7 @@ func enrichNLMemberPhotos(profiles []MemberProfile, client *http.Client) []Membe
 		rawName := strings.TrimSpace(strings.ReplaceAll(nameMatch[1], `\'`, "'"))
 		// Convert "LastName, FirstName" to normalised "firstname lastname".
 		displayName := nbConvertMemberName(rawName)
-		normName := normalisePersonName(displayName)
+		normName := provincial.NormalisePersonName(displayName)
 		if normName == "" || slug == "" {
 			continue
 		}
@@ -647,7 +648,7 @@ func enrichNLMemberPhotos(profiles []MemberProfile, client *http.Client) []Membe
 		if p.PhotoURL != "" {
 			continue
 		}
-		norm := normalisePersonName(p.Name)
+		norm := provincial.NormalisePersonName(p.Name)
 		if photo, ok := photoMap[norm]; ok {
 			profiles[i].PhotoURL = photo
 			enriched++

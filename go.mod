@@ -42,6 +42,7 @@ require (
 	github.com/pkg/errors v0.9.1 // indirect
 	golang.org/x/crypto v0.49.0 // indirect
 	golang.org/x/image v0.32.0 // indirect
+	golang.org/x/sync v0.20.0 // indirect
 	golang.org/x/text v0.35.0 // indirect
 	gopkg.in/yaml.v2 v2.4.0 // indirect
 )

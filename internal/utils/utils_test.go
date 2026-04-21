@@ -72,9 +72,9 @@ func TestBillIDFromParts(t *testing.T) {
 	}{
 		{45, 1, "C-47", "45-1-c-47"},
 		{45, 1, "S-209", "45-1-s-209"},
-		{45, 1, "c-47", "45-1-c-47"}, // already lowercase
+		{45, 1, "c-47", "45-1-c-47"},     // already lowercase
 		{45, 1, "  C-47  ", "45-1-c-47"}, // trims whitespace
-		{45, 1, "", ""},              // empty input → empty output
+		{45, 1, "", ""},                  // empty input → empty output
 	}
 	for _, c := range cases {
 		got := utils.BillIDFromParts(c.parliament, c.session, c.billNumber)
