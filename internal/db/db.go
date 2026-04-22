@@ -8,6 +8,7 @@ import (
 	"database/sql"
 	"fmt"
 	"log"
+	"strings"
 	"time"
 
 	_ "github.com/mattn/go-sqlite3" // SQLite driver
@@ -107,6 +108,12 @@ func Migrate(db *sql.DB) error {
 			date       TEXT,
 			PRIMARY KEY (parliament, session, date)
 		)`,
+		`CREATE TABLE IF NOT EXISTS legislature_calendar_dates (
+			jurisdiction TEXT,
+			date         TEXT,
+			last_scraped TEXT,
+			PRIMARY KEY (jurisdiction, date)
+		)`,
 		`CREATE TABLE IF NOT EXISTS users (
 			id                   TEXT PRIMARY KEY,
 			email                TEXT UNIQUE,
@@ -182,6 +189,7 @@ func Migrate(db *sql.DB) error {
 		`CREATE INDEX IF NOT EXISTS idx_bill_reactions_bill ON bill_reactions(bill_id)`,
 		`CREATE INDEX IF NOT EXISTS idx_email_tokens_user   ON email_verification_tokens(user_id)`,
 		`CREATE INDEX IF NOT EXISTS idx_sessions_user        ON user_sessions(user_id)`,
+		`CREATE INDEX IF NOT EXISTS idx_leg_calendar_juris_date ON legislature_calendar_dates(jurisdiction, date)`,
 	}
 	for _, s := range stmts {
 		if _, err := db.Exec(s); err != nil {
@@ -460,6 +468,78 @@ func SittingDates(db *sql.DB, parliament, session int) ([]string, error) {
 	rows, err := db.Query(
 		`SELECT date FROM sitting_calendar WHERE parliament = ? AND session = ? ORDER BY date`,
 		parliament, session,
+	)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+
+	var dates []string
+	for rows.Next() {
+		var d string
+		if err := rows.Scan(&d); err != nil {
+			return nil, err
+		}
+		dates = append(dates, d)
+	}
+	return dates, rows.Err()
+}
+
+// ReplaceLegislatureCalendarDates atomically replaces all dates for a jurisdiction.
+func ReplaceLegislatureCalendarDates(db *sql.DB, jurisdiction string, dates []string, lastScraped string) error {
+	if strings.TrimSpace(jurisdiction) == "" {
+		return fmt.Errorf("jurisdiction required")
+	}
+	if strings.TrimSpace(lastScraped) == "" {
+		lastScraped = time.Now().UTC().Format("2006-01-02T15:04:05")
+	}
+
+	uniq := make(map[string]struct{}, len(dates))
+	for _, d := range dates {
+		d = strings.TrimSpace(d)
+		if d == "" {
+			continue
+		}
+		uniq[d] = struct{}{}
+	}
+
+	tx, err := db.Begin()
+	if err != nil {
+		return err
+	}
+	defer func() {
+		if err != nil {
+			_ = tx.Rollback()
+		}
+	}()
+
+	if _, err = tx.Exec(`DELETE FROM legislature_calendar_dates WHERE jurisdiction = ?`, jurisdiction); err != nil {
+		return err
+	}
+
+	if len(uniq) > 0 {
+		stmt, prepErr := tx.Prepare(`
+			INSERT INTO legislature_calendar_dates (jurisdiction, date, last_scraped)
+			VALUES (?,?,?)`)
+		if prepErr != nil {
+			return prepErr
+		}
+		defer stmt.Close()
+		for d := range uniq {
+			if _, err = stmt.Exec(jurisdiction, d, lastScraped); err != nil {
+				return err
+			}
+		}
+	}
+
+	return tx.Commit()
+}
+
+// LegislatureCalendarDates returns stored dates for a jurisdiction.
+func LegislatureCalendarDates(db *sql.DB, jurisdiction string) ([]string, error) {
+	rows, err := db.Query(
+		`SELECT date FROM legislature_calendar_dates WHERE jurisdiction = ? ORDER BY date`,
+		jurisdiction,
 	)
 	if err != nil {
 		return nil, err

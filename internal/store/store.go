@@ -821,6 +821,118 @@ func (s *Store) GetParliamentStatus(parliament, session int) (ParliamentStatus, 
 	return ps, nil
 }
 
+// GetJurisdictionStatus returns "in_session", "on_break", or "status_unavailable"
+// based on persisted legislature_calendar_dates rows for the jurisdiction.
+func (s *Store) GetJurisdictionStatus(jurisdiction string) (string, error) {
+	rows, err := s.db.Query(`
+		SELECT date FROM legislature_calendar_dates
+		WHERE jurisdiction = ?
+		ORDER BY date`, jurisdiction)
+	if err != nil {
+		return "status_unavailable", err
+	}
+	defer rows.Close()
+
+	var dates []string
+	for rows.Next() {
+		var d string
+		if err := rows.Scan(&d); err != nil {
+			return "status_unavailable", err
+		}
+		dates = append(dates, d)
+	}
+	if err := rows.Err(); err != nil {
+		return "status_unavailable", err
+	}
+	if len(dates) == 0 {
+		return "status_unavailable", nil
+	}
+	return statusFromScheduleDates(time.Now().UTC(), dates), nil
+}
+
+// GetCombinedJurisdictionStatus combines multiple jurisdiction statuses.
+// Returns "in_session" if any jurisdiction is in session, else "on_break" if
+// at least one has schedule data, else "status_unavailable".
+func (s *Store) GetCombinedJurisdictionStatus(jurisdictions ...string) (string, error) {
+	hasOnBreak := false
+	for _, jurisdiction := range jurisdictions {
+		status, err := s.GetJurisdictionStatus(jurisdiction)
+		if err != nil {
+			return "status_unavailable", err
+		}
+		switch status {
+		case "in_session":
+			return "in_session", nil
+		case "on_break":
+			hasOnBreak = true
+		}
+	}
+	if hasOnBreak {
+		return "on_break", nil
+	}
+	return "status_unavailable", nil
+}
+
+func statusFromScheduleDates(now time.Time, dates []string) string {
+	today := now.Format("2006-01-02")
+	for _, d := range dates {
+		if d == today {
+			return "in_session"
+		}
+	}
+
+	nowDay := time.Date(now.Year(), now.Month(), now.Day(), 0, 0, 0, 0, time.UTC)
+	var (
+		nextDate time.Time
+		hasNext  bool
+		prevDate time.Time
+		hasPrev  bool
+	)
+	for _, iso := range dates {
+		d, err := time.Parse("2006-01-02", iso)
+		if err != nil {
+			continue
+		}
+		d = time.Date(d.Year(), d.Month(), d.Day(), 0, 0, 0, 0, time.UTC)
+		if !d.Before(nowDay) {
+			if !hasNext || d.Before(nextDate) {
+				nextDate = d
+				hasNext = true
+			}
+		}
+		if !d.After(nowDay) {
+			if !hasPrev || d.After(prevDate) {
+				prevDate = d
+				hasPrev = true
+			}
+		}
+	}
+
+	if hasNext {
+		daysUntilNext := int(nextDate.Sub(nowDay).Hours() / 24)
+		if daysUntilNext <= 7 {
+			return "in_session"
+		}
+		if hasPrev {
+			daysSincePrev := int(nowDay.Sub(prevDate).Hours() / 24)
+			if daysSincePrev <= 7 && daysUntilNext <= 21 {
+				return "in_session"
+			}
+		}
+		return "on_break"
+	}
+
+	if hasPrev {
+		daysSincePrev := int(nowDay.Sub(prevDate).Hours() / 24)
+		if daysSincePrev <= 30 {
+			return "in_session"
+		}
+		return "on_break"
+	}
+
+	return "status_unavailable"
+}
+
 // GetRecentBills returns the most recently active bills.
 func (s *Store) GetRecentBills(limit int) ([]BillRow, error) {
 	if limit <= 0 {

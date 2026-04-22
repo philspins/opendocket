@@ -79,7 +79,6 @@ func TestHandleRequestVerification_DoesNotLeakSecrets(t *testing.T) {
 	srv, _ := newTestServer(t)
 
 	form := url.Values{}
-	form.Set("email", "verify1@example.com")
 	req := httptest.NewRequest(http.MethodPost, "/auth/request-verification", strings.NewReader(form.Encode()))
 	req.Header.Set("Content-Type", "application/x-www-form-urlencoded")
 	rr := httptest.NewRecorder()
@@ -601,6 +600,12 @@ func TestHandleHome_UsesSavedRepresentativesAndHidesLookupHero(t *testing.T) {
 	if !strings.Contains(body, "John Fraser") {
 		t.Fatalf("expected provincial representative name from local member in home page body")
 	}
+	if !strings.Contains(body, "href=\"/members/mp-ottawa-centre\"") {
+		t.Fatalf("expected federal representative name to link to member profile")
+	}
+	if !strings.Contains(body, "href=\"/members/mpp-ottawa-south\"") {
+		t.Fatalf("expected provincial representative name to link to member profile")
+	}
 	if strings.Contains(body, "Find Your Riding") {
 		t.Fatalf("expected lookup hero to be hidden once address is saved")
 	}
@@ -848,22 +853,51 @@ func TestHandleHome_ShowsRecentBillVotesForSelectedRepresentatives(t *testing.T)
 	}
 }
 
-func TestRecentBillVotes_DeduplicatesAndSkipsNonBillDivisions(t *testing.T) {
+func TestRecentBillVotes_DeduplicatesAndFallsBackToNonBillDivisions(t *testing.T) {
+	// Bill-linked votes come first and are deduplicated; non-bill votes fill remaining slots.
 	got := recentBillVotes([]store.VoteRow{
-		{BillID: "", Description: "No bill"},
-		{BillID: "b-1", Description: "Latest for b-1"},
-		{BillID: "b-1", Description: "Older for b-1"},
-		{BillID: "b-2", Description: "Only for b-2"},
+		{BillID: "", DivisionID: "d-0", Description: "No bill"},
+		{BillID: "b-1", DivisionID: "d-1", Description: "Latest for b-1"},
+		{BillID: "b-1", DivisionID: "d-1b", Description: "Older for b-1"},
+		{BillID: "b-2", DivisionID: "d-2", Description: "Only for b-2"},
 	}, 5)
 
-	if len(got) != 2 {
-		t.Fatalf("len=%d want 2", len(got))
+	if len(got) != 3 {
+		t.Fatalf("len=%d want 3 (2 bill + 1 non-bill fallback)", len(got))
 	}
 	if got[0].Description != "Latest for b-1" {
 		t.Fatalf("first description=%q want latest b-1 vote", got[0].Description)
 	}
 	if got[1].Description != "Only for b-2" {
 		t.Fatalf("second description=%q want b-2 vote", got[1].Description)
+	}
+	if got[2].Description != "No bill" {
+		t.Fatalf("third description=%q want fallback non-bill vote", got[2].Description)
+	}
+
+	// With a tight limit, non-bill votes should NOT appear if bill slots are full.
+	got2 := recentBillVotes([]store.VoteRow{
+		{BillID: "", DivisionID: "d-0", Description: "No bill"},
+		{BillID: "b-1", DivisionID: "d-1", Description: "B1 vote"},
+		{BillID: "b-2", DivisionID: "d-2", Description: "B2 vote"},
+	}, 2)
+	if len(got2) != 2 {
+		t.Fatalf("len=%d want 2", len(got2))
+	}
+	for _, v := range got2 {
+		if strings.TrimSpace(v.BillID) == "" {
+			t.Fatalf("expected only bill votes when limit is filled by bills, got non-bill: %q", v.Description)
+		}
+	}
+
+	// With only non-bill votes (e.g. provincial legislature), all slots fill from divisions.
+	got3 := recentBillVotes([]store.VoteRow{
+		{BillID: "", DivisionID: "d-a", Description: "Div A"},
+		{BillID: "", DivisionID: "d-b", Description: "Div B"},
+		{BillID: "", DivisionID: "d-a", Description: "Div A duplicate"},
+	}, 5)
+	if len(got3) != 2 {
+		t.Fatalf("len=%d want 2 unique non-bill votes", len(got3))
 	}
 }
 

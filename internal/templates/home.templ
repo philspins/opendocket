@@ -7,7 +7,7 @@ import (
 	"github.com/philspins/open-democracy/internal/store"
 )
 
-templ Home(ps store.ParliamentStatus, provincialVotes []store.VoteRow, federalVotes []store.VoteRow, savedAddress string, federalRep opennorth.Representative, provincialRep opennorth.Representative) {
+templ Home(ps store.ParliamentStatus, provincialVotes []store.VoteRow, federalVotes []store.VoteRow, savedAddress string, federalRep opennorth.Representative, provincialRep opennorth.Representative, provincialStatus string, federalStatus string) {
 	@Layout("Home", ps) {
 		{{
 			provParty := provincialRep.PartyName
@@ -41,9 +41,21 @@ templ Home(ps store.ParliamentStatus, provincialVotes []store.VoteRow, federalVo
 
 			<section class="rep-grid">
 				<div>
+					{{
+						provName, provRole := homeRepresentativeNameRole(provincialRep, "Your current provincial representative", "Provincial representative")
+					}}
 					<div class="px-5 py-3 text-sm" style={ partyBannerStyle(provParty) }>
 						<div class="flex items-start justify-between gap-3">
-							<h3 class="text-base font-bold leading-tight">{ homeRepresentativeHeading(provincialRep, "Your current provincial representative", "Provincial representative") }</h3>
+							<h3 class="text-base font-bold leading-tight">
+								if strings.TrimSpace(provincialRep.LocalMemberID) != "" {
+									<a href={ templ.SafeURL("/members/" + strings.TrimSpace(provincialRep.LocalMemberID)) } class="hover:underline">{ provName }</a>
+								} else {
+									{ provName }
+								}
+								if provRole != "" {
+									{ " (" + provRole + ")" }
+								}
+							</h3>
 							if strings.TrimSpace(provincialRep.DistrictName) != "" {
 								<h4 class="text-base font-semibold text-right leading-tight">{ strings.TrimSpace(provincialRep.DistrictName) }</h4>
 							}
@@ -53,7 +65,7 @@ templ Home(ps store.ParliamentStatus, provincialVotes []store.VoteRow, federalVo
 						}
 					</div>
 					<div class="px-5 py-2 text-sm text-gray-700 border-b border-gray-100">
-						Parliament is currently: <strong>{ statusPhrase(ps.Status) }</strong>
+						Parliament is currently: <strong>{ provincialStatus }</strong>
 					</div>
 					<div class="p-5 space-y-4">
 						<div class="title-row">
@@ -83,9 +95,21 @@ templ Home(ps store.ParliamentStatus, provincialVotes []store.VoteRow, federalVo
 				</div>
 
 				<div>
+					{{
+						fedName, fedRole := homeRepresentativeNameRole(federalRep, "Your current federal representative", "Federal representative")
+					}}
 					<div class="px-5 py-3 text-sm" style={ partyBannerStyle(federalParty) }>
 						<div class="flex items-start justify-between gap-3">
-							<h3 class="text-base font-bold leading-tight">{ homeRepresentativeHeading(federalRep, "Your current federal representative", "Federal representative") }</h3>
+							<h3 class="text-base font-bold leading-tight">
+								if strings.TrimSpace(federalRep.LocalMemberID) != "" {
+									<a href={ templ.SafeURL("/members/" + strings.TrimSpace(federalRep.LocalMemberID)) } class="hover:underline">{ fedName }</a>
+								} else {
+									{ fedName }
+								}
+								if fedRole != "" {
+									{ " (" + fedRole + ")" }
+								}
+							</h3>
 							if strings.TrimSpace(federalRep.DistrictName) != "" {
 								<h4 class="text-base font-semibold text-right leading-tight">{ strings.TrimSpace(federalRep.DistrictName) }</h4>
 							}
@@ -95,7 +119,7 @@ templ Home(ps store.ParliamentStatus, provincialVotes []store.VoteRow, federalVo
 						}
 					</div>
 					<div class="px-5 py-2 text-sm text-gray-700 border-b border-gray-100">
-						Parliament is currently: <strong>{ statusPhrase(ps.Status) }</strong>
+						Parliament is currently: <strong>{ federalStatus }</strong>
 					</div>
 					<div class="p-5 space-y-4">
 						<div class="title-row">
@@ -150,7 +174,7 @@ templ Home(ps store.ParliamentStatus, provincialVotes []store.VoteRow, federalVo
 	}
 }
 
-func homeRepresentativeHeading(rep opennorth.Representative, fallbackName, fallbackRole string) string {
+func homeRepresentativeNameRole(rep opennorth.Representative, fallbackName, fallbackRole string) (string, string) {
 	name := strings.TrimSpace(rep.Name)
 	if name == "" {
 		name = fallbackName
@@ -159,6 +183,11 @@ func homeRepresentativeHeading(rep opennorth.Representative, fallbackName, fallb
 	if role == "" {
 		role = fallbackRole
 	}
+	return name, role
+}
+
+func homeRepresentativeHeading(rep opennorth.Representative, fallbackName, fallbackRole string) string {
+	name, role := homeRepresentativeNameRole(rep, fallbackName, fallbackRole)
 	if role == "" {
 		return name
 	}

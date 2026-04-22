@@ -149,6 +149,8 @@ func (s *Server) handleHome(w http.ResponseWriter, r *http.Request) {
 		provincialRep   opennorth.Representative
 		federalVotes    []store.VoteRow
 		provincialVotes []store.VoteRow
+		federalStatus   = parliamentStatusText(ps.Status)
+		provStatus      = parliamentStatusText(ps.Status)
 	)
 	if user, ok := s.auth.SessionUser(r); ok {
 		result := fallbackLookupResult(user, s.store)
@@ -170,11 +172,61 @@ func (s *Server) handleHome(w http.ResponseWriter, r *http.Request) {
 		votes, _ := s.store.GetMemberVotes(memberID, 100)
 		federalVotes = recentBillVotes(votes, 5)
 	}
+	provincialProvince := ""
 	if memberID := s.resolveRepresentativeMemberID(provincialRep, false); memberID != "" {
 		votes, _ := s.store.GetMemberVotes(memberID, 100)
 		provincialVotes = recentBillVotes(votes, 5)
+		if member, err := s.store.GetMember(memberID); err == nil {
+			provincialProvince = member.Province
+		}
 	}
-	_ = templates.Home(ps, provincialVotes, federalVotes, savedAddress, federalRep, provincialRep).Render(r.Context(), w)
+	if status, err := s.store.GetCombinedJurisdictionStatus("federal-commons", "federal-senate"); err == nil {
+		if resolved := strings.TrimSpace(parliamentStatusText(status)); resolved != "" && resolved != "status unavailable" {
+			federalStatus = resolved
+		}
+	}
+	if key := provinceJurisdictionKey(provincialProvince); key != "" {
+		if status, err := s.store.GetJurisdictionStatus(key); err == nil {
+			if resolved := strings.TrimSpace(parliamentStatusText(status)); resolved != "" && resolved != "status unavailable" {
+				provStatus = resolved
+			}
+		}
+	}
+	_ = templates.Home(ps, provincialVotes, federalVotes, savedAddress, federalRep, provincialRep, provStatus, federalStatus).Render(r.Context(), w)
+}
+
+func provinceJurisdictionKey(province string) string {
+	p := strings.ToUpper(strings.TrimSpace(province))
+	switch p {
+	case "AB", "ALBERTA":
+		return "provincial-AB"
+	case "BC", "BRITISH COLUMBIA":
+		return "provincial-BC"
+	case "MB", "MANITOBA":
+		return "provincial-MB"
+	case "NB", "NEW BRUNSWICK":
+		return "provincial-NB"
+	case "NL", "NEWFOUNDLAND AND LABRADOR":
+		return "provincial-NL"
+	case "NS", "NOVA SCOTIA":
+		return "provincial-NS"
+	case "ON", "ONTARIO":
+		return "provincial-ON"
+	case "PE", "PEI", "PRINCE EDWARD ISLAND":
+		return "provincial-PE"
+	case "QC", "QUEBEC", "QUÉBEC":
+		return "provincial-QC"
+	case "SK", "SASKATCHEWAN":
+		return "provincial-SK"
+	case "YT", "YUKON":
+		return "provincial-YT"
+	case "NT", "NORTHWEST TERRITORIES":
+		return "provincial-NT"
+	case "NU", "NUNAVUT":
+		return "provincial-NU"
+	default:
+		return ""
+	}
 }
 
 func (s *Server) resolveRepresentativeMemberID(rep opennorth.Representative, federal bool) string {
@@ -227,6 +279,7 @@ func recentBillVotes(votes []store.VoteRow, limit int) []store.VoteRow {
 	}
 	out := make([]store.VoteRow, 0, limit)
 	seen := make(map[string]struct{}, len(votes))
+	// First pass: prefer votes linked to bills.
 	for _, vote := range votes {
 		billID := strings.TrimSpace(vote.BillID)
 		if billID == "" {
@@ -238,10 +291,39 @@ func recentBillVotes(votes []store.VoteRow, limit int) []store.VoteRow {
 		seen[billID] = struct{}{}
 		out = append(out, vote)
 		if len(out) == limit {
-			break
+			return out
+		}
+	}
+	// Second pass: fill remaining slots from non-bill votes (e.g. provincial divisions).
+	for _, vote := range votes {
+		if strings.TrimSpace(vote.BillID) != "" {
+			continue
+		}
+		key := vote.DivisionID
+		if key == "" {
+			key = vote.Date + "|" + vote.Description
+		}
+		if _, ok := seen[key]; ok {
+			continue
+		}
+		seen[key] = struct{}{}
+		out = append(out, vote)
+		if len(out) == limit {
+			return out
 		}
 	}
 	return out
+}
+
+func parliamentStatusText(status string) string {
+	switch strings.TrimSpace(status) {
+	case "in_session":
+		return "in session"
+	case "on_break":
+		return "on break"
+	default:
+		return "status unavailable"
+	}
 }
 
 func (s *Server) handleBills(w http.ResponseWriter, r *http.Request) {
