@@ -10,8 +10,8 @@ templ CompareMPs(ps store.ParliamentStatus, members []store.MemberRow, m1, m2 st
 		<div class="space-y-6">
 			<h1 class="text-2xl font-bold text-gray-900">Compare MPs</h1>
 
-			<form id="compare-form" method="GET" action="/compare" class="bg-white rounded-lg border border-gray-200 p-4 space-y-3 max-w-4xl mx-auto">
-				<div class="grid grid-cols-1 md:grid-cols-2 gap-3">
+			<form id="compare-form" method="GET" action="/compare" class="bg-white rounded-lg border border-gray-200 p-4 space-y-3 w-full">
+				<div class={ templ.KV("grid grid-cols-1 gap-3", true), templ.KV("md:grid-cols-3", level == "provincial"), templ.KV("md:grid-cols-2", level != "provincial") }>
 					<div>
 						<label class="text-xs text-gray-500 block mb-1">Government level</label>
 						<select name="level" class="border border-gray-300 rounded px-3 py-1.5 text-sm w-full" onchange="this.form.submit()">
@@ -19,6 +19,17 @@ templ CompareMPs(ps store.ParliamentStatus, members []store.MemberRow, m1, m2 st
 							<option value="provincial" selected?={ level == "provincial" }>Provincial</option>
 						</select>
 					</div>
+					if level == "provincial" {
+						<div>
+							<label class="text-xs text-gray-500 block mb-1">Province</label>
+							<select name="province" class="border border-gray-300 rounded px-3 py-1.5 text-sm w-full" onchange="this.form.submit()">
+								<option value="" selected?={ province == "" }>All provinces</option>
+								for _, pv := range provinces {
+									<option value={ pv } selected?={ province == pv }>{ pv }</option>
+								}
+							</select>
+						</div>
+					}
 					<div>
 						<label class="text-xs text-gray-500 block mb-1">Party</label>
 						<select name="party" class="border border-gray-300 rounded px-3 py-1.5 text-sm w-full" onchange="this.form.submit()">
@@ -29,17 +40,6 @@ templ CompareMPs(ps store.ParliamentStatus, members []store.MemberRow, m1, m2 st
 						</select>
 					</div>
 				</div>
-				if level == "provincial" {
-					<div class="max-w-md mx-auto w-full">
-						<label class="text-xs text-gray-500 block mb-1">Province</label>
-						<select name="province" class="border border-gray-300 rounded px-3 py-1.5 text-sm w-full" onchange="this.form.submit()">
-							<option value="" selected?={ province == "" }>All provinces</option>
-							for _, pv := range provinces {
-								<option value={ pv } selected?={ province == pv }>{ pv }</option>
-							}
-						</select>
-					</div>
-				}
 				<div class="grid grid-cols-1 md:grid-cols-2 gap-3">
 					<div>
 						<label class="text-xs text-gray-500 block mb-1">Representative 1</label>
@@ -97,8 +97,11 @@ templ CompareMPs(ps store.ParliamentStatus, members []store.MemberRow, m1, m2 st
 								</tr>
 							</thead>
 							<tbody class="divide-y divide-gray-100">
-								for _, v := range sharedVotes {
-									<tr class="hover:bg-gray-50">
+								for i, v := range sharedVotes {
+									<tr
+										class={ "hover:bg-gray-50", templ.KV("hidden", i >= MemberVotesPerPage) }
+										data-shared-vote-row=""
+									>
 										<td class="px-4 py-2 text-gray-500 whitespace-nowrap">{ FormatDate(v.Date) }</td>
 										<td class="px-4 py-2">
 											if v.BillNumber != "" {
@@ -112,13 +115,14 @@ templ CompareMPs(ps store.ParliamentStatus, members []store.MemberRow, m1, m2 st
 									</tr>
 								}
 								if len(sharedVotes) == 0 {
-									<tr>
+									<tr data-shared-vote-empty-row="">
 										<td colspan="6" class="px-4 py-8 text-center text-gray-500">No shared votes found.</td>
 									</tr>
 								}
 							</tbody>
 						</table>
 					</div>
+					@VotesPagination("compare-votes", "[data-shared-vote-row]", MemberVotesPerPage)
 				</section>
 			}
 		</div>

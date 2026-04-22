@@ -551,7 +551,11 @@ func (s *Store) GetMemberVotes(id string, limit int) ([]VoteRow, error) {
 // GetMemberStats computes voting statistics for a member.
 func (s *Store) GetMemberStats(id string) (MemberStats, error) {
 	var party string
-	_ = s.db.QueryRow("SELECT COALESCE(party,'') FROM members WHERE id = ?", id).Scan(&party)
+	var governmentLevel string
+	_ = s.db.QueryRow(
+		"SELECT COALESCE(party,''), COALESCE(government_level,'federal') FROM members WHERE id = ?",
+		id,
+	).Scan(&party, &governmentLevel)
 
 	rows, err := s.db.Query(`
 		SELECT mv.division_id, mv.vote
@@ -581,9 +585,27 @@ func (s *Store) GetMemberStats(id string) (MemberStats, error) {
 
 	totalVoted := len(votes)
 	partyLine := 0
+	partyMemberCount := 0
+	if party != "" {
+		_ = s.db.QueryRow(
+			`SELECT COUNT(*)
+			 FROM members
+			 WHERE party = ?
+			   AND active = 1
+			   AND COALESCE(government_level, 'federal') = ?`,
+			party,
+			governmentLevel,
+		).Scan(&partyMemberCount)
+	}
+
+	// If this is the only elected member for the party at this government level,
+	// their vote defines the party line.
+	if totalVoted > 0 && partyMemberCount <= 1 {
+		partyLine = totalVoted
+	}
 
 	// Batch-fetch party majority for all divisions in one query to avoid N+1.
-	if len(votes) > 0 && party != "" {
+	if len(votes) > 0 && party != "" && partyMemberCount > 1 {
 		divIDs := make([]string, len(votes))
 		memberVoteMap := make(map[string]string, len(votes))
 		for i, dv := range votes {

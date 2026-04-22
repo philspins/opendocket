@@ -92,6 +92,16 @@ func TestCompareMPs_ShowsProvinceFilterForProvincial(t *testing.T) {
 			t.Fatalf("expected provincial compare page to contain %q", needle)
 		}
 	}
+
+	levelIdx := strings.Index(html, `<select name="level"`)
+	provinceIdx := strings.Index(html, `<select name="province"`)
+	partyIdx := strings.Index(html, `<select name="party"`)
+	if levelIdx == -1 || provinceIdx == -1 || partyIdx == -1 {
+		t.Fatalf("expected level, province, and party selectors in rendered HTML")
+	}
+	if !(levelIdx < provinceIdx && provinceIdx < partyIdx) {
+		t.Fatalf("expected province selector between level and party selectors")
+	}
 }
 
 func TestCompareMPs_RendersSharedVotesTable(t *testing.T) {
@@ -134,6 +144,10 @@ func TestCompareMPs_RendersSharedVotesTable(t *testing.T) {
 	for _, needle := range []string{
 		`id="compare-votes-section"`,
 		`Votes in Common`,
+		`id="compare-votes-pagination"`,
+		`id="compare-votes-prev"`,
+		`id="compare-votes-next"`,
+		`id="compare-votes-page-size"`,
 		`<th class="px-4 py-2">Alex Federal</th>`,
 		`<th class="px-4 py-2">Blake Federal</th>`,
 		`C-1`,
@@ -142,6 +156,19 @@ func TestCompareMPs_RendersSharedVotesTable(t *testing.T) {
 	} {
 		if !strings.Contains(html, needle) {
 			t.Fatalf("expected compare shared votes section to contain %q", needle)
+		}
+	}
+	for _, size := range []string{"5", "10", "20", "50"} {
+		if !strings.Contains(html, `option value="`+size+`"`) {
+			t.Fatalf("expected compare page-size option %s to be rendered", size)
+		}
+	}
+	if !strings.Contains(html, `option value="10" selected`) {
+		t.Fatalf("expected 10 to be the default selected compare page-size option")
+	}
+	for _, placeholder := range []string{"{ prefix }", "{ rowSelector }"} {
+		if strings.Contains(html, placeholder) {
+			t.Fatalf("expected compare page output to not contain unresolved placeholder %q", placeholder)
 		}
 	}
 }

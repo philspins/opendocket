@@ -305,6 +305,52 @@ func TestGetMemberStats_Basic(t *testing.T) {
 	}
 }
 
+func TestGetMemberStats_SolePartyMemberCountsAsPartyLine(t *testing.T) {
+	conn := tempDB(t)
+	st := store.New(conn)
+
+	_, err := conn.Exec(`INSERT INTO members (id, name, party, riding, province, chamber, active, government_level)
+		VALUES ('m1', 'Elizabeth May', 'Green Party', 'Saanich--Gulf Islands', 'BC', 'commons', 1, 'federal'),
+		       ('m2', 'Alex Other', 'Liberal', 'Ottawa Centre', 'ON', 'commons', 1, 'federal')`)
+	if err != nil {
+		t.Fatalf("insert member: %v", err)
+	}
+
+	for i := 1; i <= 3; i++ {
+		_, err := conn.Exec(fmt.Sprintf(`INSERT INTO divisions (id, parliament, session, number, date, yeas, nays, result, chamber)
+			VALUES (?, 45, 1, ?, '2025-02-0%d', 100, 50, 'Carried', 'commons')`, i),
+			fmt.Sprintf("d%d", i), i)
+		if err != nil {
+			t.Fatalf("insert division: %v", err)
+		}
+	}
+
+	for _, v := range []struct{ div, vote string }{
+		{"d1", "Yea"},
+		{"d2", "Nay"},
+		{"d3", "Yea"},
+	} {
+		_, err := conn.Exec(`INSERT INTO member_votes (division_id, member_id, vote) VALUES (?, 'm1', ?)`, v.div, v.vote)
+		if err != nil {
+			t.Fatalf("insert vote: %v", err)
+		}
+	}
+
+	stats, err := st.GetMemberStats("m1")
+	if err != nil {
+		t.Fatalf("GetMemberStats: %v", err)
+	}
+	if stats.TotalVotes != 3 {
+		t.Fatalf("want TotalVotes=3, got %d", stats.TotalVotes)
+	}
+	if stats.PartyLinePct != 100 {
+		t.Fatalf("want PartyLinePct=100 for sole-party member, got %d", stats.PartyLinePct)
+	}
+	if stats.RebelPct != 0 {
+		t.Fatalf("want RebelPct=0 for sole-party member, got %d", stats.RebelPct)
+	}
+}
+
 func TestCompareMemberVotes(t *testing.T) {
 	conn := tempDB(t)
 	st := store.New(conn)
