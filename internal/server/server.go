@@ -7,6 +7,7 @@ import (
 	"net/http"
 	"net/url"
 	"os"
+	"sort"
 	"strconv"
 	"strings"
 	"time"
@@ -234,30 +235,75 @@ func (s *Server) handleCompare(w http.ResponseWriter, r *http.Request) {
 	q := r.URL.Query()
 	ps := s.parliamentStatus()
 	var m1, m2 store.MemberRow
+	var sharedVotes []store.SharedVoteRow
 	var overlap, total int
 	level := q.Get("level")
 	if level == "" {
 		level = "federal"
 	}
+
+	provincialMembers, _ := s.store.ListMembers("", "", "", "", "provincial")
+	provinces := sortedUniqueMemberField(provincialMembers, func(m store.MemberRow) string { return m.Province })
 	province := q.Get("province")
-	if level != "provincial" {
+	if level != "provincial" || !contains(provinces, province) {
 		province = ""
 	}
+
+	partyBaseMembers, _ := s.store.ListMembers("", "", province, "", level)
+	parties := sortedUniqueMemberField(partyBaseMembers, func(m store.MemberRow) string { return m.Party })
 	party := q.Get("party")
+	if !contains(parties, party) {
+		party = ""
+	}
+
 	members, _ := s.store.ListMembers("", party, province, "", level)
-	parties, _ := s.store.ListDistinctParties()
-	provinces, _ := s.store.ListDistinctProvinces()
+	memberIDs := make(map[string]struct{}, len(members))
+	for _, m := range members {
+		memberIDs[m.ID] = struct{}{}
+	}
+
 	idA, idB := q.Get("a"), q.Get("b")
-	if idA != "" {
+	if _, ok := memberIDs[idA]; idA != "" && ok {
 		m1, _ = s.store.GetMember(idA)
 	}
-	if idB != "" {
+	if _, ok := memberIDs[idB]; idB != "" && ok {
 		m2, _ = s.store.GetMember(idB)
 	}
 	if m1.ID != "" && m2.ID != "" {
 		overlap, total, _ = s.store.CompareMemberVotes(m1.ID, m2.ID)
+		sharedVotes, _ = s.store.GetSharedMemberVotes(m1.ID, m2.ID, 100)
 	}
-	_ = templates.CompareMPs(ps, members, m1, m2, level, province, party, provinces, parties, overlap, total).Render(r.Context(), w)
+	_ = templates.CompareMPs(ps, members, m1, m2, level, province, party, provinces, parties, overlap, total, sharedVotes).Render(r.Context(), w)
+}
+
+func sortedUniqueMemberField(members []store.MemberRow, field func(store.MemberRow) string) []string {
+	seen := map[string]struct{}{}
+	var out []string
+	for _, m := range members {
+		value := strings.TrimSpace(field(m))
+		if value == "" {
+			continue
+		}
+		if _, ok := seen[value]; ok {
+			continue
+		}
+		seen[value] = struct{}{}
+		out = append(out, value)
+	}
+	sort.Strings(out)
+	return out
+}
+
+func contains(values []string, needle string) bool {
+	if needle == "" {
+		return true
+	}
+	for _, v := range values {
+		if v == needle {
+			return true
+		}
+	}
+	return false
 }
 
 func (s *Server) handleFollow(w http.ResponseWriter, r *http.Request) {

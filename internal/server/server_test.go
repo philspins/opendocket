@@ -260,7 +260,29 @@ func TestLegalPages_Render(t *testing.T) {
 }
 
 func TestHandleCompare_RendersDropdownFiltersAndSelectedValues(t *testing.T) {
-	srv, _ := newTestServer(t)
+	t.Setenv("SES_FROM_EMAIL", "")
+	t.Setenv("OAUTH_BASE_URL", "http://127.0.0.1:8080")
+	t.Setenv("GOOGLE_MAPS_API_KEY", "test-maps-key")
+
+	conn, err := db.Open(filepath.Join(t.TempDir(), "test.db"))
+	if err != nil {
+		t.Fatalf("db.Open: %v", err)
+	}
+	t.Cleanup(func() { _ = conn.Close() })
+
+	st := store.New(conn)
+	srv := New(st)
+
+	_, err = conn.Exec(`
+		INSERT INTO members (id, name, party, riding, province, chamber, active, government_level) VALUES
+		('f-lib', 'Federal Liberal', 'Liberal', 'Ottawa Centre', 'Ontario', 'commons', 1, 'federal'),
+		('f-con', 'Federal Conservative', 'Conservative', 'Calgary Centre', 'Alberta', 'commons', 1, 'federal'),
+		('p-on-ndp', 'Ontario NDP', 'NDP', 'Toronto Centre', 'Ontario', 'ontario', 1, 'provincial'),
+		('p-qc-caq', 'Quebec CAQ', 'CAQ', 'Quebec City', 'Quebec', 'quebec', 1, 'provincial')
+	`)
+	if err != nil {
+		t.Fatalf("insert members: %v", err)
+	}
 
 	req := httptest.NewRequest(http.MethodGet, "/compare?level=provincial&province=Ontario&party=NDP", nil)
 	rr := httptest.NewRecorder()
@@ -276,10 +298,73 @@ func TestHandleCompare_RendersDropdownFiltersAndSelectedValues(t *testing.T) {
 	if strings.Contains(body, `type="text" name="a"`) || strings.Contains(body, `type="text" name="b"`) {
 		t.Fatalf("expected compare page to use dropdown selectors for both representatives")
 	}
-	for _, needle := range []string{`name="a"`, `name="b"`, `name="party"`, `value="provincial" selected`} {
+	for _, needle := range []string{
+		`name="a"`,
+		`name="b"`,
+		`name="party"`,
+		`value="provincial" selected`,
+		`onchange="this.form.submit()"`,
+	} {
 		if !strings.Contains(body, needle) {
 			t.Fatalf("expected compare page body to contain %q", needle)
 		}
+	}
+}
+
+func TestHandleCompare_FiltersPartiesAndCandidatesByLevelAndProvince(t *testing.T) {
+	t.Setenv("SES_FROM_EMAIL", "")
+	t.Setenv("OAUTH_BASE_URL", "http://127.0.0.1:8080")
+	t.Setenv("GOOGLE_MAPS_API_KEY", "test-maps-key")
+
+	conn, err := db.Open(filepath.Join(t.TempDir(), "test.db"))
+	if err != nil {
+		t.Fatalf("db.Open: %v", err)
+	}
+	t.Cleanup(func() { _ = conn.Close() })
+
+	st := store.New(conn)
+	srv := New(st)
+
+	_, err = conn.Exec(`
+		INSERT INTO members (id, name, party, riding, province, chamber, active, government_level) VALUES
+		('f-lib', 'Federal Liberal', 'Liberal', 'Ottawa Centre', 'Ontario', 'commons', 1, 'federal'),
+		('f-con', 'Federal Conservative', 'Conservative', 'Calgary Centre', 'Alberta', 'commons', 1, 'federal'),
+		('p-on-ndp', 'Ontario NDP', 'NDP', 'Toronto Centre', 'Ontario', 'ontario', 1, 'provincial'),
+		('p-qc-caq', 'Quebec CAQ', 'CAQ', 'Quebec City', 'Quebec', 'quebec', 1, 'provincial')
+	`)
+	if err != nil {
+		t.Fatalf("insert members: %v", err)
+	}
+
+	reqFederal := httptest.NewRequest(http.MethodGet, "/compare?level=federal", nil)
+	rrFederal := httptest.NewRecorder()
+	srv.ServeHTTP(rrFederal, reqFederal)
+	bodyFederal := rrFederal.Body.String()
+	if strings.Contains(bodyFederal, `name="province"`) {
+		t.Fatalf("expected province selector to be hidden in federal mode")
+	}
+	if strings.Contains(bodyFederal, `value="NDP"`) || strings.Contains(bodyFederal, `value="CAQ"`) {
+		t.Fatalf("expected provincial parties to be hidden in federal mode")
+	}
+	if !strings.Contains(bodyFederal, `Federal Liberal (Liberal)`) || strings.Contains(bodyFederal, `Ontario NDP (NDP)`) {
+		t.Fatalf("expected candidate list to include only federal candidates in federal mode")
+	}
+
+	reqProvincial := httptest.NewRequest(http.MethodGet, "/compare?level=provincial&province=Ontario", nil)
+	rrProvincial := httptest.NewRecorder()
+	srv.ServeHTTP(rrProvincial, reqProvincial)
+	bodyProvincial := rrProvincial.Body.String()
+	if !strings.Contains(bodyProvincial, `name="province"`) {
+		t.Fatalf("expected province selector to be shown in provincial mode")
+	}
+	if strings.Contains(bodyProvincial, `value="Liberal"`) || strings.Contains(bodyProvincial, `value="Conservative"`) {
+		t.Fatalf("expected federal parties to be hidden in provincial mode")
+	}
+	if !strings.Contains(bodyProvincial, `value="NDP"`) || strings.Contains(bodyProvincial, `value="CAQ"`) {
+		t.Fatalf("expected party list to be filtered by selected province in provincial mode")
+	}
+	if !strings.Contains(bodyProvincial, `Ontario NDP (NDP)`) || strings.Contains(bodyProvincial, `Quebec CAQ (CAQ)`) {
+		t.Fatalf("expected candidate list to be filtered by selected province in provincial mode")
 	}
 }
 

@@ -710,6 +710,54 @@ func (s *Store) CompareMemberVotes(id1, id2 string) (overlap int, total int, err
 	return overlap, total, err
 }
 
+// GetSharedMemberVotes returns divisions where both members cast a vote, including
+// each member's vote choice for side-by-side comparison.
+func (s *Store) GetSharedMemberVotes(id1, id2 string, limit int) ([]SharedVoteRow, error) {
+	if limit <= 0 {
+		limit = 50
+	}
+	rows, err := s.db.Query(`
+		SELECT
+			d.id,
+			COALESCE(d.date, ''),
+			COALESCE(d.bill_id, ''),
+			COALESCE(b.number, ''),
+			COALESCE(d.description, ''),
+			COALESCE(d.result, ''),
+			COALESCE(mv1.vote, ''),
+			COALESCE(mv2.vote, '')
+		FROM member_votes mv1
+		JOIN member_votes mv2 ON mv2.division_id = mv1.division_id AND mv2.member_id = ?
+		JOIN divisions d ON d.id = mv1.division_id
+		LEFT JOIN bills b ON b.id = d.bill_id
+		WHERE mv1.member_id = ?
+		ORDER BY d.date DESC, d.id DESC
+		LIMIT ?`, id2, id1, limit)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+
+	var out []SharedVoteRow
+	for rows.Next() {
+		var v SharedVoteRow
+		if err := rows.Scan(
+			&v.DivisionID,
+			&v.Date,
+			&v.BillID,
+			&v.BillNumber,
+			&v.Description,
+			&v.Result,
+			&v.Member1Vote,
+			&v.Member2Vote,
+		); err != nil {
+			return nil, err
+		}
+		out = append(out, v)
+	}
+	return out, rows.Err()
+}
+
 // ── parliament status ─────────────────────────────────────────────────────────
 
 // GetParliamentStatus returns the current session status based on sitting_calendar.
