@@ -305,6 +305,52 @@ func TestGetMemberStats_Basic(t *testing.T) {
 	}
 }
 
+func TestGetMemberStats_SolePartyMemberCountsAsPartyLine(t *testing.T) {
+	conn := tempDB(t)
+	st := store.New(conn)
+
+	_, err := conn.Exec(`INSERT INTO members (id, name, party, riding, province, chamber, active, government_level)
+		VALUES ('m1', 'Elizabeth May', 'Green Party', 'Saanich--Gulf Islands', 'BC', 'commons', 1, 'federal'),
+		       ('m2', 'Alex Other', 'Liberal', 'Ottawa Centre', 'ON', 'commons', 1, 'federal')`)
+	if err != nil {
+		t.Fatalf("insert member: %v", err)
+	}
+
+	for i := 1; i <= 3; i++ {
+		_, err := conn.Exec(fmt.Sprintf(`INSERT INTO divisions (id, parliament, session, number, date, yeas, nays, result, chamber)
+			VALUES (?, 45, 1, ?, '2025-02-0%d', 100, 50, 'Carried', 'commons')`, i),
+			fmt.Sprintf("d%d", i), i)
+		if err != nil {
+			t.Fatalf("insert division: %v", err)
+		}
+	}
+
+	for _, v := range []struct{ div, vote string }{
+		{"d1", "Yea"},
+		{"d2", "Nay"},
+		{"d3", "Yea"},
+	} {
+		_, err := conn.Exec(`INSERT INTO member_votes (division_id, member_id, vote) VALUES (?, 'm1', ?)`, v.div, v.vote)
+		if err != nil {
+			t.Fatalf("insert vote: %v", err)
+		}
+	}
+
+	stats, err := st.GetMemberStats("m1")
+	if err != nil {
+		t.Fatalf("GetMemberStats: %v", err)
+	}
+	if stats.TotalVotes != 3 {
+		t.Fatalf("want TotalVotes=3, got %d", stats.TotalVotes)
+	}
+	if stats.PartyLinePct != 100 {
+		t.Fatalf("want PartyLinePct=100 for sole-party member, got %d", stats.PartyLinePct)
+	}
+	if stats.RebelPct != 0 {
+		t.Fatalf("want RebelPct=0 for sole-party member, got %d", stats.RebelPct)
+	}
+}
+
 func TestCompareMemberVotes(t *testing.T) {
 	conn := tempDB(t)
 	st := store.New(conn)
@@ -347,6 +393,63 @@ func TestCompareMemberVotes(t *testing.T) {
 	}
 	if overlap != 2 {
 		t.Errorf("want overlap=2, got %d", overlap)
+	}
+}
+
+func TestGetSharedMemberVotes(t *testing.T) {
+	conn := tempDB(t)
+	st := store.New(conn)
+
+	_, err := conn.Exec(`INSERT INTO members (id, name, party, chamber, active, government_level)
+		VALUES ('m1', 'Alice', 'Liberal', 'commons', 1, 'federal'),
+		       ('m2', 'Bob', 'Conservative', 'commons', 1, 'federal')`)
+	if err != nil {
+		t.Fatalf("insert members: %v", err)
+	}
+
+	_, err = conn.Exec(`INSERT INTO bills (id, parliament, session, number, title, chamber)
+		VALUES ('b1', 45, 1, 'C-1', 'Bill One', 'commons')`)
+	if err != nil {
+		t.Fatalf("insert bill: %v", err)
+	}
+
+	for i := 1; i <= 3; i++ {
+		_, err := conn.Exec(fmt.Sprintf(`INSERT INTO divisions (id, parliament, session, number, date, bill_id, yeas, nays, result, chamber)
+			VALUES (?, 45, 1, ?, '2025-01-0%d', ?, 100, 50, 'Carried', 'commons')`, i),
+			fmt.Sprintf("d%d", i), i, "b1")
+		if err != nil {
+			t.Fatalf("insert division: %v", err)
+		}
+	}
+
+	// Shared on d1 and d2; only m1 voted on d3.
+	for _, v := range []struct{ div, member, vote string }{
+		{"d1", "m1", "Yea"}, {"d1", "m2", "Nay"},
+		{"d2", "m1", "Nay"}, {"d2", "m2", "Nay"},
+		{"d3", "m1", "Yea"},
+	} {
+		_, err := conn.Exec(`INSERT INTO member_votes (division_id, member_id, vote) VALUES (?,?,?)`,
+			v.div, v.member, v.vote)
+		if err != nil {
+			t.Fatalf("insert vote: %v", err)
+		}
+	}
+
+	shared, err := st.GetSharedMemberVotes("m1", "m2", 10)
+	if err != nil {
+		t.Fatalf("GetSharedMemberVotes: %v", err)
+	}
+	if len(shared) != 2 {
+		t.Fatalf("want 2 shared votes, got %d", len(shared))
+	}
+	if shared[0].DivisionID != "d2" || shared[1].DivisionID != "d1" {
+		t.Fatalf("unexpected shared vote order: %+v", shared)
+	}
+	if shared[1].BillNumber != "C-1" {
+		t.Fatalf("expected bill number on d1, got %q", shared[1].BillNumber)
+	}
+	if shared[1].Member1Vote != "Yea" || shared[1].Member2Vote != "Nay" {
+		t.Fatalf("unexpected shared vote values: %+v", shared[1])
 	}
 }
 

@@ -66,6 +66,17 @@ type VoteRow struct {
 	PartyMajority  string
 }
 
+type SharedVoteRow struct {
+	DivisionID  string
+	Date        string
+	BillID      string
+	BillNumber  string
+	Description string
+	Result      string
+	Member1Vote string
+	Member2Vote string
+}
+
 type MemberStats struct {
 	TotalVotes   int
 	PartyLinePct int
