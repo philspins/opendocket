@@ -20,6 +20,8 @@ import (
 	"github.com/philspins/open-democracy/internal/templates"
 )
 
+const localRidingContextToken = "local-riding"
+
 // Server holds application dependencies.
 type Server struct {
 	store   *store.Store
@@ -149,8 +151,17 @@ func (s *Server) handleHome(w http.ResponseWriter, r *http.Request) {
 		provincialRep opennorth.Representative
 	)
 	if user, ok := s.auth.SessionUser(r); ok {
-		savedAddr, result := s.loadRepresentativeContext(r, user)
-		savedAddress = savedAddr
+		result := fallbackLookupResult(user, s.store)
+		if hasLocalRidingContext(result) {
+			savedAddress = localRidingContextToken
+		}
+		federalRep = result.FederalRepresentative
+		provincialRep = result.ProvincialRepresentative
+	} else {
+		result := fallbackLookupResult(localRidingUserFromCookies(r), s.store)
+		if hasLocalRidingContext(result) {
+			savedAddress = localRidingContextToken
+		}
 		federalRep = result.FederalRepresentative
 		provincialRep = result.ProvincialRepresentative
 	}

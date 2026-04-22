@@ -81,3 +81,34 @@ func TestHandleLookup_MatchesLocalMemberID(t *testing.T) {
 		t.Fatalf("expected riding page to link matched local member profile")
 	}
 }
+
+func TestLookup_RecognizesProvincialOfficeWithProvinceSuffix(t *testing.T) {
+	svc, _, _ := newTestRidingService(t, "fake-key")
+	svc.SetLookups(
+		func(ctx context.Context, address, apiKey string) (float64, float64, error) {
+			return 45.0, -75.0, nil
+		},
+		func(ctx context.Context, lat, lng float64) ([]opennorth.Representative, error) {
+			return []opennorth.Representative{
+				{
+					Name:          "Jane Doe",
+					ElectedOffice: "MP",
+					DistrictName:  "Ottawa Centre",
+				},
+				{
+					Name:          "John Doe",
+					ElectedOffice: "MPP (ON)",
+					DistrictName:  "Ottawa South",
+				},
+			}, nil
+		},
+	)
+
+	result, err := svc.Lookup(context.Background(), "123 Main St")
+	if err != nil {
+		t.Fatalf("Lookup: %v", err)
+	}
+	if result.ProvincialRidingID != "Ottawa South" {
+		t.Fatalf("ProvincialRidingID=%q want %q", result.ProvincialRidingID, "Ottawa South")
+	}
+}

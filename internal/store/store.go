@@ -882,8 +882,10 @@ func scanUserRow(scanner interface{ Scan(...interface{}) error }) (UserRow, erro
 }
 
 func (s *Store) getUserByID(id string) (UserRow, error) {
+	// Privacy requirement: user addresses are no longer returned from storage.
+	// Keep the scan shape stable while forcing Address to an empty value.
 	return scanUserRow(s.db.QueryRow(`
-		SELECT id, COALESCE(email,''), COALESCE(email_verified,0), COALESCE(address,''), COALESCE(federal_riding_id,''),
+		SELECT id, COALESCE(email,''), COALESCE(email_verified,0), '', COALESCE(federal_riding_id,''),
 		       COALESCE(provincial_riding_id,''), COALESCE(created_at,''), COALESCE(email_digest,'weekly')
 		FROM users WHERE id = ?`, id))
 }
@@ -942,7 +944,7 @@ func (s *Store) GetUserByEmail(email string) (UserRow, error) {
 	return s.getUserByID(id)
 }
 
-func (s *Store) UpdateUserLocation(userID, address, federalRidingID, provincialRidingID string) (UserRow, error) {
+func (s *Store) UpdateUserLocation(userID, federalRidingID, provincialRidingID string) (UserRow, error) {
 	userID = strings.TrimSpace(userID)
 	if userID == "" {
 		return UserRow{}, fmt.Errorf("user id required")
@@ -950,11 +952,10 @@ func (s *Store) UpdateUserLocation(userID, address, federalRidingID, provincialR
 
 	_, err := s.db.Exec(`
 		UPDATE users
-		SET address = ?,
+		SET address = '',
 		    federal_riding_id = ?,
 		    provincial_riding_id = ?
 		WHERE id = ?`,
-		strings.TrimSpace(address),
 		strings.TrimSpace(federalRidingID),
 		strings.TrimSpace(provincialRidingID),
 		userID,
