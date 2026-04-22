@@ -20,6 +20,8 @@ import (
 	"github.com/philspins/open-democracy/internal/templates"
 )
 
+// localRidingContextToken indicates local riding context exists without exposing
+// specific riding identifiers to the template.
 const localRidingContextToken = "local-riding"
 
 // Server holds application dependencies.
@@ -150,7 +152,7 @@ func (s *Server) handleHome(w http.ResponseWriter, r *http.Request) {
 		federalVotes    []store.VoteRow
 		provincialVotes []store.VoteRow
 		federalStatus   = parliamentStatusText(ps.Status)
-		provStatus      = parliamentStatusText(ps.Status)
+		provStatus      = parliamentStatusText("status_unavailable")
 	)
 	if user, ok := s.auth.SessionUser(r); ok {
 		result := fallbackLookupResult(user, s.store)
@@ -169,13 +171,21 @@ func (s *Server) handleHome(w http.ResponseWriter, r *http.Request) {
 
 	}
 	if memberID := s.resolveRepresentativeMemberID(federalRep, true); memberID != "" {
-		votes, _ := s.store.GetMemberVotes(memberID, 100)
-		federalVotes = recentBillVotes(votes, 5)
+		votes, err := s.store.GetMemberVotes(memberID, 100)
+		if err != nil {
+			log.Printf("home: failed loading federal member votes for %q: %v", memberID, err)
+		} else {
+			federalVotes = recentBillVotes(votes, 5)
+		}
 	}
 	provincialProvince := ""
 	if memberID := s.resolveRepresentativeMemberID(provincialRep, false); memberID != "" {
-		votes, _ := s.store.GetMemberVotes(memberID, 100)
-		provincialVotes = recentBillVotes(votes, 5)
+		votes, err := s.store.GetMemberVotes(memberID, 100)
+		if err != nil {
+			log.Printf("home: failed loading provincial member votes for %q: %v", memberID, err)
+		} else {
+			provincialVotes = recentBillVotes(votes, 5)
+		}
 		if member, err := s.store.GetMember(memberID); err == nil {
 			provincialProvince = member.Province
 		}
@@ -270,7 +280,7 @@ func (s *Server) resolveRepresentativeMemberID(rep opennorth.Representative, fed
 	if anyLevelNameMatch != "" {
 		return anyLevelNameMatch
 	}
-	return members[0].ID
+	return ""
 }
 
 func recentBillVotes(votes []store.VoteRow, limit int) []store.VoteRow {
@@ -299,9 +309,9 @@ func recentBillVotes(votes []store.VoteRow, limit int) []store.VoteRow {
 		if strings.TrimSpace(vote.BillID) != "" {
 			continue
 		}
-		key := vote.DivisionID
+		key := strings.TrimSpace(vote.DivisionID)
 		if key == "" {
-			key = vote.Date + "|" + vote.Description
+			continue
 		}
 		if _, ok := seen[key]; ok {
 			continue

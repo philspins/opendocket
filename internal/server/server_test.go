@@ -79,6 +79,7 @@ func TestHandleRequestVerification_DoesNotLeakSecrets(t *testing.T) {
 	srv, _ := newTestServer(t)
 
 	form := url.Values{}
+	form.Set("email", "verify1@example.com")
 	req := httptest.NewRequest(http.MethodPost, "/auth/request-verification", strings.NewReader(form.Encode()))
 	req.Header.Set("Content-Type", "application/x-www-form-urlencoded")
 	rr := httptest.NewRecorder()
@@ -898,6 +899,66 @@ func TestRecentBillVotes_DeduplicatesAndFallsBackToNonBillDivisions(t *testing.T
 	}, 5)
 	if len(got3) != 2 {
 		t.Fatalf("len=%d want 2 unique non-bill votes", len(got3))
+	}
+
+	got4 := recentBillVotes([]store.VoteRow{
+		{BillID: "", DivisionID: "", Description: "No division ID"},
+		{BillID: "", DivisionID: "d-z", Description: "Has division ID"},
+	}, 5)
+	if len(got4) != 1 || got4[0].DivisionID != "d-z" {
+		t.Fatalf("expected only non-bill votes with division IDs, got %+v", got4)
+	}
+}
+
+func TestResolveRepresentativeMemberID_DoesNotFallbackToWrongGovernmentLevel(t *testing.T) {
+	srv, _, conn := newTestServerWithConn(t)
+	for _, member := range []db.Member{
+		{
+			ID:              "federal-ottawa-centre",
+			Name:            "Federal Rep",
+			Riding:          "Ottawa Centre",
+			Chamber:         "commons",
+			Active:          true,
+			GovernmentLevel: "federal",
+			LastScraped:     "2026-01-01T00:00:00Z",
+		},
+		{
+			ID:              "provincial-ottawa-centre",
+			Name:            "Provincial Rep",
+			Riding:          "Ottawa Centre",
+			Chamber:         "ontario",
+			Active:          true,
+			GovernmentLevel: "provincial",
+			LastScraped:     "2026-01-01T00:00:00Z",
+		},
+	} {
+		if err := db.UpsertMember(conn, member); err != nil {
+			t.Fatalf("UpsertMember %s: %v", member.ID, err)
+		}
+	}
+
+	federalID := srv.resolveRepresentativeMemberID(opennorth.Representative{
+		Name:         "No Match",
+		DistrictName: "Ottawa Centre",
+	}, true)
+	if federalID != "federal-ottawa-centre" {
+		t.Fatalf("federalID=%q want federal-ottawa-centre", federalID)
+	}
+
+	provincialID := srv.resolveRepresentativeMemberID(opennorth.Representative{
+		Name:         "No Match",
+		DistrictName: "Ottawa Centre",
+	}, false)
+	if provincialID != "provincial-ottawa-centre" {
+		t.Fatalf("provincialID=%q want provincial-ottawa-centre", provincialID)
+	}
+
+	missingLevelID := srv.resolveRepresentativeMemberID(opennorth.Representative{
+		Name:         "No Match",
+		DistrictName: "No Such Riding",
+	}, false)
+	if missingLevelID != "" {
+		t.Fatalf("missingLevelID=%q want empty", missingLevelID)
 	}
 }
 

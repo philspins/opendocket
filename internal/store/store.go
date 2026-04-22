@@ -854,12 +854,58 @@ func (s *Store) GetJurisdictionStatus(jurisdiction string) (string, error) {
 // Returns "in_session" if any jurisdiction is in session, else "on_break" if
 // at least one has schedule data, else "status_unavailable".
 func (s *Store) GetCombinedJurisdictionStatus(jurisdictions ...string) (string, error) {
-	hasOnBreak := false
+	if len(jurisdictions) == 0 {
+		return "status_unavailable", nil
+	}
+	placeholders := make([]string, 0, len(jurisdictions))
+	args := make([]interface{}, 0, len(jurisdictions))
 	for _, jurisdiction := range jurisdictions {
-		status, err := s.GetJurisdictionStatus(jurisdiction)
-		if err != nil {
+		jurisdiction = strings.TrimSpace(jurisdiction)
+		if jurisdiction == "" {
+			continue
+		}
+		placeholders = append(placeholders, "?")
+		args = append(args, jurisdiction)
+	}
+	if len(placeholders) == 0 {
+		return "status_unavailable", nil
+	}
+	rows, err := s.db.Query(
+		`SELECT jurisdiction, date
+		FROM legislature_calendar_dates
+		WHERE jurisdiction IN (`+strings.Join(placeholders, ",")+`)
+		ORDER BY jurisdiction, date`,
+		args...,
+	)
+	if err != nil {
+		return "status_unavailable", err
+	}
+	defer rows.Close()
+
+	datesByJurisdiction := make(map[string][]string, len(placeholders))
+	for rows.Next() {
+		var jurisdiction, date string
+		if err := rows.Scan(&jurisdiction, &date); err != nil {
 			return "status_unavailable", err
 		}
+		datesByJurisdiction[jurisdiction] = append(datesByJurisdiction[jurisdiction], date)
+	}
+	if err := rows.Err(); err != nil {
+		return "status_unavailable", err
+	}
+
+	hasOnBreak := false
+	now := time.Now().UTC()
+	for _, jurisdiction := range jurisdictions {
+		jurisdiction = strings.TrimSpace(jurisdiction)
+		if jurisdiction == "" {
+			continue
+		}
+		dates := datesByJurisdiction[jurisdiction]
+		if len(dates) == 0 {
+			continue
+		}
+		status := statusFromScheduleDates(now, dates)
 		switch status {
 		case "in_session":
 			return "in_session", nil
@@ -924,7 +970,7 @@ func statusFromScheduleDates(now time.Time, dates []string) string {
 
 	if hasPrev {
 		daysSincePrev := int(nowDay.Sub(prevDate).Hours() / 24)
-		if daysSincePrev <= 30 {
+		if daysSincePrev <= 3 {
 			return "in_session"
 		}
 		return "on_break"

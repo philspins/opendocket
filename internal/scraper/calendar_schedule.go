@@ -131,20 +131,32 @@ var (
 
 func extractCalendarDatesFromText(body string) []string {
 	seen := map[string]struct{}{}
-	for _, m := range isoDateRe.FindAllString(body, -1) {
-		if d := utils.ParseDate(m); d != "" {
-			seen[d] = struct{}{}
+	now := dayStartUTC(time.Now().UTC())
+	minDate := now.AddDate(-1, 0, 0)
+	maxDate := now.AddDate(1, 0, 0)
+	addIfInRange := func(raw string) {
+		d := utils.ParseDate(raw)
+		if d == "" {
+			return
 		}
+		parsed, err := time.Parse("2006-01-02", d)
+		if err != nil {
+			return
+		}
+		parsed = dayStartUTC(parsed)
+		if parsed.Before(minDate) || parsed.After(maxDate) {
+			return
+		}
+		seen[d] = struct{}{}
+	}
+	for _, m := range isoDateRe.FindAllString(body, -1) {
+		addIfInRange(m)
 	}
 	for _, m := range englishDateRe.FindAllString(body, -1) {
-		if d := utils.ParseDate(m); d != "" {
-			seen[d] = struct{}{}
-		}
+		addIfInRange(m)
 	}
 	for _, m := range englishDateRe2.FindAllString(body, -1) {
-		if d := utils.ParseDate(m); d != "" {
-			seen[d] = struct{}{}
-		}
+		addIfInRange(m)
 	}
 	out := make([]string, 0, len(seen))
 	for d := range seen {
@@ -444,6 +456,8 @@ func parsePEIHighlightedSittingDatesFromPDF(pdfBytes []byte, year int) ([]string
 	}
 
 	bounds := img.Bounds()
+	// PEI calendars place month grids in the top ~60% of the page; the lower
+	// section is legend/text that produces OCR false positives for day numbers.
 	maxCalendarY := bounds.Min.Y + int(float64(bounds.Dy())*0.62)
 
 	dayWords := make([]ocrWord, 0, len(words))

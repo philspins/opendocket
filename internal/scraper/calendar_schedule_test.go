@@ -4,6 +4,7 @@ import (
 	"image"
 	"image/color"
 	"sort"
+	"strings"
 	"testing"
 	"time"
 )
@@ -49,6 +50,23 @@ func TestExtractCalendarDatesFromText(t *testing.T) {
 	got := extractCalendarDatesFromText(in)
 	if len(got) < 2 {
 		t.Fatalf("expected at least 2 unique dates, got %v", got)
+	}
+}
+
+func TestExtractCalendarDatesFromText_FiltersFarDates(t *testing.T) {
+	now := time.Now().UTC()
+	inRange := now.Format("2006-01-02")
+	tooOld := now.AddDate(-5, 0, 0).Format("2006-01-02")
+	tooFuture := now.AddDate(5, 0, 0).Format("2006-01-02")
+	in := strings.Join([]string{
+		`<div data-date="` + inRange + `"></div>`,
+		`<div data-date="` + tooOld + `"></div>`,
+		`<div data-date="` + tooFuture + `"></div>`,
+	}, "")
+
+	got := extractCalendarDatesFromText(in)
+	if len(got) != 1 || got[0] != inRange {
+		t.Fatalf("expected only in-range date %q, got %v", inRange, got)
 	}
 }
 
