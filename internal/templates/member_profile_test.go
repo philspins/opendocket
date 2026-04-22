@@ -53,6 +53,11 @@ func TestMemberProfile_ReordersEngageAndAddsVotePagination(t *testing.T) {
 	if !strings.Contains(html, "option value=\"10\" selected") {
 		t.Fatalf("expected 10 to be the default selected page-size option")
 	}
+	for _, placeholder := range []string{"{ prefix }", "{ rowSelector }"} {
+		if strings.Contains(html, placeholder) {
+			t.Fatalf("expected member profile output to not contain unresolved placeholder %q", placeholder)
+		}
+	}
 }
 
 func TestMemberProfile_UsesConsistentRedStylingForNaysAndRebel(t *testing.T) {

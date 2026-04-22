@@ -7,6 +7,7 @@ import (
 	"net/http"
 	"net/url"
 	"os"
+	"sort"
 	"strconv"
 	"strings"
 	"time"
@@ -245,18 +246,98 @@ func (s *Server) handleCompare(w http.ResponseWriter, r *http.Request) {
 	q := r.URL.Query()
 	ps := s.parliamentStatus()
 	var m1, m2 store.MemberRow
+	var sharedVotes []store.SharedVoteRow
 	var overlap, total int
-	idA, idB := q.Get("a"), q.Get("b")
-	if idA != "" {
-		m1, _ = s.store.GetMember(idA)
+	level := q.Get("level")
+	if level == "" {
+		level = "federal"
 	}
-	if idB != "" {
-		m2, _ = s.store.GetMember(idB)
+
+	provincialMembers, err := s.store.ListMembers("", "", "", "", "provincial")
+	if err != nil {
+		log.Printf("handleCompare: list provincial members: %v", err)
+	}
+	provinces := uniqueSortedMemberFields(provincialMembers, func(m store.MemberRow) string { return m.Province })
+	province := q.Get("province")
+	if level != "provincial" || !isValidSelection(provinces, province) {
+		province = ""
+	}
+
+	partyBaseMembers, err := s.store.ListMembers("", "", province, "", level)
+	if err != nil {
+		log.Printf("handleCompare: list party base members: %v", err)
+	}
+	parties := uniqueSortedMemberFields(partyBaseMembers, func(m store.MemberRow) string { return m.Party })
+	party := q.Get("party")
+	if !isValidSelection(parties, party) {
+		party = ""
+	}
+
+	members, err := s.store.ListMembers("", party, province, "", level)
+	if err != nil {
+		log.Printf("handleCompare: list filtered members: %v", err)
+	}
+	memberIDs := make(map[string]struct{}, len(members))
+	for _, m := range members {
+		memberIDs[m.ID] = struct{}{}
+	}
+
+	idA, idB := q.Get("a"), q.Get("b")
+	if _, ok := memberIDs[idA]; idA != "" && ok {
+		m1, err = s.store.GetMember(idA)
+		if err != nil {
+			log.Printf("handleCompare: get member a %q: %v", idA, err)
+		}
+	}
+	if _, ok := memberIDs[idB]; idB != "" && ok {
+		m2, err = s.store.GetMember(idB)
+		if err != nil {
+			log.Printf("handleCompare: get member b %q: %v", idB, err)
+		}
 	}
 	if m1.ID != "" && m2.ID != "" {
-		overlap, total, _ = s.store.CompareMemberVotes(m1.ID, m2.ID)
+		overlap, total, err = s.store.CompareMemberVotes(m1.ID, m2.ID)
+		if err != nil {
+			log.Printf("handleCompare: compare votes %q vs %q: %v", m1.ID, m2.ID, err)
+		}
+		sharedVotes, err = s.store.GetSharedMemberVotes(m1.ID, m2.ID, 100)
+		if err != nil {
+			log.Printf("handleCompare: shared votes %q vs %q: %v", m1.ID, m2.ID, err)
+		}
 	}
-	_ = templates.CompareMPs(ps, m1, m2, overlap, total).Render(r.Context(), w)
+	if err := templates.CompareMPs(ps, members, m1, m2, level, province, party, provinces, parties, overlap, total, sharedVotes).Render(r.Context(), w); err != nil {
+		log.Printf("handleCompare: render: %v", err)
+	}
+}
+
+func uniqueSortedMemberFields(members []store.MemberRow, field func(store.MemberRow) string) []string {
+	seen := map[string]struct{}{}
+	var out []string
+	for _, m := range members {
+		value := strings.TrimSpace(field(m))
+		if value == "" {
+			continue
+		}
+		if _, ok := seen[value]; ok {
+			continue
+		}
+		seen[value] = struct{}{}
+		out = append(out, value)
+	}
+	sort.Strings(out)
+	return out
+}
+
+func isValidSelection(values []string, needle string) bool {
+	if needle == "" {
+		return true
+	}
+	for _, v := range values {
+		if v == needle {
+			return true
+		}
+	}
+	return false
 }
 
 func (s *Server) handleFollow(w http.ResponseWriter, r *http.Request) {

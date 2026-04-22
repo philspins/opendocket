@@ -1,0 +1,148 @@
+package templates
+
+import "fmt"
+
+templ VotesPagination(prefix, rowSelector string, pageSize int) {
+	<div
+		id={ prefix + "-pagination" }
+		class="flex items-center justify-between gap-3 mt-4 text-sm"
+		data-prefix={ prefix }
+		data-row-selector={ rowSelector }
+		data-page-size={ fmt.Sprint(pageSize) }
+	>
+		<div class="flex items-center gap-2">
+			<label for={ prefix + "-page-size" } class="text-gray-600">Rows per page</label>
+			<select id={ prefix + "-page-size" } class="input-field py-2 pr-8">
+				<option value="5" selected?={ pageSize == 5 }>5</option>
+				<option value="10" selected?={ pageSize == 10 }>10</option>
+				<option value="20" selected?={ pageSize == 20 }>20</option>
+				<option value="50" selected?={ pageSize == 50 }>50</option>
+			</select>
+		</div>
+		<div class="flex items-center gap-2">
+			<button id={ prefix + "-prev" } type="button" class="btn btn-secondary" disabled>Prev</button>
+			<div id={ prefix + "-pages" } class="flex items-center gap-1"></div>
+			<button id={ prefix + "-next" } type="button" class="btn btn-secondary" disabled>Next</button>
+		</div>
+	</div>
+
+	<script>
+		(() => {
+			const scriptEl = document.currentScript;
+			const pagination = scriptEl ? scriptEl.previousElementSibling : null;
+			if (!(pagination instanceof HTMLDivElement)) return;
+
+			const prefix = pagination.dataset.prefix || "";
+			const rowSelector = pagination.dataset.rowSelector || "";
+			if (!prefix || !rowSelector) return;
+
+			const section = document.getElementById(prefix + "-section");
+			if (!section) return;
+			const rows = Array.from(section.querySelectorAll(rowSelector));
+			const prevBtn = document.getElementById(prefix + "-prev");
+			const nextBtn = document.getElementById(prefix + "-next");
+			const pagesEl = document.getElementById(prefix + "-pages");
+			const pageSizeSelect = document.getElementById(prefix + "-page-size");
+			let pageSize = Number(pagination.dataset.pageSize) || 10;
+			let currentPage = 1;
+
+			if (!prevBtn || !nextBtn || !pagesEl || !pageSizeSelect) return;
+			if (rows.length === 0) {
+				pagination.classList.add("hidden");
+				return;
+			}
+			const allowedPageSizes = new Set(Array.from(pageSizeSelect.options, (option) => Number(option.value)));
+			pageSizeSelect.value = String(pageSize);
+			const totalPages = () => Math.max(1, Math.ceil(rows.length / pageSize));
+
+			const visiblePages = (total, current) => {
+				if (total <= 5) {
+					return Array.from({ length: total }, (_, i) => i + 1);
+				}
+				const pages = [1];
+				let start = current - 1;
+				let end = current + 1;
+				if (start < 2) {
+					start = 2;
+					end = 4;
+				}
+				if (end > total - 1) {
+					end = total - 1;
+					start = total - 3;
+				}
+				if (start > 2) pages.push(-1);
+				for (let p = start; p <= end; p++) {
+					pages.push(p);
+				}
+				if (end < total - 1) pages.push(-1);
+				pages.push(total);
+				return pages;
+			};
+			const clampPage = (page, maxPages) => Math.min(Math.max(page, 1), maxPages);
+
+			const updatePager = () => {
+				const pages = totalPages();
+				prevBtn.disabled = currentPage == 1;
+				nextBtn.disabled = currentPage == pages;
+				pagesEl.innerHTML = "";
+				for (const item of visiblePages(pages, currentPage)) {
+					if (item === -1) {
+						const ellipsis = document.createElement("span");
+						ellipsis.className = "px-1 text-gray-500";
+						ellipsis.textContent = "...";
+						pagesEl.appendChild(ellipsis);
+						continue;
+					}
+					const pageBtn = document.createElement("button");
+					pageBtn.type = "button";
+					pageBtn.className = "px-2 py-1 text-gray-700 hover:underline";
+					pageBtn.dataset.page = String(item);
+					pageBtn.textContent = String(item);
+					if (item === currentPage) {
+						pageBtn.classList.add("underline", "font-semibold");
+					}
+					pagesEl.appendChild(pageBtn);
+				}
+			};
+
+			const renderPage = () => {
+				const pages = totalPages();
+				currentPage = clampPage(currentPage, pages);
+				rows.forEach((row, idx) => {
+					const rowPage = Math.floor(idx / pageSize) + 1;
+					row.classList.toggle("hidden", rowPage !== currentPage);
+				});
+				updatePager();
+			};
+
+			prevBtn.addEventListener("click", () => {
+				if (currentPage <= 1) return;
+				currentPage--;
+				renderPage();
+			});
+			nextBtn.addEventListener("click", () => {
+				if (currentPage >= totalPages()) return;
+				currentPage++;
+				renderPage();
+			});
+			pagesEl.addEventListener("click", (event) => {
+				const target = event.target;
+				if (!(target instanceof HTMLButtonElement)) return;
+				const selected = Number(target.dataset.page);
+				const pages = totalPages();
+				if (!Number.isInteger(selected) || selected < 1 || selected > pages) return;
+				currentPage = selected;
+				renderPage();
+			});
+			pageSizeSelect.addEventListener("change", () => {
+				const selectedSize = Number(pageSizeSelect.value);
+				if (!allowedPageSizes.has(selectedSize)) return;
+				pageSize = selectedSize;
+				currentPage = 1;
+				renderPage();
+			});
+
+			renderPage();
+		})();
+	</script>
+}

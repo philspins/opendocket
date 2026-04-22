@@ -551,7 +551,11 @@ func (s *Store) GetMemberVotes(id string, limit int) ([]VoteRow, error) {
 // GetMemberStats computes voting statistics for a member.
 func (s *Store) GetMemberStats(id string) (MemberStats, error) {
 	var party string
-	_ = s.db.QueryRow("SELECT COALESCE(party,'') FROM members WHERE id = ?", id).Scan(&party)
+	var governmentLevel string
+	_ = s.db.QueryRow(
+		"SELECT COALESCE(party,''), COALESCE(government_level,'federal') FROM members WHERE id = ?",
+		id,
+	).Scan(&party, &governmentLevel)
 
 	rows, err := s.db.Query(`
 		SELECT mv.division_id, mv.vote
@@ -581,9 +585,27 @@ func (s *Store) GetMemberStats(id string) (MemberStats, error) {
 
 	totalVoted := len(votes)
 	partyLine := 0
+	partyMemberCount := 0
+	if party != "" {
+		_ = s.db.QueryRow(
+			`SELECT COUNT(*)
+			 FROM members
+			 WHERE party = ?
+			   AND active = 1
+			   AND COALESCE(government_level, 'federal') = ?`,
+			party,
+			governmentLevel,
+		).Scan(&partyMemberCount)
+	}
+
+	// If this is the only elected member for the party at this government level,
+	// their vote defines the party line.
+	if totalVoted > 0 && partyMemberCount <= 1 {
+		partyLine = totalVoted
+	}
 
 	// Batch-fetch party majority for all divisions in one query to avoid N+1.
-	if len(votes) > 0 && party != "" {
+	if len(votes) > 0 && party != "" && partyMemberCount > 1 {
 		divIDs := make([]string, len(votes))
 		memberVoteMap := make(map[string]string, len(votes))
 		for i, dv := range votes {
@@ -708,6 +730,54 @@ func (s *Store) CompareMemberVotes(id1, id2 string) (overlap int, total int, err
 		return 0, 0, nil
 	}
 	return overlap, total, err
+}
+
+// GetSharedMemberVotes returns divisions where both members cast a vote, including
+// each member's vote choice for side-by-side comparison.
+func (s *Store) GetSharedMemberVotes(id1, id2 string, limit int) ([]SharedVoteRow, error) {
+	if limit <= 0 {
+		limit = 50
+	}
+	rows, err := s.db.Query(`
+		SELECT
+			d.id,
+			COALESCE(d.date, ''),
+			COALESCE(d.bill_id, ''),
+			COALESCE(b.number, ''),
+			COALESCE(d.description, ''),
+			COALESCE(d.result, ''),
+			COALESCE(mv1.vote, ''),
+			COALESCE(mv2.vote, '')
+		FROM member_votes mv1
+		JOIN member_votes mv2 ON mv2.division_id = mv1.division_id AND mv2.member_id = ?
+		JOIN divisions d ON d.id = mv1.division_id
+		LEFT JOIN bills b ON b.id = d.bill_id
+		WHERE mv1.member_id = ?
+		ORDER BY d.date DESC, d.id DESC
+		LIMIT ?`, id2, id1, limit)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+
+	var out []SharedVoteRow
+	for rows.Next() {
+		var v SharedVoteRow
+		if err := rows.Scan(
+			&v.DivisionID,
+			&v.Date,
+			&v.BillID,
+			&v.BillNumber,
+			&v.Description,
+			&v.Result,
+			&v.Member1Vote,
+			&v.Member2Vote,
+		); err != nil {
+			return nil, err
+		}
+		out = append(out, v)
+	}
+	return out, rows.Err()
 }
 
 // ── parliament status ─────────────────────────────────────────────────────────
