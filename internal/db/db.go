@@ -192,6 +192,15 @@ func Migrate(db *sql.DB) error {
 	// Forward-compatible migration for older DBs created before email_verified existed.
 	_, _ = db.Exec(`ALTER TABLE users ADD COLUMN email_verified INTEGER DEFAULT 0`)
 	_, _ = db.Exec(`ALTER TABLE users ADD COLUMN address TEXT`)
+	var addressesToClear int
+	if err := db.QueryRow(`SELECT COUNT(1) FROM users WHERE COALESCE(TRIM(address), '') <> ''`).Scan(&addressesToClear); err != nil {
+		return fmt.Errorf("migrate: count user addresses: %w", err)
+	}
+	if addressesToClear > 0 {
+		if _, err := db.Exec(`UPDATE users SET address = '' WHERE COALESCE(TRIM(address), '') <> ''`); err != nil {
+			return fmt.Errorf("migrate: clear user addresses: %w", err)
+		}
+	}
 	// Forward-compatible migration: add government_level for DBs created before this field existed.
 	_, _ = db.Exec(`ALTER TABLE members ADD COLUMN government_level TEXT DEFAULT 'federal'`)
 

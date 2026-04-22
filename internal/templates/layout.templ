@@ -181,6 +181,10 @@ templ Layout(title string, ps store.ParliamentStatus) {
 					box-shadow: 0 0 0 3px rgba(15, 98, 254, 0.18);
 				}
 
+				.is-hidden {
+					display: none !important;
+				}
+
 				.btn {
 					display: inline-flex;
 					align-items: center;
@@ -632,7 +636,7 @@ templ Layout(title string, ps store.ParliamentStatus) {
 					}).then((user) => {
 						if (!user) return;
 						authActions.innerHTML = "<a href=\"/profile\" class=\"btn btn-secondary\">Profile</a><form method=\"POST\" action=\"/auth/logout\"><button type=\"submit\" class=\"btn btn-secondary\">Sign Out</button></form>";
-						if (searchForm && user.Address) {
+						if (searchForm && (user.FederalRidingID || user.ProvincialRidingID)) {
 							searchForm.style.display = "none";
 						}
 					}).catch(() => {

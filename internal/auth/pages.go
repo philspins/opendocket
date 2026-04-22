@@ -23,7 +23,8 @@ func (s *Service) HandleSignupPage(w http.ResponseWriter, r *http.Request) {
 	ps := s.parliamentStatus()
 	googleClientID := strings.TrimSpace(os.Getenv("GOOGLE_CLIENT_ID"))
 	facebookAppID := strings.TrimSpace(os.Getenv("FACEBOOK_CLIENT_ID"))
-	_ = templates.AuthPage(ps, "signup", googleClientID, facebookAppID).Render(r.Context(), w)
+	recaptchaSiteKey := strings.TrimSpace(os.Getenv("RECAPTCHA_SITE_KEY"))
+	_ = templates.AuthPage(ps, "signup", googleClientID, facebookAppID, recaptchaSiteKey).Render(r.Context(), w)
 }
 
 func (s *Service) HandleLoginPage(w http.ResponseWriter, r *http.Request) {
@@ -34,5 +35,5 @@ func (s *Service) HandleLoginPage(w http.ResponseWriter, r *http.Request) {
 	ps := s.parliamentStatus()
 	googleClientID := strings.TrimSpace(os.Getenv("GOOGLE_CLIENT_ID"))
 	facebookAppID := strings.TrimSpace(os.Getenv("FACEBOOK_CLIENT_ID"))
-	_ = templates.AuthPage(ps, "login", googleClientID, facebookAppID).Render(r.Context(), w)
+	_ = templates.AuthPage(ps, "login", googleClientID, facebookAppID, "").Render(r.Context(), w)
 }

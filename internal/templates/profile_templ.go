@@ -46,7 +46,7 @@ func ProfilePage(ps store.ParliamentStatus, user store.UserRow, address string, 
 				}()
 			}
 			ctx = templ.InitializeContext(ctx)
-			templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 1, "<div class=\"space-y-6\"><section class=\"surface-card p-6 space-y-4\"><div class=\"title-row\"><div><span class=\"kicker\">Account</span><h1 class=\"page-title mt-3\">Profile</h1><p class=\"section-lead mt-2\">Save your address so Open Democracy can remember your federal and provincial representatives.</p></div><div class=\"text-sm text-gray-500\">Signed in as <strong>")
+			templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 1, "<div class=\"space-y-6\"><section class=\"surface-card p-6 space-y-4\"><div class=\"title-row\"><div><span class=\"kicker\">Account</span><h1 class=\"page-title mt-3\">Profile</h1><p class=\"section-lead mt-2\">Use your address to look up your federal and provincial ridings. We only save your riding IDs, never your address.</p></div><div class=\"text-sm text-gray-500\">Signed in as <strong>")
 			if templ_7745c5c3_Err != nil {
 				return templ_7745c5c3_Err
 			}
@@ -64,7 +64,7 @@ func ProfilePage(ps store.ParliamentStatus, user store.UserRow, address string, 
 				return templ_7745c5c3_Err
 			}
 			if updated {
-				templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 3, "<div class=\"rounded-lg border border-green-200 bg-green-50 px-4 py-3 text-sm text-green-800\">Your saved address and riding have been updated.</div>")
+				templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 3, "<div class=\"rounded-lg border border-green-200 bg-green-50 px-4 py-3 text-sm text-green-800\">Your saved riding information has been updated.</div>")
 				if templ_7745c5c3_Err != nil {
 					return templ_7745c5c3_Err
 				}
@@ -101,35 +101,12 @@ func ProfilePage(ps store.ParliamentStatus, user store.UserRow, address string, 
 			if templ_7745c5c3_Err != nil {
 				return templ_7745c5c3_Err
 			}
-			templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 7, "\" placeholder=\"Save your full Canadian address\" class=\"input-field w-full max-w-2xl\" autocomplete=\"off\"> <button type=\"submit\" class=\"btn btn-primary\">Save Address</button> <a href=\"/profile\" class=\"text-sm text-gray-500 hover:underline\">Reset</a></form></section>")
+			templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 7, "\" placeholder=\"Enter your full Canadian address\" class=\"input-field w-full max-w-2xl\" autocomplete=\"off\"> <button type=\"submit\" class=\"btn btn-primary\">Update Riding</button> <a href=\"/profile\" class=\"text-sm text-gray-500 hover:underline\">Reset</a></form></section>")
 			if templ_7745c5c3_Err != nil {
 				return templ_7745c5c3_Err
 			}
 			if len(profileRepresentativeCards(reps, federalRep, provincialRep)) > 0 {
-				templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 8, "<section class=\"surface-card p-6 space-y-4\"><div class=\"title-row\"><h2 class=\"text-xl\">Current representatives</h2>")
-				if templ_7745c5c3_Err != nil {
-					return templ_7745c5c3_Err
-				}
-				if address != "" {
-					templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 9, "<p class=\"text-sm text-gray-500\">Saved address: ")
-					if templ_7745c5c3_Err != nil {
-						return templ_7745c5c3_Err
-					}
-					var templ_7745c5c3_Var6 string
-					templ_7745c5c3_Var6, templ_7745c5c3_Err = templ.JoinStringErrs(address)
-					if templ_7745c5c3_Err != nil {
-						return templ.Error{Err: templ_7745c5c3_Err, FileName: `internal/templates/profile.templ`, Line: 47, Col: 64}
-					}
-					_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var6))
-					if templ_7745c5c3_Err != nil {
-						return templ_7745c5c3_Err
-					}
-					templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 10, "</p>")
-					if templ_7745c5c3_Err != nil {
-						return templ_7745c5c3_Err
-					}
-				}
-				templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 11, "</div><div class=\"grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4\">")
+				templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 8, "<section class=\"surface-card p-6 space-y-4\"><div class=\"title-row\"><h2 class=\"text-xl\">Current representatives</h2></div><div class=\"grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4\">")
 				if templ_7745c5c3_Err != nil {
 					return templ_7745c5c3_Err
 				}
@@ -139,12 +116,12 @@ func ProfilePage(ps store.ParliamentStatus, user store.UserRow, address string, 
 						return templ_7745c5c3_Err
 					}
 				}
-				templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 12, "</div></section>")
+				templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 9, "</div></section>")
 				if templ_7745c5c3_Err != nil {
 					return templ_7745c5c3_Err
 				}
 			}
-			templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 13, "</div>")
+			templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 10, "</div>")
 			if templ_7745c5c3_Err != nil {
 				return templ_7745c5c3_Err
 			}

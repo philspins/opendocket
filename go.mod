@@ -13,6 +13,7 @@ require (
 	github.com/pdfcpu/pdfcpu v0.11.1
 	github.com/robfig/cron/v3 v3.0.1
 	golang.org/x/net v0.52.0
+	golang.org/x/sync v0.20.0
 )
 
 require (

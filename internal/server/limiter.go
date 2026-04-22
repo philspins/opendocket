@@ -1,0 +1,51 @@
+package server
+
+import (
+	"sync"
+	"time"
+)
+
+// rateLimiterCleanupInterval controls how often stale limiter entries are
+// opportunistically evicted while processing requests.
+const rateLimiterCleanupInterval = 256
+
+type rateRecord struct {
+	windowStart time.Time
+	count       int
+}
+
+type simpleRateLimiter struct {
+	mu      sync.Mutex
+	records map[string]rateRecord
+	calls   uint64
+}
+
+func newSimpleRateLimiter() *simpleRateLimiter {
+	return &simpleRateLimiter{records: map[string]rateRecord{}}
+}
+
+func (r *simpleRateLimiter) allow(key string, limit int, window time.Duration, now time.Time) bool {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	r.calls++
+	if r.calls%rateLimiterCleanupInterval == 0 {
+		for k, rec := range r.records {
+			if now.Sub(rec.windowStart) >= window {
+				delete(r.records, k)
+			}
+		}
+	}
+	rec, ok := r.records[key]
+	if !ok || now.Sub(rec.windowStart) >= window {
+		r.records[key] = rateRecord{windowStart: now, count: 1}
+		return true
+	}
+	if rec.count >= limit {
+		return false
+	}
+	// rec is a copy from the map; this read-modify-write sequence remains safe
+	// because the limiter mutex is held for the entire method.
+	rec.count++
+	r.records[key] = rec
+	return true
+}
