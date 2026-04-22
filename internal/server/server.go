@@ -242,21 +242,30 @@ func (s *Server) handleCompare(w http.ResponseWriter, r *http.Request) {
 		level = "federal"
 	}
 
-	provincialMembers, _ := s.store.ListMembers("", "", "", "", "provincial")
-	provinces := sortedUniqueMemberField(provincialMembers, func(m store.MemberRow) string { return m.Province })
+	provincialMembers, err := s.store.ListMembers("", "", "", "", "provincial")
+	if err != nil {
+		log.Printf("handleCompare: list provincial members: %v", err)
+	}
+	provinces := uniqueSortedMemberFields(provincialMembers, func(m store.MemberRow) string { return m.Province })
 	province := q.Get("province")
-	if level != "provincial" || !contains(provinces, province) {
+	if level != "provincial" || !isValidSelection(provinces, province) {
 		province = ""
 	}
 
-	partyBaseMembers, _ := s.store.ListMembers("", "", province, "", level)
-	parties := sortedUniqueMemberField(partyBaseMembers, func(m store.MemberRow) string { return m.Party })
+	partyBaseMembers, err := s.store.ListMembers("", "", province, "", level)
+	if err != nil {
+		log.Printf("handleCompare: list party base members: %v", err)
+	}
+	parties := uniqueSortedMemberFields(partyBaseMembers, func(m store.MemberRow) string { return m.Party })
 	party := q.Get("party")
-	if !contains(parties, party) {
+	if !isValidSelection(parties, party) {
 		party = ""
 	}
 
-	members, _ := s.store.ListMembers("", party, province, "", level)
+	members, err := s.store.ListMembers("", party, province, "", level)
+	if err != nil {
+		log.Printf("handleCompare: list filtered members: %v", err)
+	}
 	memberIDs := make(map[string]struct{}, len(members))
 	for _, m := range members {
 		memberIDs[m.ID] = struct{}{}
@@ -264,19 +273,33 @@ func (s *Server) handleCompare(w http.ResponseWriter, r *http.Request) {
 
 	idA, idB := q.Get("a"), q.Get("b")
 	if _, ok := memberIDs[idA]; idA != "" && ok {
-		m1, _ = s.store.GetMember(idA)
+		m1, err = s.store.GetMember(idA)
+		if err != nil {
+			log.Printf("handleCompare: get member a %q: %v", idA, err)
+		}
 	}
 	if _, ok := memberIDs[idB]; idB != "" && ok {
-		m2, _ = s.store.GetMember(idB)
+		m2, err = s.store.GetMember(idB)
+		if err != nil {
+			log.Printf("handleCompare: get member b %q: %v", idB, err)
+		}
 	}
 	if m1.ID != "" && m2.ID != "" {
-		overlap, total, _ = s.store.CompareMemberVotes(m1.ID, m2.ID)
-		sharedVotes, _ = s.store.GetSharedMemberVotes(m1.ID, m2.ID, 100)
+		overlap, total, err = s.store.CompareMemberVotes(m1.ID, m2.ID)
+		if err != nil {
+			log.Printf("handleCompare: compare votes %q vs %q: %v", m1.ID, m2.ID, err)
+		}
+		sharedVotes, err = s.store.GetSharedMemberVotes(m1.ID, m2.ID, 100)
+		if err != nil {
+			log.Printf("handleCompare: shared votes %q vs %q: %v", m1.ID, m2.ID, err)
+		}
 	}
-	_ = templates.CompareMPs(ps, members, m1, m2, level, province, party, provinces, parties, overlap, total, sharedVotes).Render(r.Context(), w)
+	if err := templates.CompareMPs(ps, members, m1, m2, level, province, party, provinces, parties, overlap, total, sharedVotes).Render(r.Context(), w); err != nil {
+		log.Printf("handleCompare: render: %v", err)
+	}
 }
 
-func sortedUniqueMemberField(members []store.MemberRow, field func(store.MemberRow) string) []string {
+func uniqueSortedMemberFields(members []store.MemberRow, field func(store.MemberRow) string) []string {
 	seen := map[string]struct{}{}
 	var out []string
 	for _, m := range members {
@@ -294,7 +317,7 @@ func sortedUniqueMemberField(members []store.MemberRow, field func(store.MemberR
 	return out
 }
 
-func contains(values []string, needle string) bool {
+func isValidSelection(values []string, needle string) bool {
 	if needle == "" {
 		return true
 	}

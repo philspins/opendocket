@@ -36,6 +36,34 @@ func newTestServer(t *testing.T) (*Server, *store.Store) {
 	return srv, st
 }
 
+func newCompareServerWithTestMembers(t *testing.T) *Server {
+	t.Helper()
+	t.Setenv("SES_FROM_EMAIL", "")
+	t.Setenv("OAUTH_BASE_URL", "http://127.0.0.1:8080")
+	t.Setenv("GOOGLE_MAPS_API_KEY", "test-maps-key")
+
+	conn, err := db.Open(filepath.Join(t.TempDir(), "test.db"))
+	if err != nil {
+		t.Fatalf("db.Open: %v", err)
+	}
+	t.Cleanup(func() { _ = conn.Close() })
+
+	st := store.New(conn)
+	srv := New(st)
+
+	_, err = conn.Exec(`
+		INSERT INTO members (id, name, party, riding, province, chamber, active, government_level) VALUES
+		('f-lib', 'Federal Liberal', 'Liberal', 'Ottawa Centre', 'Ontario', 'commons', 1, 'federal'),
+		('f-con', 'Federal Conservative', 'Conservative', 'Calgary Centre', 'Alberta', 'commons', 1, 'federal'),
+		('p-on-ndp', 'Ontario NDP', 'NDP', 'Toronto Centre', 'Ontario', 'ontario', 1, 'provincial'),
+		('p-qc-caq', 'Quebec CAQ', 'CAQ', 'Quebec City', 'Quebec', 'quebec', 1, 'provincial')
+	`)
+	if err != nil {
+		t.Fatalf("insert members: %v", err)
+	}
+	return srv
+}
+
 func TestHandleRequestVerification_DoesNotLeakSecrets(t *testing.T) {
 	srv, _ := newTestServer(t)
 
@@ -260,29 +288,7 @@ func TestLegalPages_Render(t *testing.T) {
 }
 
 func TestHandleCompare_RendersDropdownFiltersAndSelectedValues(t *testing.T) {
-	t.Setenv("SES_FROM_EMAIL", "")
-	t.Setenv("OAUTH_BASE_URL", "http://127.0.0.1:8080")
-	t.Setenv("GOOGLE_MAPS_API_KEY", "test-maps-key")
-
-	conn, err := db.Open(filepath.Join(t.TempDir(), "test.db"))
-	if err != nil {
-		t.Fatalf("db.Open: %v", err)
-	}
-	t.Cleanup(func() { _ = conn.Close() })
-
-	st := store.New(conn)
-	srv := New(st)
-
-	_, err = conn.Exec(`
-		INSERT INTO members (id, name, party, riding, province, chamber, active, government_level) VALUES
-		('f-lib', 'Federal Liberal', 'Liberal', 'Ottawa Centre', 'Ontario', 'commons', 1, 'federal'),
-		('f-con', 'Federal Conservative', 'Conservative', 'Calgary Centre', 'Alberta', 'commons', 1, 'federal'),
-		('p-on-ndp', 'Ontario NDP', 'NDP', 'Toronto Centre', 'Ontario', 'ontario', 1, 'provincial'),
-		('p-qc-caq', 'Quebec CAQ', 'CAQ', 'Quebec City', 'Quebec', 'quebec', 1, 'provincial')
-	`)
-	if err != nil {
-		t.Fatalf("insert members: %v", err)
-	}
+	srv := newCompareServerWithTestMembers(t)
 
 	req := httptest.NewRequest(http.MethodGet, "/compare?level=provincial&province=Ontario&party=NDP", nil)
 	rr := httptest.NewRecorder()
@@ -312,29 +318,7 @@ func TestHandleCompare_RendersDropdownFiltersAndSelectedValues(t *testing.T) {
 }
 
 func TestHandleCompare_FiltersPartiesAndCandidatesByLevelAndProvince(t *testing.T) {
-	t.Setenv("SES_FROM_EMAIL", "")
-	t.Setenv("OAUTH_BASE_URL", "http://127.0.0.1:8080")
-	t.Setenv("GOOGLE_MAPS_API_KEY", "test-maps-key")
-
-	conn, err := db.Open(filepath.Join(t.TempDir(), "test.db"))
-	if err != nil {
-		t.Fatalf("db.Open: %v", err)
-	}
-	t.Cleanup(func() { _ = conn.Close() })
-
-	st := store.New(conn)
-	srv := New(st)
-
-	_, err = conn.Exec(`
-		INSERT INTO members (id, name, party, riding, province, chamber, active, government_level) VALUES
-		('f-lib', 'Federal Liberal', 'Liberal', 'Ottawa Centre', 'Ontario', 'commons', 1, 'federal'),
-		('f-con', 'Federal Conservative', 'Conservative', 'Calgary Centre', 'Alberta', 'commons', 1, 'federal'),
-		('p-on-ndp', 'Ontario NDP', 'NDP', 'Toronto Centre', 'Ontario', 'ontario', 1, 'provincial'),
-		('p-qc-caq', 'Quebec CAQ', 'CAQ', 'Quebec City', 'Quebec', 'quebec', 1, 'provincial')
-	`)
-	if err != nil {
-		t.Fatalf("insert members: %v", err)
-	}
+	srv := newCompareServerWithTestMembers(t)
 
 	reqFederal := httptest.NewRequest(http.MethodGet, "/compare?level=federal", nil)
 	rrFederal := httptest.NewRecorder()
