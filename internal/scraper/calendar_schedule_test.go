@@ -166,3 +166,28 @@ func TestClassifyCalendarCellColors(t *testing.T) {
 		t.Fatalf("expected violet overlay classification")
 	}
 }
+
+func TestMBMonthFromGrid(t *testing.T) {
+	tests := []struct {
+		row  int
+		col  int
+		want int
+	}{
+		{0, 0, 3},
+		{0, 1, 4},
+		{1, 0, 5},
+		{1, 1, 6},
+		{2, 0, 9},
+		{2, 1, 10},
+		{3, 0, 11},
+		{3, 1, 12},
+		{4, 0, 0},
+		{0, 2, 0},
+		{-1, 0, 0},
+	}
+	for _, tc := range tests {
+		if got := mbMonthFromGrid(tc.row, tc.col); got != tc.want {
+			t.Fatalf("mbMonthFromGrid(%d,%d)=%d want %d", tc.row, tc.col, got, tc.want)
+		}
+	}
+}

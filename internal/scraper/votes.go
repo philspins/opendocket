@@ -13,6 +13,8 @@ import (
 	"github.com/philspins/open-democracy/internal/utils"
 )
 
+var chamberMeetingDateClassRe = regexp.MustCompile(`\b\d{4}-\d{2}-\d{2}\b`)
+
 // ── constants ─────────────────────────────────────────────────────────────────
 
 const (
@@ -285,6 +287,18 @@ func CrawlSittingCalendar(url string, client *http.Client) ([]string, error) {
 	}
 
 	seen := make(map[string]bool)
+
+	// Current ourcommons.ca markup uses class tokens like:
+	// class="2026-04-23 chamber-meeting"
+	doc.Find("td.chamber-meeting, td[class*='chamber-meeting']").Each(func(_ int, s *goquery.Selection) {
+		classAttr, _ := s.Attr("class")
+		for _, token := range chamberMeetingDateClassRe.FindAllString(classAttr, -1) {
+			if d := utils.ParseDate(token); d != "" {
+				seen[d] = true
+			}
+		}
+	})
+
 	doc.Find("[data-date], td.sitting, td[class*='sitting'], [class*='sitting-day']").Each(
 		func(_ int, s *goquery.Selection) {
 			raw, _ := s.Attr("data-date")
