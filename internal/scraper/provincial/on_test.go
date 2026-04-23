@@ -106,3 +106,39 @@ func TestCrawlOntarioVPDay_ParsesCurrentMarkupAndSkipsNonDivisionDataWrappers(t 
 		t.Fatalf("len(votes)=%d, want 5", len(divs[0].Votes))
 	}
 }
+
+func TestOntarioCalendarDates_SelectsCurrentYearBlock(t *testing.T) {
+	body := `
+		<h2>Parliamentary calendar 2025</h2>
+		<p>The House may meet from Monday to Thursday, from April 14, 2025, to December 11, 2025, with the following exceptions:</p>
+		<p>June 9 to October 16</p>
+		<h2>Parliamentary calendar 2026</h2>
+		<p>The House may meet from Monday to Thursday, from March 23, 2026, to December 10, 2026, with the following exceptions:</p>
+		<p>April 6 to 9</p>
+		<p>April 27 to 30</p>
+	`
+	dates, ok := OntarioCalendarDates(body, 2026)
+	if !ok {
+		t.Fatalf("expected Ontario parser to match 2026 section")
+	}
+	if len(dates) == 0 {
+		t.Fatalf("expected non-empty generated date list")
+	}
+	for _, d := range []string{"2026-04-06", "2026-04-07", "2026-04-08", "2026-04-09", "2026-04-27", "2026-04-28", "2026-04-29", "2026-04-30"} {
+		for _, got := range dates {
+			if d == got {
+				t.Fatalf("did not expect exception date %s in generated dates", d)
+			}
+		}
+	}
+	found := false
+	for _, got := range dates {
+		if got == "2026-04-22" {
+			found = true
+			break
+		}
+	}
+	if !found {
+		t.Fatalf("expected 2026-04-22 to be generated as in-session date")
+	}
+}

@@ -9,42 +9,6 @@ import (
 	"time"
 )
 
-func TestOntarioCalendarDates_SelectsCurrentYearBlock(t *testing.T) {
-	body := `
-		<h2>Parliamentary calendar 2025</h2>
-		<p>The House may meet from Monday to Thursday, from April 14, 2025, to December 11, 2025, with the following exceptions:</p>
-		<p>June 9 to October 16</p>
-		<h2>Parliamentary calendar 2026</h2>
-		<p>The House may meet from Monday to Thursday, from March 23, 2026, to December 10, 2026, with the following exceptions:</p>
-		<p>April 6 to 9</p>
-		<p>April 27 to 30</p>
-	`
-	dates, ok := ontarioCalendarDates(body, 2026)
-	if !ok {
-		t.Fatalf("expected Ontario parser to match 2026 section")
-	}
-	if len(dates) == 0 {
-		t.Fatalf("expected non-empty generated date list")
-	}
-	for _, d := range []string{"2026-04-06", "2026-04-07", "2026-04-08", "2026-04-09", "2026-04-27", "2026-04-28", "2026-04-29", "2026-04-30"} {
-		for _, got := range dates {
-			if d == got {
-				t.Fatalf("did not expect exception date %s in generated dates", d)
-			}
-		}
-	}
-	found := false
-	for _, got := range dates {
-		if got == "2026-04-22" {
-			found = true
-			break
-		}
-	}
-	if !found {
-		t.Fatalf("expected 2026-04-22 to be generated as in-session date")
-	}
-}
-
 func TestExtractCalendarDatesFromText(t *testing.T) {
 	in := `<div data-date="2026-04-22"></div><p>April 24, 2026</p><p>24 April 2026</p>`
 	got := extractCalendarDatesFromText(in)
@@ -75,46 +39,6 @@ func TestDayStartUTC(t *testing.T) {
 	d := dayStartUTC(n)
 	if d.Hour() != 0 || d.Minute() != 0 || d.Second() != 0 {
 		t.Fatalf("expected midnight, got %v", d)
-	}
-}
-
-func TestParsePEIDatesFromCalendarText(t *testing.T) {
-	text := `
-		Parliamentary Calendar 2026
-		Sitting Schedule
-		In keeping with the Rules of the Legislative Assembly, the first day of the winter/spring sitting is the fourth Tuesday of February,
-		and the first day of the fall sitting is the first Tuesday in November.
-		Note on calendar update: The 2nd session of the 67th General Assembly was prorogued February 20, 2026,
-		and the opening of the 3rd Session set for 1:00pm, Tuesday, March 24, 2026.
-		Legislative Planning Weeks
-		one legislative planning week is scheduled for the week prior to the winter/spring sitting and the fall sitting;
-		one legislative planning week to coincide with March Break (March 16-20, 2026).
-	`
-	dates := parsePEIDatesFromCalendarText(text, 2026)
-	if len(dates) == 0 {
-		t.Fatalf("expected generated PEI dates")
-	}
-
-	contains := func(needle string) bool {
-		for _, d := range dates {
-			if d == needle {
-				return true
-			}
-		}
-		return false
-	}
-
-	if !contains("2026-04-22") {
-		t.Fatalf("expected 2026-04-22 to be included")
-	}
-	if contains("2026-03-17") {
-		t.Fatalf("did not expect March break date 2026-03-17")
-	}
-	if contains("2026-03-23") {
-		t.Fatalf("did not expect Monday non-sitting date 2026-03-23")
-	}
-	if !contains("2026-11-03") {
-		t.Fatalf("expected fall sitting start 2026-11-03 to be included")
 	}
 }
 
@@ -164,31 +88,6 @@ func TestClassifyCalendarCellColors(t *testing.T) {
 	}
 	if !violet {
 		t.Fatalf("expected violet overlay classification")
-	}
-}
-
-func TestMBMonthFromGrid(t *testing.T) {
-	tests := []struct {
-		row  int
-		col  int
-		want int
-	}{
-		{0, 0, 3},
-		{0, 1, 4},
-		{1, 0, 5},
-		{1, 1, 6},
-		{2, 0, 9},
-		{2, 1, 10},
-		{3, 0, 11},
-		{3, 1, 12},
-		{4, 0, 0},
-		{0, 2, 0},
-		{-1, 0, 0},
-	}
-	for _, tc := range tests {
-		if got := mbMonthFromGrid(tc.row, tc.col); got != tc.want {
-			t.Fatalf("mbMonthFromGrid(%d,%d)=%d want %d", tc.row, tc.col, got, tc.want)
-		}
 	}
 }
 

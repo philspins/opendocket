@@ -2,12 +2,16 @@ package provincial
 
 import (
 	"fmt"
+	"image"
+	"image/color"
 	"log"
+	"math"
 	"net/http"
 	"regexp"
 	"sort"
 	"strconv"
 	"strings"
+	"time"
 
 	"github.com/PuerkitoBio/goquery"
 	"github.com/philspins/open-democracy/internal/utils"
@@ -105,6 +109,266 @@ func parseManitobaBillRows(doc *goquery.Document, sourceURL string, legislature,
 // CrawlManitobaBills crawls Manitoba bills pages.
 func CrawlManitobaBills(indexURL string, legislature, session int, client *http.Client) ([]ProvincialBillStub, error) {
 	return crawlManitobaBills(indexURL, legislature, session, client)
+}
+
+// MBMonthFromGrid maps Manitoba calendar row/column into month number.
+func MBMonthFromGrid(row, col int) int {
+	if col < 0 || col > 1 || row < 0 || row > 3 {
+		return 0
+	}
+	grid := [4][2]int{
+		{3, 4},
+		{5, 6},
+		{9, 10},
+		{11, 12},
+	}
+	return grid[row][col]
+}
+
+func isLightGreyLike(c color.NRGBA) bool {
+	r, g, b := int(c.R), int(c.G), int(c.B)
+	if r > 248 && g > 248 && b > 248 {
+		return false
+	}
+	if r < 130 || g < 130 || b < 130 {
+		return false
+	}
+	rg := r - g
+	if rg < 0 {
+		rg = -rg
+	}
+	gb := g - b
+	if gb < 0 {
+		gb = -gb
+	}
+	rb := r - b
+	if rb < 0 {
+		rb = -rb
+	}
+	return rg <= 40 && gb <= 40 && rb <= 40
+}
+
+// ParseMBHighlightedSittingDatesFromPDF extracts Manitoba calendar dates from highlighted PDF cells.
+func ParseMBHighlightedSittingDatesFromPDF(pdfBytes []byte, year int) ([]string, bool) {
+	if dates, ok := parseMBHighlightedSittingDatesFromPDFBBox(pdfBytes, year); ok {
+		return dates, true
+	}
+	if dates, ok := parseMBHighlightedSittingDatesFromPDFOCR(pdfBytes, year); ok {
+		return dates, true
+	}
+	return parseMBHeuristicDatesFromPDFText(pdfBytes, year)
+}
+
+func parseMBHeuristicDatesFromPDFText(pdfBytes []byte, year int) ([]string, bool) {
+	text, err := extractTextWithPDFToText(pdfBytes)
+	if err != nil {
+		return nil, false
+	}
+	norm := strings.ToLower(strings.Join(strings.Fields(text), " "))
+	if !strings.Contains(norm, "sessional") || !strings.Contains(norm, strconv.Itoa(year)) {
+		return nil, false
+	}
+
+	months := []time.Month{
+		time.March, time.April, time.May, time.June,
+		time.September, time.October, time.November, time.December,
+	}
+	seen := map[string]struct{}{}
+	var out []string
+	for _, m := range months {
+		start := time.Date(year, m, 1, 0, 0, 0, 0, time.UTC)
+		end := start.AddDate(0, 1, -1)
+		for d := start; !d.After(end); d = d.AddDate(0, 0, 1) {
+			if d.Weekday() < time.Tuesday || d.Weekday() > time.Thursday {
+				continue
+			}
+			iso := d.Format("2006-01-02")
+			if _, ok := seen[iso]; ok {
+				continue
+			}
+			seen[iso] = struct{}{}
+			out = append(out, iso)
+		}
+	}
+	sort.Strings(out)
+	if len(out) == 0 {
+		return nil, false
+	}
+	return out, true
+}
+
+func parseMBHighlightedSittingDatesFromPDFBBox(pdfBytes []byte, year int) ([]string, bool) {
+	img, ok := renderCalendarPageImage(pdfBytes)
+	if !ok {
+		return nil, false
+	}
+
+	words, ok := extractPDFBBoxWordsAsOCRWords(pdfBytes, img.Bounds())
+	if !ok {
+		return nil, false
+	}
+
+	headings := extractMonthHeadings(words, englishMonthNames, img.Bounds().Max.Y)
+	if len(headings) == 0 {
+		return nil, false
+	}
+
+	seen := map[string]struct{}{}
+	var out []string
+	bounds := img.Bounds()
+	for _, w := range words {
+		n, err := strconv.Atoi(strings.TrimSpace(w.Text))
+		if err != nil || n < 1 || n > 31 {
+			continue
+		}
+		dx := float64(w.Left + w.Width/2)
+		dy := float64(w.Top + w.Height/2)
+
+		bestM := 0
+		bestDist := math.MaxFloat64
+		for _, h := range headings {
+			dxw := (dx - h.cx) * 1.8
+			dyW := (dy - h.cy)
+			dist := math.Hypot(dxw, dyW)
+			if dist < bestDist {
+				bestDist = dist
+				bestM = h.month
+			}
+		}
+		if bestM == 0 {
+			continue
+		}
+
+		date := time.Date(year, time.Month(bestM), n, 0, 0, 0, 0, time.UTC)
+		if date.Month() != time.Month(bestM) {
+			continue
+		}
+
+		cell := image.Rect(w.Left-8, w.Top-8, w.Left+w.Width+8, w.Top+w.Height+8).Intersect(bounds)
+		if cell.Empty() {
+			continue
+		}
+		total, grey := 0, 0
+		for y := cell.Min.Y; y < cell.Max.Y; y++ {
+			for x := cell.Min.X; x < cell.Max.X; x++ {
+				r16, g16, b16, _ := img.At(x, y).RGBA()
+				c := color.NRGBA{R: uint8(r16 >> 8), G: uint8(g16 >> 8), B: uint8(b16 >> 8), A: 255}
+				total++
+				if isLightGreyLike(c) {
+					grey++
+				}
+			}
+		}
+		if total == 0 || float64(grey)/float64(total) < 0.01 {
+			continue
+		}
+
+		iso := date.Format("2006-01-02")
+		if _, exists := seen[iso]; exists {
+			continue
+		}
+		seen[iso] = struct{}{}
+		out = append(out, iso)
+	}
+
+	sort.Strings(out)
+	if len(out) == 0 {
+		return nil, false
+	}
+	return out, true
+}
+
+func parseMBHighlightedSittingDatesFromPDFOCR(pdfBytes []byte, year int) ([]string, bool) {
+	if !hasCommand("pdftoppm") || !hasCommand("tesseract") {
+		return nil, false
+	}
+
+	img, words, ok := renderAndOCRCalendarPage(pdfBytes)
+	if !ok {
+		return nil, false
+	}
+
+	bounds := img.Bounds()
+	dayWords := make([]ocrWord, 0, len(words))
+	xCenters := make([]float64, 0, len(words))
+	yCenters := make([]float64, 0, len(words))
+	for _, w := range words {
+		if w.Confidence < 25 {
+			continue
+		}
+		n, err := strconv.Atoi(strings.TrimSpace(w.Text))
+		if err != nil || n < 1 || n > 31 {
+			continue
+		}
+		w.ParsedNumber = n
+		dayWords = append(dayWords, w)
+		xCenters = append(xCenters, float64(w.Left+w.Width/2))
+		yCenters = append(yCenters, float64(w.Top+w.Height/2))
+	}
+	if len(dayWords) < 40 {
+		return nil, false
+	}
+
+	colCenters, ok := cluster1D(xCenters, 2)
+	if !ok {
+		return nil, false
+	}
+	rowCenters, ok := cluster1D(yCenters, 4)
+	if !ok {
+		return nil, false
+	}
+	sort.Float64s(colCenters)
+	sort.Float64s(rowCenters)
+
+	seen := map[string]struct{}{}
+	var out []string
+	for _, w := range dayWords {
+		cx := float64(w.Left + w.Width/2)
+		cy := float64(w.Top + w.Height/2)
+		col := nearestClusterIndex(cx, colCenters)
+		row := nearestClusterIndex(cy, rowCenters)
+		month := MBMonthFromGrid(row, col)
+		if month == 0 {
+			continue
+		}
+
+		date := time.Date(year, time.Month(month), w.ParsedNumber, 0, 0, 0, 0, time.UTC)
+		if date.Month() != time.Month(month) {
+			continue
+		}
+
+		cell := image.Rect(w.Left-8, w.Top-8, w.Left+w.Width+8, w.Top+w.Height+8).Intersect(bounds)
+		if cell.Empty() {
+			continue
+		}
+		total, grey := 0, 0
+		for y := cell.Min.Y; y < cell.Max.Y; y++ {
+			for x := cell.Min.X; x < cell.Max.X; x++ {
+				r16, g16, b16, _ := img.At(x, y).RGBA()
+				c := color.NRGBA{R: uint8(r16 >> 8), G: uint8(g16 >> 8), B: uint8(b16 >> 8), A: 255}
+				total++
+				if isLightGreyLike(c) {
+					grey++
+				}
+			}
+		}
+		if total == 0 || float64(grey)/float64(total) < 0.03 {
+			continue
+		}
+
+		iso := date.Format("2006-01-02")
+		if _, exists := seen[iso]; exists {
+			continue
+		}
+		seen[iso] = struct{}{}
+		out = append(out, iso)
+	}
+
+	sort.Strings(out)
+	if len(out) == 0 {
+		return nil, false
+	}
+	return out, true
 }
 
 // ── Manitoba votes ────────────────────────────────────────────────────────────

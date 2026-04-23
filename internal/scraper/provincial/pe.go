@@ -5,6 +5,8 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"image"
+	"image/color"
 	"io"
 	"log"
 	"net/http"
@@ -907,4 +909,449 @@ func crawlPrinceEdwardIslandVotes(indexURL string, legislature, session int, cli
 // CrawlPrinceEdwardIslandVotes crawls PEI votes/proceedings pages.
 func CrawlPrinceEdwardIslandVotes(indexURL string, legislature, session int, client *http.Client) ([]ProvincialDivisionResult, error) {
 	return crawlPrinceEdwardIslandVotes(indexURL, legislature, session, client)
+}
+
+var peiCalendarPDFURLRe = regexp.MustCompile(`(?i)https?://[^\s"']*parliamentary[^\s"']*calendar[^\s"']*\.pdf`)
+var peiMarchBreakRangeRe = regexp.MustCompile(`(?i)March\s+(\d{1,2})\s*[-–]\s*(\d{1,2}),\s*(\d{4})`)
+var peiSessionOpeningDateRe = regexp.MustCompile(`(?i)opening\s+of\s+the\s+\d+(?:st|nd|rd|th)\s+Session[^\n]*?([A-Za-z]+\s+\d{1,2},\s+\d{4})`)
+var peiDayDigitsOnlyRe = regexp.MustCompile(`^\d+$`)
+
+// ExtractPEICalendarPDFURL extracts the PEI parliamentary calendar PDF URL from page HTML.
+func ExtractPEICalendarPDFURL(pageHTML string, year int) string {
+	urls := peiCalendarPDFURLRe.FindAllString(pageHTML, -1)
+	if len(urls) == 0 {
+		return ""
+	}
+	yearToken := strconv.Itoa(year)
+	for _, u := range urls {
+		if strings.Contains(u, yearToken) {
+			return u
+		}
+	}
+	return urls[0]
+}
+
+func PEICalendarDates(client *http.Client, pageHTML string, year int) ([]string, bool) {
+	pdfURL := ExtractPEICalendarPDFURL(pageHTML, year)
+	if pdfURL == "" {
+		return nil, false
+	}
+	pdfBytes, err := FetchCalendarPDFBytes(client, pdfURL)
+	if err != nil || len(pdfBytes) == 0 {
+		return nil, false
+	}
+	return PEICalendarDatesFromPDFBytes(pdfBytes, year)
+}
+
+func PEICalendarDatesFromPDFBytes(pdfBytes []byte, year int) ([]string, bool) {
+	return parsePEIHighlightedSittingDatesFromPDF(pdfBytes, year)
+}
+
+// ParsePEIDatesFromCalendarText derives likely PEI sitting dates from the calendar text.
+func ParsePEIDatesFromCalendarText(text string, year int) []string {
+	norm := normalizeCalendarText(text)
+	springStart := fourthTuesdayInFebruary(year)
+	if m := peiSessionOpeningDateRe.FindStringSubmatch(norm); len(m) == 2 {
+		if t, err := time.Parse("January 2, 2006", m[1]); err == nil && t.Year() == year {
+			springStart = dayStartUTC(t)
+		}
+	}
+	fallStart := firstTuesdayInNovember(year)
+
+	planning := map[string]struct{}{}
+	addWeekdaysRange(planning, mondayOfWeek(springStart).AddDate(0, 0, -7), mondayOfWeek(springStart).AddDate(0, 0, -3))
+	addWeekdaysRange(planning, mondayOfWeek(fallStart).AddDate(0, 0, -7), mondayOfWeek(fallStart).AddDate(0, 0, -3))
+	if m := peiMarchBreakRangeRe.FindStringSubmatch(norm); len(m) == 4 {
+		startDay, _ := strconv.Atoi(m[1])
+		endDay, _ := strconv.Atoi(m[2])
+		y, _ := strconv.Atoi(m[3])
+		if y == year {
+			start := dayStartUTC(time.Date(year, time.March, startDay, 0, 0, 0, 0, time.UTC))
+			end := dayStartUTC(time.Date(year, time.March, endDay, 0, 0, 0, 0, time.UTC))
+			addWeekdaysRange(planning, start, end)
+		}
+	}
+
+	springEnd := dayStartUTC(time.Date(year, time.June, 30, 0, 0, 0, 0, time.UTC))
+	fallEnd := dayStartUTC(time.Date(year, time.December, 31, 0, 0, 0, 0, time.UTC))
+
+	seen := map[string]struct{}{}
+	var out []string
+	appendSittingDays := func(start, end time.Time) {
+		for d := start; !d.After(end); d = d.AddDate(0, 0, 1) {
+			wd := d.Weekday()
+			if wd < time.Tuesday || wd > time.Friday {
+				continue
+			}
+			iso := d.Format("2006-01-02")
+			if _, blocked := planning[iso]; blocked {
+				continue
+			}
+			if _, ok := seen[iso]; ok {
+				continue
+			}
+			seen[iso] = struct{}{}
+			out = append(out, iso)
+		}
+	}
+	appendSittingDays(springStart, springEnd)
+	appendSittingDays(fallStart, fallEnd)
+	sort.Strings(out)
+	return out
+}
+
+func addWeekdaysRange(dst map[string]struct{}, start, end time.Time) {
+	for d := dayStartUTC(start); !d.After(dayStartUTC(end)); d = d.AddDate(0, 0, 1) {
+		wd := d.Weekday()
+		if wd < time.Monday || wd > time.Friday {
+			continue
+		}
+		dst[d.Format("2006-01-02")] = struct{}{}
+	}
+}
+
+func mondayOfWeek(t time.Time) time.Time {
+	t = dayStartUTC(t)
+	wd := int(t.Weekday())
+	if wd == 0 {
+		wd = 7
+	}
+	return t.AddDate(0, 0, -(wd - 1))
+}
+
+func fourthTuesdayInFebruary(year int) time.Time {
+	d := time.Date(year, time.February, 1, 0, 0, 0, 0, time.UTC)
+	for d.Weekday() != time.Tuesday {
+		d = d.AddDate(0, 0, 1)
+	}
+	return d.AddDate(0, 0, 21)
+}
+
+func firstTuesdayInNovember(year int) time.Time {
+	d := time.Date(year, time.November, 1, 0, 0, 0, 0, time.UTC)
+	for d.Weekday() != time.Tuesday {
+		d = d.AddDate(0, 0, 1)
+	}
+	return d
+}
+
+func parsePEIHighlightedSittingDatesFromPDF(pdfBytes []byte, year int) ([]string, bool) {
+	if !hasCommand("pdftoppm") {
+		return nil, false
+	}
+
+	img, ok := renderCalendarPageImage(pdfBytes)
+	if !ok {
+		return nil, false
+	}
+
+	words, ok := extractPDFBBoxWordsAsOCRWords(pdfBytes, img.Bounds())
+	if !ok {
+		if !hasCommand("tesseract") {
+			return nil, false
+		}
+		imgOCR, ocrWords, okOCR := renderAndOCRCalendarPage(pdfBytes)
+		if !okOCR {
+			return nil, false
+		}
+		img = imgOCR
+		words = ocrWords
+	}
+
+	bounds := img.Bounds()
+	if len(words) == 0 {
+		return nil, false
+	}
+
+	isLikelyOCR := false
+	for _, w := range words {
+		if w.Confidence > 0 && w.Confidence < 100 {
+			isLikelyOCR = true
+			break
+		}
+	}
+
+	maxCalendarY := bounds.Min.Y + int(float64(bounds.Dy())*0.78)
+	dayWords := make([]ocrWord, 0, len(words))
+	xCenters := make([]float64, 0, len(words))
+	yCenters := make([]float64, 0, len(words))
+	for _, w := range words {
+		if isLikelyOCR && w.Confidence < 30 {
+			continue
+		}
+		appendPEIDayWordCandidates(&dayWords, &xCenters, &yCenters, w, maxCalendarY, true)
+	}
+	if len(dayWords) < 40 {
+		dayWords = dayWords[:0]
+		xCenters = xCenters[:0]
+		yCenters = yCenters[:0]
+		for _, w := range words {
+			if isLikelyOCR && w.Confidence < 30 {
+				continue
+			}
+			appendPEIDayWordCandidates(&dayWords, &xCenters, &yCenters, w, maxCalendarY, false)
+		}
+		if len(dayWords) < 40 {
+			if !isLikelyOCR && hasCommand("tesseract") {
+				imgOCR, ocrWords, okOCR := renderAndOCRCalendarPage(pdfBytes)
+				if okOCR {
+					img = imgOCR
+					bounds = img.Bounds()
+					maxCalendarY = bounds.Min.Y + int(float64(bounds.Dy())*0.78)
+					dayWords = dayWords[:0]
+					xCenters = xCenters[:0]
+					yCenters = yCenters[:0]
+					for _, ow := range ocrWords {
+						if ow.Confidence < 30 {
+							continue
+						}
+						appendPEIDayWordCandidates(&dayWords, &xCenters, &yCenters, ow, maxCalendarY, true)
+					}
+					if len(dayWords) < 40 {
+						dayWords = dayWords[:0]
+						xCenters = xCenters[:0]
+						yCenters = yCenters[:0]
+						for _, ow := range ocrWords {
+							if ow.Confidence < 30 {
+								continue
+							}
+							appendPEIDayWordCandidates(&dayWords, &xCenters, &yCenters, ow, maxCalendarY, false)
+						}
+					}
+				}
+			}
+			if len(dayWords) < 40 {
+				return nil, false
+			}
+		}
+	}
+
+	colCenters, ok := cluster1D(xCenters, 3)
+	if !ok {
+		return nil, false
+	}
+	rowCenters, ok := cluster1D(yCenters, 4)
+	if !ok {
+		return nil, false
+	}
+	sort.Float64s(colCenters)
+	sort.Float64s(rowCenters)
+
+	greenWeeks := map[time.Time]struct{}{}
+	holidayDates := map[string]struct{}{}
+	for _, w := range dayWords {
+		cx := float64(w.Left + w.Width/2)
+		cy := float64(w.Top + w.Height/2)
+		col := nearestClusterIndex(cx, colCenters)
+		row := nearestClusterIndex(cy, rowCenters)
+		month := row*3 + col + 1
+		if month < 1 || month > 12 {
+			continue
+		}
+		date := time.Date(year, time.Month(month), w.ParsedNumber, 0, 0, 0, 0, time.UTC)
+		if date.Month() != time.Month(month) {
+			continue
+		}
+
+		cell := image.Rect(w.Left-8, w.Top-8, w.Left+w.Width+8, w.Top+w.Height+8).Intersect(bounds)
+		if cell.Empty() {
+			continue
+		}
+		green, violet := classifyPEICalendarCellColors(img, cell)
+		if !green {
+			continue
+		}
+		weekStart := mondayOfWeek(date)
+		greenWeeks[weekStart] = struct{}{}
+		if violet {
+			holidayDates[date.Format("2006-01-02")] = struct{}{}
+		}
+	}
+
+	if len(greenWeeks) == 0 {
+		return nil, false
+	}
+
+	seen := map[string]struct{}{}
+	var out []string
+	for weekStart := range greenWeeks {
+		for offset := 1; offset <= 4; offset++ {
+			d := weekStart.AddDate(0, 0, offset)
+			if d.Year() != year {
+				continue
+			}
+			iso := d.Format("2006-01-02")
+			if _, holiday := holidayDates[iso]; holiday {
+				continue
+			}
+			if _, exists := seen[iso]; exists {
+				continue
+			}
+			seen[iso] = struct{}{}
+			out = append(out, iso)
+		}
+	}
+	if len(out) == 0 {
+		return nil, false
+	}
+	sort.Strings(out)
+	return out, true
+}
+
+func appendPEIDayWordCandidates(dayWords *[]ocrWord, xCenters *[]float64, yCenters *[]float64, w ocrWord, maxCalendarY int, enforceY bool) {
+	text := strings.TrimSpace(w.Text)
+	if text == "" {
+		return
+	}
+
+	appendCandidate := func(c ocrWord) {
+		cy := c.Top + c.Height/2
+		if enforceY && cy > maxCalendarY {
+			return
+		}
+		*dayWords = append(*dayWords, c)
+		*xCenters = append(*xCenters, float64(c.Left+c.Width/2))
+		*yCenters = append(*yCenters, float64(cy))
+	}
+
+	if n, err := strconv.Atoi(text); err == nil {
+		if n < 1 || n > 31 {
+			if !peiDayDigitsOnlyRe.MatchString(text) {
+				return
+			}
+			ns := splitCalendarDayToken(text)
+			if len(ns) == 0 {
+				return
+			}
+			segW := w.Width / len(ns)
+			if segW < 1 {
+				segW = 1
+			}
+			for i, v := range ns {
+				c := w
+				c.Text = strconv.Itoa(v)
+				c.ParsedNumber = v
+				c.Left = w.Left + i*segW
+				c.Width = segW
+				appendCandidate(c)
+			}
+			return
+		}
+		w.ParsedNumber = n
+		appendCandidate(w)
+	}
+}
+
+func splitCalendarDayToken(s string) []int {
+	if !peiDayDigitsOnlyRe.MatchString(s) || len(s) <= 1 {
+		return nil
+	}
+	type key struct {
+		idx  int
+		prev int
+	}
+	type best struct {
+		score int
+		vals  []int
+		ok    bool
+	}
+	memo := map[key]best{}
+	var dfs func(i, prev int) best
+	dfs = func(i, prev int) best {
+		k := key{idx: i, prev: prev}
+		if b, ok := memo[k]; ok {
+			return b
+		}
+		if i == len(s) {
+			return best{score: 0, vals: []int{}, ok: true}
+		}
+		out := best{score: -1, ok: false}
+		for _, ln := range []int{1, 2} {
+			if i+ln > len(s) {
+				continue
+			}
+			n, err := strconv.Atoi(s[i : i+ln])
+			if err != nil || n < 1 || n > 31 {
+				continue
+			}
+			next := dfs(i+ln, n)
+			if !next.ok {
+				continue
+			}
+			bonus := 1
+			if prev > 0 && n == prev+1 {
+				bonus += 100
+			}
+			score := bonus + next.score
+			if !out.ok || score > out.score {
+				vals := make([]int, 0, 1+len(next.vals))
+				vals = append(vals, n)
+				vals = append(vals, next.vals...)
+				out = best{score: score, vals: vals, ok: true}
+			}
+		}
+		memo[k] = out
+		return out
+	}
+	b := dfs(0, -1)
+	if !b.ok || len(b.vals) < 2 {
+		return nil
+	}
+	return b.vals
+}
+
+func isPEIGreenLike(c color.NRGBA) bool {
+	return c.G >= 95 && int(c.G)-int(c.R) >= 18 && int(c.G)-int(c.B) >= 12
+}
+
+func isOliveLike(c color.NRGBA) bool {
+	return int(c.R) >= 100 && int(c.G) >= 100 &&
+		int(c.R)-int(c.B) >= 40 && int(c.G)-int(c.B) >= 40 &&
+		abs(int(c.R)-int(c.G)) <= 20
+}
+
+func classifyPEICalendarCellColors(img image.Image, rect image.Rectangle) (sitting bool, violet bool) {
+	total := 0
+	sittingCount := 0
+	violetCount := 0
+	for y := rect.Min.Y; y < rect.Max.Y; y++ {
+		for x := rect.Min.X; x < rect.Max.X; x++ {
+			r16, g16, b16, _ := img.At(x, y).RGBA()
+			c := color.NRGBA{R: uint8(r16 >> 8), G: uint8(g16 >> 8), B: uint8(b16 >> 8), A: 255}
+			total++
+			if isOliveLike(c) || isPEIGreenLike(c) {
+				sittingCount++
+			}
+			if isVioletLike(c) {
+				violetCount++
+			}
+		}
+	}
+	if total == 0 {
+		return false, false
+	}
+	sitting = float64(sittingCount)/float64(total) >= 0.08
+	violet = violetCount >= 8 && float64(violetCount)/float64(total) >= 0.01
+	return sitting, violet
+}
+
+func abs(x int) int {
+	if x < 0 {
+		return -x
+	}
+	return x
+}
+
+func isVioletLike(c color.NRGBA) bool {
+	if c.R < 90 || c.B < 90 {
+		return false
+	}
+	if c.G > 130 {
+		return false
+	}
+	deltaRB := int(c.R) - int(c.B)
+	if deltaRB < 0 {
+		deltaRB = -deltaRB
+	}
+	return deltaRB <= 70
 }

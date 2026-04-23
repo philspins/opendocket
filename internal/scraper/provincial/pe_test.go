@@ -11,6 +11,19 @@ import (
 	"github.com/philspins/open-democracy/internal/db"
 )
 
+func TestSplitCalendarDayToken(t *testing.T) {
+	got := splitCalendarDayToken("91011")
+	want := []int{9, 10, 11}
+	if len(got) != len(want) {
+		t.Fatalf("len=%d want %d: %v", len(got), len(want), got)
+	}
+	for i := range want {
+		if got[i] != want[i] {
+			t.Fatalf("splitCalendarDayToken()=%v want %v", got, want)
+		}
+	}
+}
+
 func TestCrawlPrinceEdwardIslandBills_UsesWorkflowAPI(t *testing.T) {
 	const billsJSON = `{"processInstanceId":"t1","messages":{"error":[]},"data":[{"id":"1","type":"TableV2","data":{},"children":[{"id":"2","type":"TableV2Row","data":{},"children":[{"id":"3","type":"TableV2Cell","data":{},"children":[{"id":"4","type":"LinkV2","data":{"text":"Bill 1 - An Act to Amend the Highway Traffic Act","routerLink":"../LegislativeAssemblyBillView","queryParams":{"id":"bill-doc-1"}},"children":[]}]},{"id":"5","type":"TableV2Cell","data":{"text":"1"},"children":[]},{"id":"6","type":"TableV2Cell","data":{"text":"First Reading"},"children":[]},{"id":"7","type":"TableV2Cell","data":{"text":"March 15, 2026"},"children":[]}]}]}]}`
 	const detailJSON = `{"processInstanceId":"t2","messages":{"error":[]},"data":[{"id":"10","type":"Heading","data":{"text":"Bill no. 1 - An Act to Amend the Highway Traffic Act","size":2},"children":[]},{"id":"11","type":"TableV2","data":{},"children":[{"id":"12","type":"TableV2Row","data":{},"children":[{"id":"13","type":"TableV2Header","data":{"text":"Read Original Bill Text* (PDF)"},"children":[]},{"id":"14","type":"TableV2Cell","data":{"text":null},"children":[{"id":"15","type":"LinkV2","data":{"text":"An Act to Amend the Highway Traffic Act","href":"https://docs.assembly.pe.ca/download/dms?objectId=bill-doc-1&fileName=bill-1.pdf"},"children":[]}]}]}]}]}`
@@ -289,6 +302,46 @@ func TestCrawlProvinceSource_PEICrawlsAllSessionsInCurrentLegislature(t *testing
 	}
 	if distinctSessions != 3 {
 		t.Fatalf("expected divisions from 3 PEI sessions, got %d", distinctSessions)
+	}
+}
+
+func TestParsePEIDatesFromCalendarText(t *testing.T) {
+	text := `
+		Parliamentary Calendar 2026
+		Sitting Schedule
+		In keeping with the Rules of the Legislative Assembly, the first day of the winter/spring sitting is the fourth Tuesday of February,
+		and the first day of the fall sitting is the first Tuesday in November.
+		Note on calendar update: The 2nd session of the 67th General Assembly was prorogued February 20, 2026,
+		and the opening of the 3rd Session set for 1:00pm, Tuesday, March 24, 2026.
+		Legislative Planning Weeks
+		one legislative planning week is scheduled for the week prior to the winter/spring sitting and the fall sitting;
+		one legislative planning week to coincide with March Break (March 16-20, 2026).
+	`
+	dates := ParsePEIDatesFromCalendarText(text, 2026)
+	if len(dates) == 0 {
+		t.Fatalf("expected generated PEI dates")
+	}
+
+	contains := func(needle string) bool {
+		for _, d := range dates {
+			if d == needle {
+				return true
+			}
+		}
+		return false
+	}
+
+	if !contains("2026-04-22") {
+		t.Fatalf("expected 2026-04-22 to be included")
+	}
+	if contains("2026-03-17") {
+		t.Fatalf("did not expect March break date 2026-03-17")
+	}
+	if contains("2026-03-23") {
+		t.Fatalf("did not expect Monday non-sitting date 2026-03-23")
+	}
+	if !contains("2026-11-03") {
+		t.Fatalf("expected fall sitting start 2026-11-03 to be included")
 	}
 }
 
