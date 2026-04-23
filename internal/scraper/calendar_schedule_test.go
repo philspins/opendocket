@@ -191,3 +191,24 @@ func TestMBMonthFromGrid(t *testing.T) {
 		}
 	}
 }
+
+func TestExtractSenateCalendarPDFURL_PrefersRequestedYear(t *testing.T) {
+	html := `
+		<a href="/media/old/2025-senate-sitting-calendar.pdf">2025</a>
+		<a href="/media/current/2026-senate-sitting-calendar.pdf">2026</a>
+	`
+	got := extractSenateCalendarPDFURL(html, 2026)
+	want := "https://sencanada.ca/media/current/2026-senate-sitting-calendar.pdf"
+	if got != want {
+		t.Fatalf("extractSenateCalendarPDFURL()=%q want %q", got, want)
+	}
+}
+
+func TestExtractSenateCalendarPDFURL_FallsBackToFirstMatch(t *testing.T) {
+	html := `<a href="https://sencanada.ca/media/annual/senate-sitting-calendar.pdf">calendar</a>`
+	got := extractSenateCalendarPDFURL(html, 2027)
+	want := "https://sencanada.ca/media/annual/senate-sitting-calendar.pdf"
+	if got != want {
+		t.Fatalf("extractSenateCalendarPDFURL()=%q want %q", got, want)
+	}
+}

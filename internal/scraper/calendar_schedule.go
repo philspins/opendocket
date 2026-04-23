@@ -11,6 +11,7 @@ import (
 	"log"
 	"math"
 	"net/http"
+	"net/url"
 	"os"
 	"os/exec"
 	"regexp"
@@ -161,6 +162,11 @@ func crawlLegislatureCalendarDates(client *http.Client, jurisdiction, url string
 			return dates, nil
 		}
 	}
+	if jurisdiction == "federal-senate" {
+		if dates, ok := senateCalendarDates(client, text, year); ok {
+			return dates, nil
+		}
+	}
 	if jurisdiction == "provincial-PE" {
 		if dates, ok := peiCalendarDates(client, text, year); ok {
 			return dates, nil
@@ -194,7 +200,67 @@ var (
 	qcDateRangeShortRe = regexp.MustCompile(`(\d{1,2})\s+au\s+(\d{1,2})\s+(\S+)\s+(\d{4})`)
 
 	dayDigitsOnlyRe = regexp.MustCompile(`^\d+$`)
+	senatePDFHrefRe = regexp.MustCompile(`(?i)href=["']([^"']+\.pdf)["']`)
 )
+
+func senateCalendarDates(client *http.Client, pageHTML string, year int) ([]string, bool) {
+	pdfURL := extractSenateCalendarPDFURL(pageHTML, year)
+	if pdfURL == "" {
+		return nil, false
+	}
+	pdfBytes, err := fetchPEICalendarPDFBytes(client, pdfURL)
+	if err != nil {
+		return nil, false
+	}
+	return parsePDFHighlightedCalendarDates(pdfBytes, year, isSenateOpenDayLike, englishMonthNames, 1.0, 0.02)
+}
+
+func extractSenateCalendarPDFURL(pageHTML string, year int) string {
+	matches := senatePDFHrefRe.FindAllStringSubmatch(pageHTML, -1)
+	if len(matches) == 0 {
+		return ""
+	}
+	base, _ := url.Parse("https://sencanada.ca/en/calendar/")
+	yearToken := strconv.Itoa(year)
+	best := ""
+	for _, m := range matches {
+		if len(m) != 2 {
+			continue
+		}
+		raw := strings.TrimSpace(m[1])
+		if raw == "" {
+			continue
+		}
+		u, err := url.Parse(raw)
+		if err != nil {
+			continue
+		}
+		resolved := u.String()
+		if !u.IsAbs() && base != nil {
+			resolved = base.ResolveReference(u).String()
+		}
+		lower := strings.ToLower(resolved)
+		if !strings.Contains(lower, "senate") || !strings.Contains(lower, "calendar") {
+			continue
+		}
+		if strings.Contains(lower, yearToken) {
+			return resolved
+		}
+		if best == "" {
+			best = resolved
+		}
+	}
+	return best
+}
+
+func isSenateOpenDayLike(c color.NRGBA) bool {
+	r, g, b := int(c.R), int(c.G), int(c.B)
+	// Red open days.
+	isRed := r >= 145 && g <= 165 && b <= 165 && r-g >= 20 && r-b >= 20
+	// Pink open days.
+	isPink := r >= 170 && g >= 95 && g <= 210 && b >= 95 && b <= 220 && r-g >= 8 && r-b >= 8
+	return isRed || isPink
+}
 
 func extractCalendarDatesFromText(body string) []string {
 	seen := map[string]struct{}{}
