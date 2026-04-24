@@ -102,15 +102,13 @@ func postPEIWorkflow(ctx context.Context, wdfBase, workflowName, activityName st
 	}
 	isTestServer := strings.HasPrefix(wdfBase, "http://127.0.0.1") || strings.HasPrefix(wdfBase, "http://localhost")
 	if !isTestServer {
-		data, err := invokePEIFetchJS(ctx, workflowName, activityName, queryVars)
-		if err != nil {
-			log.Printf("[pe-wdf] pei_fetch.js error: %v; will fall back to HTML", err)
+		// Skip pei_fetch.js in production - it requires puppeteer-extra which may not be installed
+		// and it's slow/unreliable (hangs for 30+ seconds). Use HTTP POST directly instead.
+		if client == nil {
+			log.Printf("[pe-wdf] no HTTP client available for WDF API")
 			return nil, nil
 		}
-		if data != nil {
-			time.Sleep(delay)
-		}
-		return data, nil
+		return postPEIWorkflowHTTP(ctx, wdfBase, workflowName, activityName, queryVars, client, delay)
 	}
 	return postPEIWorkflowHTTP(ctx, wdfBase, workflowName, activityName, queryVars, client, delay)
 }
@@ -749,14 +747,18 @@ func crawlPEIVotesFromWorkflow(wdfBase string, year, legislature, session int, c
 		queryVars["search"] = "assembly"
 		queryVars["general_assembly"] = strconv.Itoa(legislature)
 		queryVars["session"] = strconv.Itoa(session)
+		log.Printf("[pe-votes] fetching journals for legislature=%d session=%d via WDF", legislature, session)
 	} else {
 		queryVars["year"] = strconv.Itoa(year)
 		queryVars["search"] = "year"
+		log.Printf("[pe-votes] fetching journals for year=%d via WDF", year)
 	}
 	body, err := postPEIWorkflow(context.Background(), wdfBase, peiWorkflowJournals, peiWDFActivityJournals, queryVars, client, delay)
 	if err != nil || body == nil {
+		log.Printf("[pe-votes] WDF workflow returned no data: %v", err)
 		return nil, err
 	}
+	log.Printf("[pe-votes] WDF returned %d bytes", len(body))
 
 	var resp wdfTreeResponse
 	if err := json.Unmarshal(body, &resp); err != nil {
@@ -769,6 +771,7 @@ func crawlPEIVotesFromWorkflow(wdfBase string, year, legislature, session int, c
 	}
 
 	rows := wdfCollectRows(resp.Data)
+	log.Printf("[pe-votes] WDF returned %d journal rows", len(rows))
 	if len(rows) == 0 {
 		log.Printf("[pe-votes] wdf returned 0 journal rows; falling back to HTML")
 		return nil, nil
@@ -880,30 +883,16 @@ func crawlPEIVotes(indexURL string, legislature, session int, client *http.Clien
 }
 
 func crawlPrinceEdwardIslandVotes(indexURL string, legislature, session int, client *http.Client) ([]ProvincialDivisionResult, error) {
-	defaultURL := indexURL == ""
-	if defaultURL {
-		indexURL = peiJournalsIndexURL
-	}
 	delay := time.Duration(0)
 	if client == nil {
 		delay = peiDefaultDelay
 		client = newPEIHTTPClient(delay)
 	}
 
+	// Only use WDF workflow API; HTML scraping will hit CAPTCHA on assembly.pe.ca
 	wdfBase := peiWDFAPIBase
-	if !defaultURL {
-		wdfBase = indexURL
-	}
 	year := time.Now().Year()
-	divs, err := crawlPEIVotesFromWorkflow(wdfBase, year, legislature, session, client, delay)
-	if err == nil && len(divs) > 0 {
-		return divs, nil
-	}
-	if err != nil {
-		log.Printf("[pe-votes] wdf api: %v; falling back to HTML", err)
-	}
-
-	return crawlPEIVotes(indexURL, legislature, session, client)
+	return crawlPEIVotesFromWorkflow(wdfBase, year, legislature, session, client, delay)
 }
 
 // CrawlPrinceEdwardIslandVotes crawls PEI votes/proceedings pages.
