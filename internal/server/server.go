@@ -85,7 +85,9 @@ func New(st *store.Store) *Server {
 	s.mux.HandleFunc("GET /riding", s.handleRiding)
 	s.mux.HandleFunc("POST /api/follow", s.handleFollow)
 	s.mux.HandleFunc("POST /api/react", s.handleReact)
+	s.mux.HandleFunc("POST /api/subscribe-bill", s.handleSubscribeBill)
 	s.mux.HandleFunc("POST /api/log-submission", s.handleLogSubmission)
+	s.mux.HandleFunc("POST /profile/interests", s.handleProfileInterests)
 	s.auth.RegisterRoutes(s.mux)
 
 	return s
@@ -339,28 +341,43 @@ func parliamentStatusText(status string) string {
 func (s *Server) handleBills(w http.ResponseWriter, r *http.Request) {
 	q := r.URL.Query()
 	page, _ := strconv.Atoi(q.Get("page"))
+	sortParam := q.Get("sort")
 	f := store.BillFilter{
-		Search:   q.Get("q"),
-		Stage:    q.Get("stage"),
+		Search:  q.Get("q"),
+		Stage:   q.Get("stage"),
 		Category: q.Get("category"),
 		Chamber:  q.Get("chamber"),
 		Level:    q.Get("level"),
+		Sort:     sortParam,
 		Page:     page,
 		PerPage:  20,
 	}
+
+	// For personalized "auto" sort, load the user's preferences and subscriptions.
+	var subscribedIDs []string
+	if sortParam == "auto" {
+		if user, ok := s.auth.SessionUser(r); ok {
+			cats, _ := s.store.GetUserCategoryPreferences(user.ID)
+			subs, _ := s.store.GetUserBillSubscriptions(user.ID)
+			f.PreferredCategories = cats
+			f.SubscribedBillIDs = subs
+			subscribedIDs = subs
+		}
+	}
+
 	ps := s.parliamentStatus()
 	bills, total, err := s.store.ListBills(f)
 	if err != nil {
 		http.Error(w, "internal error", http.StatusInternalServerError)
 		return
 	}
-	_ = templates.BillsFeed(ps, bills, total, f).Render(r.Context(), w)
+	_ = templates.BillsFeed(ps, bills, total, f, subscribedIDs).Render(r.Context(), w)
 }
 
 func (s *Server) handleBillDetail(w http.ResponseWriter, r *http.Request) {
 	id := r.PathValue("id")
 	ps := s.parliamentStatus()
-	_, isAuthenticated := s.auth.SessionUser(r)
+	user, isAuthenticated := s.auth.SessionUser(r)
 	bill, err := s.store.GetBill(id)
 	if err != nil {
 		http.NotFound(w, r)
@@ -369,7 +386,11 @@ func (s *Server) handleBillDetail(w http.ResponseWriter, r *http.Request) {
 	stages, _ := s.store.GetBillStages(id)
 	divs, _ := s.store.GetBillDivisions(id)
 	reactions, _ := s.store.GetBillReactionCounts(id)
-	_ = templates.BillDetail(ps, bill, stages, divs, reactions, isAuthenticated).Render(r.Context(), w)
+	var isSubscribed bool
+	if isAuthenticated {
+		isSubscribed, _ = s.store.IsUserSubscribedToBill(user.ID, id)
+	}
+	_ = templates.BillDetail(ps, bill, stages, divs, reactions, isAuthenticated, isSubscribed).Render(r.Context(), w)
 }
 
 func (s *Server) handleVotes(w http.ResponseWriter, r *http.Request) {
@@ -609,6 +630,45 @@ func (s *Server) handleLogSubmission(w http.ResponseWriter, r *http.Request) {
 func (s *Server) handleHealth(w http.ResponseWriter, r *http.Request) {
 	w.Header().Set("Content-Type", "application/json")
 	_, _ = w.Write([]byte(`{"status":"ok"}`))
+}
+
+func (s *Server) handleSubscribeBill(w http.ResponseWriter, r *http.Request) {
+	u, ok := s.auth.RequireVerifiedSessionUser(w, r)
+	if !ok {
+		return
+	}
+	if err := r.ParseForm(); err != nil {
+		http.Error(w, "bad request", http.StatusBadRequest)
+		return
+	}
+	billID := strings.TrimSpace(r.FormValue("bill_id"))
+	if billID == "" {
+		http.Error(w, "bill_id required", http.StatusBadRequest)
+		return
+	}
+	if _, err := s.store.ToggleBillSubscription(u.ID, billID); err != nil {
+		http.Error(w, "failed to toggle subscription", http.StatusInternalServerError)
+		return
+	}
+	http.Redirect(w, r, "/bills/"+billID, http.StatusSeeOther)
+}
+
+func (s *Server) handleProfileInterests(w http.ResponseWriter, r *http.Request) {
+	user, ok := s.auth.SessionUser(r)
+	if !ok {
+		http.Redirect(w, r, "/auth/login", http.StatusSeeOther)
+		return
+	}
+	if err := r.ParseForm(); err != nil {
+		http.Error(w, "bad request", http.StatusBadRequest)
+		return
+	}
+	categories := r.Form["categories"]
+	if err := s.store.SaveUserCategoryPreferences(user.ID, categories); err != nil {
+		http.Error(w, "failed to save preferences", http.StatusInternalServerError)
+		return
+	}
+	http.Redirect(w, r, "/profile?updated=1", http.StatusSeeOther)
 }
 
 func billInteractionRateKey(email string) string {

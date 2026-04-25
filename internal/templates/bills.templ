@@ -5,7 +5,7 @@ import (
 	"github.com/philspins/open-democracy/internal/store"
 )
 
-templ BillsFeed(ps store.ParliamentStatus, bills []store.BillRow, total int, f store.BillFilter) {
+templ BillsFeed(ps store.ParliamentStatus, bills []store.BillRow, total int, f store.BillFilter, subscribedBillIDs []string) {
 	@Layout("Bills", ps) {
 		<div class="space-y-6">
 			<div class="title-row">
@@ -39,14 +39,26 @@ templ BillsFeed(ps store.ParliamentStatus, bills []store.BillRow, total int, f s
 					<option value="federal" selected?={ f.Level == "federal" }>Federal only</option>
 					<option value="provincial" selected?={ f.Level == "provincial" }>Provincial only</option>
 				</select>
+				<select name="sort" class="input-field">
+					<option value="" selected?={ f.Sort == "" }>Latest Activity</option>
+					<option value="date_asc" selected?={ f.Sort == "date_asc" }>Oldest First</option>
+					<option value="stage" selected?={ f.Sort == "stage" }>Stage</option>
+					<option value="category" selected?={ f.Sort == "category" }>Category</option>
+					<option value="auto" selected?={ f.Sort == "auto" }>Auto (Personalized)</option>
+				</select>
 				<button type="submit" class="btn btn-primary">Filter</button>
 				<a href="/bills" class="text-sm text-gray-500 hover:underline">Clear</a>
 			</form>
+			if f.Sort == "auto" && len(f.PreferredCategories) == 0 && len(f.SubscribedBillIDs) == 0 {
+				<div class="rounded-lg border border-blue-200 bg-blue-50 px-4 py-3 text-sm text-blue-800">
+					To personalise your feed, <a href="/profile" class="underline font-medium">set your interests on your profile</a> or subscribe to bills.
+				</div>
+			}
 
 			<!-- Bills list -->
 			<div class="space-y-3">
 				for _, b := range bills {
-					@billCard(b)
+					@billCard(b, billIsSubscribed(b.ID, subscribedBillIDs))
 				}
 				if len(bills) == 0 {
 					<div class="empty-state text-gray-500">
@@ -61,7 +73,16 @@ templ BillsFeed(ps store.ParliamentStatus, bills []store.BillRow, total int, f s
 	}
 }
 
-templ billCard(b store.BillRow) {
+func billIsSubscribed(billID string, subscribedIDs []string) bool {
+	for _, id := range subscribedIDs {
+		if id == billID {
+			return true
+		}
+	}
+	return false
+}
+
+templ billCard(b store.BillRow, subscribed bool) {
 	<article class="surface-card bg-white rounded-lg border border-gray-200 p-5 hover:shadow-md transition-shadow">
 		<div class="flex items-start justify-between gap-4">
 			<div class="flex-1 min-w-0">
@@ -72,6 +93,9 @@ templ billCard(b store.BillRow) {
 						<span class="text-xs px-2 py-0.5 rounded-full text-white" style={ CategoryBadgeStyle(b.Category) }>{ b.Category }</span>
 					}
 					<span class="text-xs text-gray-500 capitalize">{ b.Chamber }</span>
+					if subscribed {
+						<span class="text-xs px-2 py-0.5 rounded-full bg-yellow-100 text-yellow-800 font-medium">📌 Pinned</span>
+					}
 				</div>
 				<h2 class="font-medium text-gray-900">
 					<a href={ templ.SafeURL("/bills/" + b.ID) } class="hover:text-blue-700">{ ShortOrFullTitle(b) }</a>
@@ -146,6 +170,9 @@ func billPageParams(f store.BillFilter) string {
 	}
 	if f.Level != "" {
 		params += "&level=" + f.Level
+	}
+	if f.Sort != "" {
+		params += "&sort=" + f.Sort
 	}
 	return params
 }

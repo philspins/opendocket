@@ -922,3 +922,202 @@ func TestGetMemberCategoryScores_Empty(t *testing.T) {
 		t.Errorf("want 0 scores for unknown member, got %d", len(scores))
 	}
 }
+
+func TestUserCategoryPreferences(t *testing.T) {
+conn := tempDB(t)
+st := store.New(conn)
+
+// Create user
+u, err := st.UpsertUser("prefs@example.com")
+if err != nil {
+t.Fatalf("UpsertUser: %v", err)
+}
+
+// Initially empty
+cats, err := st.GetUserCategoryPreferences(u.ID)
+if err != nil {
+t.Fatalf("GetUserCategoryPreferences initial: %v", err)
+}
+if len(cats) != 0 {
+t.Errorf("expected 0 prefs, got %d", len(cats))
+}
+
+// Save preferences
+if err := st.SaveUserCategoryPreferences(u.ID, []string{"Housing", "Health", "Environment"}); err != nil {
+t.Fatalf("SaveUserCategoryPreferences: %v", err)
+}
+
+cats, err = st.GetUserCategoryPreferences(u.ID)
+if err != nil {
+t.Fatalf("GetUserCategoryPreferences after save: %v", err)
+}
+if len(cats) != 3 {
+t.Errorf("expected 3 prefs, got %d: %v", len(cats), cats)
+}
+
+// Update preferences (should replace, not append)
+if err := st.SaveUserCategoryPreferences(u.ID, []string{"Budget"}); err != nil {
+t.Fatalf("SaveUserCategoryPreferences update: %v", err)
+}
+cats, err = st.GetUserCategoryPreferences(u.ID)
+if err != nil {
+t.Fatalf("GetUserCategoryPreferences after update: %v", err)
+}
+if len(cats) != 1 || cats[0] != "Budget" {
+t.Errorf("expected [Budget], got %v", cats)
+}
+
+// Clear preferences
+if err := st.SaveUserCategoryPreferences(u.ID, []string{}); err != nil {
+t.Fatalf("SaveUserCategoryPreferences clear: %v", err)
+}
+cats, err = st.GetUserCategoryPreferences(u.ID)
+if err != nil {
+t.Fatalf("GetUserCategoryPreferences after clear: %v", err)
+}
+if len(cats) != 0 {
+t.Errorf("expected 0 prefs after clear, got %d", len(cats))
+}
+}
+
+func TestUserBillSubscriptions(t *testing.T) {
+conn := tempDB(t)
+st := store.New(conn)
+
+_, err := conn.Exec(`INSERT INTO bills (id, parliament, session, number, title) VALUES
+('b1', 45, 1, 'C-1', 'Bill One'),
+('b2', 45, 1, 'C-2', 'Bill Two')`)
+if err != nil {
+t.Fatalf("insert bills: %v", err)
+}
+
+u, err := st.UpsertUser("sub@example.com")
+if err != nil {
+t.Fatalf("UpsertUser: %v", err)
+}
+
+// Initially not subscribed
+ok, err := st.IsUserSubscribedToBill(u.ID, "b1")
+if err != nil {
+t.Fatalf("IsUserSubscribedToBill: %v", err)
+}
+if ok {
+t.Error("expected not subscribed initially")
+}
+
+// Subscribe
+subscribed, err := st.ToggleBillSubscription(u.ID, "b1")
+if err != nil {
+t.Fatalf("ToggleBillSubscription subscribe: %v", err)
+}
+if !subscribed {
+t.Error("expected subscribed=true after first toggle")
+}
+
+ok, err = st.IsUserSubscribedToBill(u.ID, "b1")
+if err != nil {
+t.Fatalf("IsUserSubscribedToBill after subscribe: %v", err)
+}
+if !ok {
+t.Error("expected subscribed after toggle")
+}
+
+// GetUserBillSubscriptions
+ids, err := st.GetUserBillSubscriptions(u.ID)
+if err != nil {
+t.Fatalf("GetUserBillSubscriptions: %v", err)
+}
+if len(ids) != 1 || ids[0] != "b1" {
+t.Errorf("expected [b1], got %v", ids)
+}
+
+// Unsubscribe
+subscribed, err = st.ToggleBillSubscription(u.ID, "b1")
+if err != nil {
+t.Fatalf("ToggleBillSubscription unsubscribe: %v", err)
+}
+if subscribed {
+t.Error("expected subscribed=false after second toggle")
+}
+
+ids, err = st.GetUserBillSubscriptions(u.ID)
+if err != nil {
+t.Fatalf("GetUserBillSubscriptions after unsubscribe: %v", err)
+}
+if len(ids) != 0 {
+t.Errorf("expected empty after unsubscribe, got %v", ids)
+}
+}
+
+func TestListBills_SortOptions(t *testing.T) {
+conn := tempDB(t)
+st := store.New(conn)
+
+_, err := conn.Exec(`INSERT INTO bills (id, parliament, session, number, title, category, current_stage, chamber, last_activity_date)
+VALUES
+('b1', 45, 1, 'C-1', 'Housing Act', 'Housing', '1st_reading', 'commons', '2024-01-01'),
+('b2', 45, 1, 'C-2', 'Health Act', 'Health', '2nd_reading', 'commons', '2024-02-01'),
+('b3', 45, 1, 'C-3', 'Budget Act', 'Budget', '3rd_reading', 'commons', '2024-03-01')`)
+if err != nil {
+t.Fatalf("insert bills: %v", err)
+}
+
+// Default sort: latest first
+bills, _, err := st.ListBills(store.BillFilter{Page: 1, PerPage: 20})
+if err != nil {
+t.Fatalf("ListBills default: %v", err)
+}
+if len(bills) != 3 || bills[0].ID != "b3" {
+t.Errorf("default sort should have b3 first (latest), got: %v", bills[0].ID)
+}
+
+// date_asc: oldest first
+bills, _, err = st.ListBills(store.BillFilter{Sort: "date_asc", Page: 1, PerPage: 20})
+if err != nil {
+t.Fatalf("ListBills date_asc: %v", err)
+}
+if len(bills) != 3 || bills[0].ID != "b1" {
+t.Errorf("date_asc sort should have b1 first (oldest), got: %v", bills[0].ID)
+}
+
+// category: alphabetical by category
+bills, _, err = st.ListBills(store.BillFilter{Sort: "category", Page: 1, PerPage: 20})
+if err != nil {
+t.Fatalf("ListBills category: %v", err)
+}
+if len(bills) != 3 || bills[0].ID != "b3" { // Budget comes first alphabetically
+t.Errorf("category sort should have b3 first (Budget), got: %v", bills[0].ID)
+}
+
+// auto: preferred category Housing first, then by date
+bills, _, err = st.ListBills(store.BillFilter{
+Sort:                "auto",
+PreferredCategories: []string{"Housing"},
+Page:                1,
+PerPage:             20,
+})
+if err != nil {
+t.Fatalf("ListBills auto: %v", err)
+}
+if len(bills) != 3 || bills[0].ID != "b1" { // Housing bill first
+t.Errorf("auto sort should have b1 first (Housing preferred), got: %v", bills[0].ID)
+}
+
+// auto with subscribed: subscribed bill first, then preferred category, then rest
+bills, _, err = st.ListBills(store.BillFilter{
+Sort:                "auto",
+PreferredCategories: []string{"Housing"},
+SubscribedBillIDs:   []string{"b2"},
+Page:                1,
+PerPage:             20,
+})
+if err != nil {
+t.Fatalf("ListBills auto with subscribed: %v", err)
+}
+if len(bills) != 3 || bills[0].ID != "b2" { // Subscribed bill first
+t.Errorf("auto sort with subscription should have b2 first (subscribed), got: %v", bills[0].ID)
+}
+if bills[1].ID != "b1" { // Preferred category next
+t.Errorf("auto sort second should be b1 (preferred Housing), got: %v", bills[1].ID)
+}
+}

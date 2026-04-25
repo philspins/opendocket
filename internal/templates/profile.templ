@@ -5,7 +5,7 @@ import (
 	"github.com/philspins/open-democracy/internal/store"
 )
 
-templ ProfilePage(ps store.ParliamentStatus, user store.UserRow, address string, reps []opennorth.Representative, federalRep opennorth.Representative, provincialRep opennorth.Representative, lookupErr string, updated bool, placesApiKey string) {
+templ ProfilePage(ps store.ParliamentStatus, user store.UserRow, address string, reps []opennorth.Representative, federalRep opennorth.Representative, provincialRep opennorth.Representative, lookupErr string, updated bool, placesApiKey string, preferredCategories []string) {
 	@Layout("Profile", ps) {
 		<div class="space-y-6">
 			<section class="surface-card p-6 space-y-4">
@@ -51,9 +51,47 @@ templ ProfilePage(ps store.ParliamentStatus, user store.UserRow, address string,
 					</div>
 				</section>
 			}
+
+			<!-- Interests section -->
+			<section class="surface-card p-6 space-y-4">
+				<div class="title-row">
+					<div>
+						<h2 class="text-xl font-semibold">Interests</h2>
+						<p class="text-sm text-gray-500 mt-1">Select the policy areas you care about. These are used to personalise your bill feed when you choose "Auto" sorting.</p>
+					</div>
+				</div>
+				<form method="POST" action="/profile/interests">
+					<div class="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 gap-3">
+						for _, cat := range Categories {
+							<label class="flex items-center gap-2 cursor-pointer select-none">
+								<input
+									type="checkbox"
+									name="categories"
+									value={ cat }
+									checked?={ profileCategorySelected(cat, preferredCategories) }
+									class="h-4 w-4 rounded border-gray-300 text-blue-600 focus:ring-blue-500"
+								/>
+								<span class="text-sm text-gray-700 dark:text-gray-300">{ cat }</span>
+							</label>
+						}
+					</div>
+					<div class="mt-4 flex items-center gap-3">
+						<button type="submit" class="btn btn-primary">Save Interests</button>
+					</div>
+				</form>
+			</section>
 		</div>
 		@AddressAutocompleteScript(placesApiKey)
 	}
+}
+
+func profileCategorySelected(cat string, preferred []string) bool {
+	for _, p := range preferred {
+		if p == cat {
+			return true
+		}
+	}
+	return false
 }
 
 func profileRepresentativeCards(reps []opennorth.Representative, federalRep opennorth.Representative, provincialRep opennorth.Representative) []opennorth.Representative {

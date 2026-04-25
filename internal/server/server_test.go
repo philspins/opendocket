@@ -1151,3 +1151,79 @@ func buildSignedRequest(t *testing.T, secret string, payload map[string]any) str
 	sigPart := base64.RawURLEncoding.EncodeToString(mac.Sum(nil))
 	return sigPart + "." + payloadPart
 }
+
+func TestHandleSubscribeBill_RequiresAuth(t *testing.T) {
+	srv, _, conn := newTestServerWithConn(t)
+
+	_, err := conn.Exec(`INSERT INTO bills (id, parliament, session, number, title) VALUES ('b1', 45, 1, 'C-1', 'Test Bill')`)
+	if err != nil {
+		t.Fatalf("insert bill: %v", err)
+	}
+
+	form := url.Values{}
+	form.Set("bill_id", "b1")
+	req := httptest.NewRequest(http.MethodPost, "/api/subscribe-bill", strings.NewReader(form.Encode()))
+	req.Header.Set("Content-Type", "application/x-www-form-urlencoded")
+	rr := httptest.NewRecorder()
+
+	srv.ServeHTTP(rr, req)
+
+	if rr.Code != http.StatusUnauthorized && rr.Code != http.StatusSeeOther {
+		t.Fatalf("expected 401 or redirect for unauthenticated request, got %d", rr.Code)
+	}
+}
+
+func TestHandleProfileInterests_RequiresAuth(t *testing.T) {
+	srv, _ := newTestServer(t)
+
+	form := url.Values{}
+	form.Add("categories", "Housing")
+	req := httptest.NewRequest(http.MethodPost, "/profile/interests", strings.NewReader(form.Encode()))
+	req.Header.Set("Content-Type", "application/x-www-form-urlencoded")
+	rr := httptest.NewRecorder()
+
+	srv.ServeHTTP(rr, req)
+
+	if rr.Code != http.StatusSeeOther {
+		t.Fatalf("expected redirect for unauthenticated request, got %d", rr.Code)
+	}
+	if !strings.HasSuffix(rr.Header().Get("Location"), "/auth/login") {
+		t.Fatalf("expected redirect to /auth/login, got %s", rr.Header().Get("Location"))
+	}
+}
+
+func TestHandleProfileInterests_SavesPreferences(t *testing.T) {
+	srv, st, conn := newTestServerWithConn(t)
+
+	u, err := st.AuthenticateOAuth("google", "cat-user", "cat@example.com", true)
+	if err != nil {
+		t.Fatalf("AuthenticateOAuth: %v", err)
+	}
+	sessionID, err := st.CreateSession(u.ID, time.Hour)
+	if err != nil {
+		t.Fatalf("CreateSession: %v", err)
+	}
+	_ = conn // used by newTestServerWithConn
+
+	form := url.Values{}
+	form.Add("categories", "Housing")
+	form.Add("categories", "Health")
+	req := httptest.NewRequest(http.MethodPost, "/profile/interests", strings.NewReader(form.Encode()))
+	req.Header.Set("Content-Type", "application/x-www-form-urlencoded")
+	req.AddCookie(&http.Cookie{Name: "od_session", Value: sessionID})
+	rr := httptest.NewRecorder()
+
+	srv.ServeHTTP(rr, req)
+
+	if rr.Code != http.StatusSeeOther {
+		t.Fatalf("expected redirect, got %d: %s", rr.Code, rr.Body.String())
+	}
+
+	cats, err := st.GetUserCategoryPreferences(u.ID)
+	if err != nil {
+		t.Fatalf("GetUserCategoryPreferences: %v", err)
+	}
+	if len(cats) != 2 {
+		t.Errorf("expected 2 saved categories, got %d: %v", len(cats), cats)
+	}
+}

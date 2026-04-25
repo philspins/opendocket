@@ -180,6 +180,17 @@ func Migrate(db *sql.DB) error {
 			expires_at TEXT,
 			created_at TEXT DEFAULT (strftime('%Y-%m-%dT%H:%M:%SZ', 'now'))
 		)`,
+		`CREATE TABLE IF NOT EXISTS user_category_preferences (
+			user_id  TEXT REFERENCES users(id) ON DELETE CASCADE,
+			category TEXT NOT NULL,
+			PRIMARY KEY (user_id, category)
+		)`,
+		`CREATE TABLE IF NOT EXISTS user_bill_subscriptions (
+			user_id    TEXT REFERENCES users(id) ON DELETE CASCADE,
+			bill_id    TEXT REFERENCES bills(id) ON DELETE CASCADE,
+			created_at TEXT DEFAULT (strftime('%Y-%m-%dT%H:%M:%SZ', 'now')),
+			PRIMARY KEY (user_id, bill_id)
+		)`,
 		`CREATE INDEX IF NOT EXISTS idx_divisions_bill      ON divisions(bill_id)`,
 		`CREATE INDEX IF NOT EXISTS idx_member_votes_member ON member_votes(member_id)`,
 		`CREATE INDEX IF NOT EXISTS idx_bills_stage         ON bills(current_stage)`,
@@ -190,6 +201,9 @@ func Migrate(db *sql.DB) error {
 		`CREATE INDEX IF NOT EXISTS idx_email_tokens_user   ON email_verification_tokens(user_id)`,
 		`CREATE INDEX IF NOT EXISTS idx_sessions_user        ON user_sessions(user_id)`,
 		`CREATE INDEX IF NOT EXISTS idx_leg_calendar_juris_date ON legislature_calendar_dates(jurisdiction, date)`,
+		`CREATE INDEX IF NOT EXISTS idx_user_cat_prefs_user  ON user_category_preferences(user_id)`,
+		`CREATE INDEX IF NOT EXISTS idx_user_bill_subs_user  ON user_bill_subscriptions(user_id)`,
+		`CREATE INDEX IF NOT EXISTS idx_user_bill_subs_bill  ON user_bill_subscriptions(bill_id)`,
 	}
 	for _, s := range stmts {
 		if _, err := db.Exec(s); err != nil {

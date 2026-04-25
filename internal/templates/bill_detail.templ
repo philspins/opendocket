@@ -5,7 +5,7 @@ import (
 	"github.com/philspins/open-democracy/internal/store"
 )
 
-templ BillDetail(ps store.ParliamentStatus, bill store.BillRow, stages []store.BillStageRow, divs []store.DivisionRow, reactions store.BillReactionCounts, isAuthenticated bool) {
+templ BillDetail(ps store.ParliamentStatus, bill store.BillRow, stages []store.BillStageRow, divs []store.DivisionRow, reactions store.BillReactionCounts, isAuthenticated bool, isSubscribed bool) {
 	@Layout(bill.Number+" — "+ShortOrFullTitle(bill), ps) {
 		<div class="space-y-6">
 			<!-- Header -->
@@ -13,12 +13,15 @@ templ BillDetail(ps store.ParliamentStatus, bill store.BillRow, stages []store.B
 				<div class="flex items-center gap-2 mb-2">
 					<a href="/bills" class="text-sm text-blue-600 hover:underline">← Bills</a>
 				</div>
-				<div class="flex items-start gap-3">
-					<span class="font-mono font-bold text-2xl text-blue-700">{ bill.Number }</span>
-						<span class={ BillLevelBadgeClass(bill) }>{ BillLevelLabel(bill) }</span>
-					if bill.Category != "" {
-						<span class="mt-1 text-sm px-2 py-0.5 rounded-full text-white" style={ CategoryBadgeStyle(bill.Category) }>{ bill.Category }</span>
-					}
+				<div class="flex items-start justify-between gap-3">
+					<div class="flex items-start gap-3 flex-wrap">
+						<span class="font-mono font-bold text-2xl text-blue-700">{ bill.Number }</span>
+							<span class={ BillLevelBadgeClass(bill) }>{ BillLevelLabel(bill) }</span>
+						if bill.Category != "" {
+							<span class="mt-1 text-sm px-2 py-0.5 rounded-full text-white" style={ CategoryBadgeStyle(bill.Category) }>{ bill.Category }</span>
+						}
+					</div>
+					@billSubscribeButton(bill.ID, isAuthenticated, isSubscribed)
 				</div>
 				<h1 class="text-xl font-semibold text-gray-900 dark:text-gray-100 mt-2">{ bill.Title }</h1>
 				if bill.ShortTitle != "" && bill.ShortTitle != bill.Title {
@@ -278,22 +281,48 @@ templ billInteractionControls(billID string, isAuthenticated bool) {
 		<div class="flex flex-col gap-1 shrink-0 opacity-40">
 			<div class="relative group flex justify-center">
 				<button type="button" class="text-base cursor-not-allowed" aria-label="Login to share your opinion" aria-disabled="true">👍</button>
-				<span class="pointer-events-none absolute left-full ml-2 top-1/2 -translate-y-1/2 whitespace-nowrap rounded bg-gray-900 px-2 py-1 text-sm font-medium text-white opacity-0 transition-opacity group-hover:opacity-100">
+				<span class="pointer-events-none absolute left-full ml-2 top-1/2 -translate-y-1/2 whitespace-nowrap rounded bg-gray-900 px-2 py-1 text-sm text-white opacity-0 transition-opacity group-hover:opacity-100">
 					login to share your opinion
 				</span>
 			</div>
 			<div class="relative group flex justify-center">
 				<button type="button" class="text-base cursor-not-allowed" aria-label="Login to share your opinion" aria-disabled="true">🤔</button>
-				<span class="pointer-events-none absolute left-full ml-2 top-1/2 -translate-y-1/2 whitespace-nowrap rounded bg-gray-900 px-2 py-1 text-sm font-medium text-white opacity-0 transition-opacity group-hover:opacity-100">
+				<span class="pointer-events-none absolute left-full ml-2 top-1/2 -translate-y-1/2 whitespace-nowrap rounded bg-gray-900 px-2 py-1 text-sm text-white opacity-0 transition-opacity group-hover:opacity-100">
 					login to share your opinion
 				</span>
 			</div>
 			<div class="relative group flex justify-center">
 				<button type="button" class="text-base cursor-not-allowed" aria-label="Login to share your opinion" aria-disabled="true">👎</button>
-				<span class="pointer-events-none absolute left-full ml-2 top-1/2 -translate-y-1/2 whitespace-nowrap rounded bg-gray-900 px-2 py-1 text-sm font-medium text-white opacity-0 transition-opacity group-hover:opacity-100">
+				<span class="pointer-events-none absolute left-full ml-2 top-1/2 -translate-y-1/2 whitespace-nowrap rounded bg-gray-900 px-2 py-1 text-sm text-white opacity-0 transition-opacity group-hover:opacity-100">
 					login to share your opinion
 				</span>
 			</div>
+		</div>
+	}
+}
+
+templ billSubscribeButton(billID string, isAuthenticated bool, isSubscribed bool) {
+	if isAuthenticated {
+		<form method="POST" action="/api/subscribe-bill" class="shrink-0">
+			<input type="hidden" name="bill_id" value={ billID }/>
+			if isSubscribed {
+				<button type="submit" class="btn btn-secondary text-sm" title="Unsubscribe from this bill" aria-label="Unsubscribe from this bill">
+					📌 Subscribed
+				</button>
+			} else {
+				<button type="submit" class="btn btn-secondary text-sm" title="Subscribe to pin this bill to the top of your feed" aria-label="Subscribe to this bill">
+					📌 Subscribe
+				</button>
+			}
+		</form>
+	} else {
+		<div class="shrink-0 relative group">
+			<button type="button" class="btn btn-secondary text-sm opacity-50 cursor-not-allowed" aria-disabled="true" aria-label="Login to subscribe to this bill">
+				📌 Subscribe
+			</button>
+			<span class="pointer-events-none absolute right-0 top-full mt-1 whitespace-nowrap rounded bg-gray-900 px-2 py-1 text-xs text-white opacity-0 transition-opacity group-hover:opacity-100">
+				Login to subscribe to this bill
+			</span>
 		</div>
 	}
 }

@@ -255,6 +255,8 @@ func (s *Server) renderProfile(w http.ResponseWriter, r *http.Request, user stor
 		result = fallbackLookupResult(user, s.store)
 	}
 
+	cats, _ := s.store.GetUserCategoryPreferences(user.ID)
+
 	_ = templates.ProfilePage(
 		s.parliamentStatus(),
 		user,
@@ -265,5 +267,6 @@ func (s *Server) renderProfile(w http.ResponseWriter, r *http.Request, user stor
 		lookupErr,
 		updated,
 		s.riding.PlacesAPIKey(),
+		cats,
 	).Render(r.Context(), w)
 }
