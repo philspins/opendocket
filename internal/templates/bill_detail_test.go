@@ -50,8 +50,14 @@ func TestBillDetail_RendersLoginPromptForGuests(t *testing.T) {
 	if strings.Contains(html, `action="/api/react"`) {
 		t.Fatalf("did not expect reaction forms for guests")
 	}
+	if strings.Contains(html, "absolute inset-0") {
+		t.Fatalf("did not expect overlay prompt for guests")
+	}
 	if !strings.Contains(html, "login to share your opinion") {
-		t.Fatalf("expected login prompt overlay for guests")
+		t.Fatalf("expected hover tooltip prompt for guests")
+	}
+	if !strings.Contains(html, "group-hover:opacity-100") {
+		t.Fatalf("expected guest tooltip to appear on hover")
 	}
 	if !strings.Contains(html, "opacity-40") {
 		t.Fatalf("expected greyed out reaction controls for guests")
