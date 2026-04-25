@@ -99,7 +99,7 @@ func (s *Store) ListBills(f BillFilter) ([]BillRow, int, error) {
 				placeholders[i] = "?"
 				args = append(args, f.SubscribedBillIDs[i])
 			}
-			orderParts = append(orderParts, "CASE WHEN b.id IN ("+strings.Join(placeholders, "," )+") THEN 0 ELSE 1 END")
+			orderParts = append(orderParts, "CASE WHEN b.id IN ("+strings.Join(placeholders, ",")+") THEN 0 ELSE 1 END")
 		}
 		if len(f.PreferredCategories) > 0 {
 			placeholders := make([]string, len(f.PreferredCategories))
