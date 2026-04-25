@@ -59,6 +59,9 @@ func TestBillDetail_RendersLoginPromptForGuests(t *testing.T) {
 	if !strings.Contains(html, "group-hover:opacity-100") {
 		t.Fatalf("expected guest tooltip to appear on hover")
 	}
+	if !strings.Contains(html, "text-sm text-white") {
+		t.Fatalf("expected guest tooltip text size to match summary text")
+	}
 	if !strings.Contains(html, "opacity-40") {
 		t.Fatalf("expected greyed out reaction controls for guests")
 	}
