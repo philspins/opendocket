@@ -360,6 +360,7 @@ func (s *Server) handleBills(w http.ResponseWriter, r *http.Request) {
 func (s *Server) handleBillDetail(w http.ResponseWriter, r *http.Request) {
 	id := r.PathValue("id")
 	ps := s.parliamentStatus()
+	_, isAuthenticated := s.auth.SessionUser(r)
 	bill, err := s.store.GetBill(id)
 	if err != nil {
 		http.NotFound(w, r)
@@ -368,7 +369,7 @@ func (s *Server) handleBillDetail(w http.ResponseWriter, r *http.Request) {
 	stages, _ := s.store.GetBillStages(id)
 	divs, _ := s.store.GetBillDivisions(id)
 	reactions, _ := s.store.GetBillReactionCounts(id)
-	_ = templates.BillDetail(ps, bill, stages, divs, reactions).Render(r.Context(), w)
+	_ = templates.BillDetail(ps, bill, stages, divs, reactions, isAuthenticated).Render(r.Context(), w)
 }
 
 func (s *Server) handleVotes(w http.ResponseWriter, r *http.Request) {
