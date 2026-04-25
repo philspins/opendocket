@@ -184,9 +184,9 @@ The nearest cultural reference points are:
 
 | Role | Typeface | Rationale |
 |------|----------|-----------|
-| **Display / Headlines** | *Playfair Display* or *Libre Baskerville* | Editorial serif. Feels like a newspaper of record. Carries institutional weight without feeling governmental. |
-| **Body / UI** | *Source Sans 3* or *DM Sans* | Humanist sans. Highly readable at small sizes. Pairs cleanly with the serif display face. |
-| **Data / tables / code** | *JetBrains Mono* or *IBM Plex Mono* | Monospace signals precision in the data layer. Used for vote tallies, bill IDs, division numbers. |
+| **Display / Headlines** | *Libre Baskerville* | Editorial serif. Feels like a newspaper of record. Carries institutional weight without feeling governmental. |
+| **Body / UI** | *DM Sans* | Humanist sans. Highly readable at small sizes. Pairs cleanly with the serif display face. |
+| **Data / tables / code** | *Inconsolata* | Monospace signals precision in the data layer. Used for vote tallies, bill IDs, division numbers. |
 
 ### Type principles
 
@@ -218,9 +218,33 @@ The nearest cultural reference points are:
 - Never use colour to communicate party affiliation — that path leads to the site reading as partisan
 - The navy and grey palette should dominate; the red and green appear only in data contexts where a status must be communicated
 
-### Dark mode
+### Dark mode palette
 
-The palette inverts naturally: off-white body text on a near-black (`#0F1117`) background, with the navy elements shifting to the steel blue. The red and green accents remain consistent across both modes.
+| Role | Hex | Name | Usage |
+|------|-----|------|-------|
+| **Background** | `#0D1117` | Midnight Ink | Page background — deep near-black with a blue undertone. Not pure black. |
+| **Surface 1** | `#161D27` | Deep Slate | Card backgrounds, primary panels, sidebars. |
+| **Surface 2** | `#1E2A3A` | Raised Slate | Elevated cards, modals, dropdown menus, hover states on Surface 1. |
+| **Border** | `#243447` | Navy Divide | All borders, dividers, table rules. Visible but quiet. |
+| **Primary** | `#2A5298` | Muted Navy | Primary buttons, active states — the light-mode navy, brightened for dark contexts. |
+| **Primary Bright** | `#5B8DD9` | Clarity Blue | Links, interactive highlights, focus rings — readable against all dark surfaces. |
+| **Text Primary** | `#E8E4DC` | Parchment | Primary body text and headings — warm off-white, not harsh pure white. |
+| **Text Secondary** | `#9BA3AF` | Warm Grey | Secondary text, metadata, vote dates, timestamps. |
+| **Text Muted** | `#6B7280` | Faded Slate | Disabled states, placeholder text, footnotes. |
+| **Alert / Accent** | `#E03E55` | Tempered Red | Flagged votes, accountability alerts — slightly brighter than light-mode red for dark contrast. |
+| **Alert Surface** | `#2A1018` | Red Tint | Background tint for alert/flagged rows in vote tables. |
+| **Positive** | `#3D9970` | Forest | Positive alignment, bills passed with public support — brighter than light-mode green. |
+| **Positive Surface** | `#0D2018` | Green Tint | Background tint for positive alignment rows. |
+| **Data Mono** | `#7BAFD4` | Code Slate | Monospace data: vote tallies, bill IDs, division numbers — cool, clinical, readable. |
+
+### Dark mode design notes
+
+- **Background is not pure black.** Midnight Ink (`#0D1117`) has a blue undertone that keeps it in family with the parliamentary navy without feeling cold or harsh. Pure black makes the navy accents look purple.
+- **Three surface levels.** Background → Surface 1 → Surface 2 creates depth for cards, modals, and hover states without introducing a fourth colour. Each step is subtle — if you can see a strong difference, it's too much contrast.
+- **Text is warm, not white.** Parchment (`#E8E4DC`) carries the warmth of the light-mode off-white into dark mode. Pure white text on dark backgrounds causes eye strain on long reading sessions — important for a data-heavy site.
+- **Accents are slightly brightened.** Both the red and green are ~10% brighter in dark mode than light mode. Dark backgrounds absorb colour; the light-mode values would look muddy without this adjustment.
+- **Links use Clarity Blue, not Primary Navy.** The dark-mode navy (`#2A5298`) is used for primary buttons only. Links use Clarity Blue (`#5B8DD9`), which has enough luminance contrast against all three surface levels to pass WCAG AA without a heavy underline.
+- **Data Mono (Code Slate).** A cool blue-grey (`#7BAFD4`) for monospace data — bill IDs, division numbers, vote tallies. Distinct from both the link colour and body text, which helps users scan data tables quickly.
 
 ---
 
