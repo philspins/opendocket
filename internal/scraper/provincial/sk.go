@@ -2,6 +2,7 @@ package provincial
 
 import (
 	"fmt"
+	"image/color"
 	"log"
 	"net/http"
 	"regexp"
@@ -195,6 +196,40 @@ func crawlSaskatchewanMinutes(minutesURL string, legislature, session int, clien
 // CrawlSaskatchewanMinutes is the exported wrapper.
 func CrawlSaskatchewanMinutes(minutesURL string, legislature, session int, client *http.Client) ([]ProvincialDivisionResult, error) {
 	return crawlSaskatchewanMinutes(minutesURL, legislature, session, client)
+}
+
+func isWarmTanLike(c color.NRGBA) bool {
+	r, g, b := int(c.R), int(c.G), int(c.B)
+	return r >= 170 && r <= 235 &&
+		g >= 150 && g <= 220 &&
+		b >= 120 && b <= 200 &&
+		r >= g && g >= b &&
+		r-b >= 10 && r-b <= 90
+}
+
+func isNeutralGreyLike(c color.NRGBA) bool {
+	r, g, b := int(c.R), int(c.G), int(c.B)
+	maxRGB := r
+	if g > maxRGB {
+		maxRGB = g
+	}
+	if b > maxRGB {
+		maxRGB = b
+	}
+	minRGB := r
+	if g < minRGB {
+		minRGB = g
+	}
+	if b < minRGB {
+		minRGB = b
+	}
+	return r >= 130 && g >= 130 && b >= 130 && maxRGB-minRGB <= 20
+}
+
+// IsSaskatchewanSittingLike returns true for SK sitting-day highlight colors.
+func IsSaskatchewanSittingLike(c color.NRGBA) bool {
+	// SK highlights appear as grey in some exports and warm tan in others.
+	return isNeutralGreyLike(c) || isWarmTanLike(c)
 }
 
 // parseSaskatchewanMinutesDoc is the pure HTML-parsing logic for Saskatchewan Minutes.

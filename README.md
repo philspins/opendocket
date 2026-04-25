@@ -12,6 +12,8 @@ Built with the **GOAT Stack**: Go · Templ · Alpine.js · Tailwind CSS.
 |---|---|---|
 | Go | ≥ 1.24 | https://go.dev/dl/ |
 | GCC / CGo | any | `apt install gcc` / `brew install gcc` (required by `go-sqlite3`) |
+| Poppler (`pdftoppm`) | any | `apt install poppler-utils` / `brew install poppler` (optional, used for PEI calendar PDF OCR) |
+| Tesseract OCR | any | `apt install tesseract-ocr` / `brew install tesseract` (optional, used for PEI calendar PDF OCR) |
 
 ---
 
@@ -192,6 +194,7 @@ The scheduler runs four jobs:
 ```
 
 If `ANTHROPIC_API_KEY` is not set, the AI summarization job will not be able to generate Claude summaries.
+PEI calendar OCR gracefully degrades if `pdftoppm`/`tesseract` are unavailable; calendar extraction still runs with text-based fallback parsing.
 
 ---
 
@@ -237,4 +240,3 @@ internal/
   templates/        Templ UI components
   utils/            HTTP client, URL/ID helpers, date parser
 ```
-

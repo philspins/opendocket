@@ -156,6 +156,9 @@ func CrawlCalendar(conn *sql.DB, client *http.Client, _ time.Duration, sourceURL
 			log.Printf("[calendar] upsert %s: %v", d, err)
 		}
 	}
+	if err := CrawlAndPersistLegislatureCalendars(conn, client); err != nil {
+		log.Printf("[calendar] legislature schedule crawl warning: %v", err)
+	}
 	return nil
 }
 

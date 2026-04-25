@@ -269,6 +269,18 @@ const sampleCalendarHTML = `<html><body>
   </table>
 </body></html>`
 
+const sampleCommonsCalendarHTML = `<html><body>
+	<table class="chamber-calendar">
+		<tbody>
+			<tr>
+				<td valign="top" class="2026-04-22 chamber-meeting">22</td>
+				<td valign="top" class="2026-04-23 chamber-meeting">23</td>
+				<td valign="top" class="adjournment-tabling">24</td>
+			</tr>
+		</tbody>
+	</table>
+</body></html>`
+
 func TestCrawlSittingCalendar_ParsesDates(t *testing.T) {
 	srv := newTestServer(sampleCalendarHTML)
 	defer srv.Close()
@@ -295,6 +307,26 @@ func TestCrawlSittingCalendar_Sorted(t *testing.T) {
 		if dates[i] < dates[i-1] {
 			t.Errorf("dates not sorted: %v", dates)
 		}
+	}
+}
+
+func TestCrawlSittingCalendar_ParsesCommonsChamberMeetingClasses(t *testing.T) {
+	srv := newTestServer(sampleCommonsCalendarHTML)
+	defer srv.Close()
+
+	dates, err := scraper.CrawlSittingCalendar(srv.URL, srv.Client())
+	if err != nil {
+		t.Fatalf("CrawlSittingCalendar: %v", err)
+	}
+	found := make(map[string]bool)
+	for _, d := range dates {
+		found[d] = true
+	}
+	if !found["2026-04-22"] || !found["2026-04-23"] {
+		t.Fatalf("expected chamber-meeting dates, got %v", dates)
+	}
+	if found["2026-04-24"] {
+		t.Fatalf("did not expect adjournment date in sitting dates: %v", dates)
 	}
 }
 

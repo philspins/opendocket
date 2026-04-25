@@ -258,6 +258,73 @@ func TestGetParliamentStatus_NextSitting(t *testing.T) {
 	}
 }
 
+func TestGetJurisdictionStatus_InSessionWithNearbySchedule(t *testing.T) {
+	conn := tempDB(t)
+	st := store.New(conn)
+	today := time.Now().UTC().Format("2006-01-02")
+	_, err := conn.Exec(`INSERT INTO legislature_calendar_dates (jurisdiction, date, last_scraped) VALUES ('provincial-ON', ?, '2026-01-01T00:00:00')`, today)
+	if err != nil {
+		t.Fatalf("insert: %v", err)
+	}
+	status, err := st.GetJurisdictionStatus("provincial-ON")
+	if err != nil {
+		t.Fatalf("GetJurisdictionStatus: %v", err)
+	}
+	if status != "in_session" {
+		t.Fatalf("status=%q want in_session", status)
+	}
+}
+
+func TestGetCombinedJurisdictionStatus_AnyInSessionWins(t *testing.T) {
+	conn := tempDB(t)
+	st := store.New(conn)
+	today := time.Now().UTC().Format("2006-01-02")
+	future := time.Now().UTC().AddDate(0, 3, 0).Format("2006-01-02")
+	if _, err := conn.Exec(`INSERT INTO legislature_calendar_dates (jurisdiction, date, last_scraped) VALUES ('federal-commons', ?, '2026-01-01T00:00:00')`, future); err != nil {
+		t.Fatalf("insert commons: %v", err)
+	}
+	if _, err := conn.Exec(`INSERT INTO legislature_calendar_dates (jurisdiction, date, last_scraped) VALUES ('federal-senate', ?, '2026-01-01T00:00:00')`, today); err != nil {
+		t.Fatalf("insert senate: %v", err)
+	}
+	status, err := st.GetCombinedJurisdictionStatus("federal-commons", "federal-senate")
+	if err != nil {
+		t.Fatalf("GetCombinedJurisdictionStatus: %v", err)
+	}
+	if status != "in_session" {
+		t.Fatalf("status=%q want in_session", status)
+	}
+}
+
+func TestGetJurisdictionStatus_NoFutureDateRecentPastWindowIsTight(t *testing.T) {
+	conn := tempDB(t)
+	st := store.New(conn)
+	now := time.Now().UTC()
+
+	recent := now.AddDate(0, 0, -2).Format("2006-01-02")
+	if _, err := conn.Exec(`INSERT INTO legislature_calendar_dates (jurisdiction, date, last_scraped) VALUES ('provincial-ON', ?, '2026-01-01T00:00:00')`, recent); err != nil {
+		t.Fatalf("insert recent date: %v", err)
+	}
+	status, err := st.GetJurisdictionStatus("provincial-ON")
+	if err != nil {
+		t.Fatalf("GetJurisdictionStatus recent: %v", err)
+	}
+	if status != "in_session" {
+		t.Fatalf("status=%q want in_session for 2-day lookback", status)
+	}
+
+	old := now.AddDate(0, 0, -10).Format("2006-01-02")
+	if _, err := conn.Exec(`INSERT INTO legislature_calendar_dates (jurisdiction, date, last_scraped) VALUES ('provincial-QC', ?, '2026-01-01T00:00:00')`, old); err != nil {
+		t.Fatalf("insert old date: %v", err)
+	}
+	status, err = st.GetJurisdictionStatus("provincial-QC")
+	if err != nil {
+		t.Fatalf("GetJurisdictionStatus old: %v", err)
+	}
+	if status != "on_break" {
+		t.Fatalf("status=%q want on_break for 10-day lookback with no future dates", status)
+	}
+}
+
 func TestGetMemberStats_Basic(t *testing.T) {
 	conn := tempDB(t)
 	st := store.New(conn)

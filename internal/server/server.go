@@ -20,6 +20,8 @@ import (
 	"github.com/philspins/open-democracy/internal/templates"
 )
 
+// localRidingContextToken indicates local riding context exists without exposing
+// specific riding identifiers to the template.
 const localRidingContextToken = "local-riding"
 
 // Server holds application dependencies.
@@ -143,12 +145,14 @@ func (s *Server) parliamentStatus() store.ParliamentStatus {
 
 func (s *Server) handleHome(w http.ResponseWriter, r *http.Request) {
 	ps := s.parliamentStatus()
-	bills, _ := s.store.GetRecentBills(5)
-	divs, _ := s.store.GetRecentDivisions(10)
 	var (
-		savedAddress  string
-		federalRep    opennorth.Representative
-		provincialRep opennorth.Representative
+		savedAddress    string
+		federalRep      opennorth.Representative
+		provincialRep   opennorth.Representative
+		federalVotes    []store.VoteRow
+		provincialVotes []store.VoteRow
+		federalStatus   = parliamentStatusText(ps.Status)
+		provStatus      = parliamentStatusText("status_unavailable")
 	)
 	if user, ok := s.auth.SessionUser(r); ok {
 		result := fallbackLookupResult(user, s.store)
@@ -164,8 +168,172 @@ func (s *Server) handleHome(w http.ResponseWriter, r *http.Request) {
 		}
 		federalRep = result.FederalRepresentative
 		provincialRep = result.ProvincialRepresentative
+
 	}
-	_ = templates.Home(ps, bills, divs, savedAddress, federalRep, provincialRep).Render(r.Context(), w)
+	if memberID := s.resolveRepresentativeMemberID(federalRep, true); memberID != "" {
+		votes, err := s.store.GetMemberVotes(memberID, 100)
+		if err != nil {
+			log.Printf("home: failed loading federal member votes for %q: %v", memberID, err)
+		} else {
+			federalVotes = recentBillVotes(votes, 5)
+		}
+	}
+	provincialProvince := ""
+	if memberID := s.resolveRepresentativeMemberID(provincialRep, false); memberID != "" {
+		votes, err := s.store.GetMemberVotes(memberID, 100)
+		if err != nil {
+			log.Printf("home: failed loading provincial member votes for %q: %v", memberID, err)
+		} else {
+			provincialVotes = recentBillVotes(votes, 5)
+		}
+		if member, err := s.store.GetMember(memberID); err == nil {
+			provincialProvince = member.Province
+		}
+	}
+	if status, err := s.store.GetCombinedJurisdictionStatus("federal-commons", "federal-senate"); err == nil {
+		if resolved := strings.TrimSpace(parliamentStatusText(status)); resolved != "" && resolved != "status unavailable" {
+			federalStatus = resolved
+		}
+	}
+	if key := provinceJurisdictionKey(provincialProvince); key != "" {
+		if status, err := s.store.GetJurisdictionStatus(key); err == nil {
+			if resolved := strings.TrimSpace(parliamentStatusText(status)); resolved != "" && resolved != "status unavailable" {
+				provStatus = resolved
+			}
+		}
+	}
+	_ = templates.Home(ps, provincialVotes, federalVotes, savedAddress, federalRep, provincialRep, provStatus, federalStatus).Render(r.Context(), w)
+}
+
+func provinceJurisdictionKey(province string) string {
+	p := strings.ToUpper(strings.TrimSpace(province))
+	switch p {
+	case "AB", "ALBERTA":
+		return "provincial-AB"
+	case "BC", "BRITISH COLUMBIA":
+		return "provincial-BC"
+	case "MB", "MANITOBA":
+		return "provincial-MB"
+	case "NB", "NEW BRUNSWICK":
+		return "provincial-NB"
+	case "NL", "NEWFOUNDLAND AND LABRADOR":
+		return "provincial-NL"
+	case "NS", "NOVA SCOTIA":
+		return "provincial-NS"
+	case "ON", "ONTARIO":
+		return "provincial-ON"
+	case "PE", "PEI", "PRINCE EDWARD ISLAND":
+		return "provincial-PE"
+	case "QC", "QUEBEC", "QUÉBEC":
+		return "provincial-QC"
+	case "SK", "SASKATCHEWAN":
+		return "provincial-SK"
+	case "YT", "YUKON":
+		return "provincial-YT"
+	case "NT", "NORTHWEST TERRITORIES":
+		return "provincial-NT"
+	case "NU", "NUNAVUT":
+		return "provincial-NU"
+	default:
+		return ""
+	}
+}
+
+func (s *Server) resolveRepresentativeMemberID(rep opennorth.Representative, federal bool) string {
+	if id := strings.TrimSpace(rep.LocalMemberID); id != "" {
+		return id
+	}
+	ridingName := strings.TrimSpace(rep.DistrictName)
+	if ridingName == "" {
+		return ""
+	}
+	members, err := s.store.GetMembersByRiding(ridingName)
+	if err != nil || len(members) == 0 {
+		return ""
+	}
+
+	targetLevel := "provincial"
+	if federal {
+		targetLevel = "federal"
+	}
+	name := strings.TrimSpace(rep.Name)
+	fallback := ""
+	anyLevelNameMatch := ""
+	for _, member := range members {
+		nameMatch := name != "" && strings.EqualFold(strings.TrimSpace(member.Name), name)
+		if !strings.EqualFold(strings.TrimSpace(member.GovernmentLevel), targetLevel) {
+			if anyLevelNameMatch == "" && nameMatch {
+				anyLevelNameMatch = member.ID
+			}
+			continue
+		}
+		if fallback == "" {
+			fallback = member.ID
+		}
+		if nameMatch {
+			return member.ID
+		}
+	}
+	if fallback != "" {
+		return fallback
+	}
+	if anyLevelNameMatch != "" {
+		return anyLevelNameMatch
+	}
+	return ""
+}
+
+func recentBillVotes(votes []store.VoteRow, limit int) []store.VoteRow {
+	if limit <= 0 {
+		limit = 5
+	}
+	out := make([]store.VoteRow, 0, limit)
+	seen := make(map[string]struct{}, len(votes))
+	// First pass: prefer votes linked to bills.
+	for _, vote := range votes {
+		billID := strings.TrimSpace(vote.BillID)
+		if billID == "" {
+			continue
+		}
+		if _, ok := seen[billID]; ok {
+			continue
+		}
+		seen[billID] = struct{}{}
+		out = append(out, vote)
+		if len(out) == limit {
+			return out
+		}
+	}
+	// Second pass: fill remaining slots from non-bill votes (e.g. provincial divisions).
+	for _, vote := range votes {
+		if strings.TrimSpace(vote.BillID) != "" {
+			continue
+		}
+		key := strings.TrimSpace(vote.DivisionID)
+		if key == "" {
+			continue
+		}
+		if _, ok := seen[key]; ok {
+			continue
+		}
+		seen[key] = struct{}{}
+		out = append(out, vote)
+		if len(out) == limit {
+			return out
+		}
+	}
+	return out
+}
+
+func parliamentStatusText(status string) string {
+	switch strings.TrimSpace(status) {
+	case "in_session":
+		return "in session"
+	case "on_break":
+		return "on break"
+	default:
+		return "status unavailable"
+	}
 }
 
 func (s *Server) handleBills(w http.ResponseWriter, r *http.Request) {

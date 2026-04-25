@@ -8,6 +8,7 @@ import (
 	"sort"
 	"strconv"
 	"strings"
+	"time"
 
 	"github.com/PuerkitoBio/goquery"
 	"github.com/philspins/open-democracy/internal/utils"
@@ -40,6 +41,12 @@ func CrawlOntarioBills(indexURL string, legislature, session int, client *http.C
 
 var ontarioDivCountRe = regexp.MustCompile(`\((\d+)\)`)
 var ontarioHouseDocDatePathRe = regexp.MustCompile(`/parliament-\d+/session-\d+/(\d{4}-\d{2}-\d{2})/`)
+var ontarioExceptionSameMoRe = regexp.MustCompile(`(?i)\b([A-Za-z]+)\s+(\d{1,2})\s+to\s+(\d{1,2})\b`)
+var ontarioExceptionCrossMoRe = regexp.MustCompile(`(?i)\b([A-Za-z]+)\s+(\d{1,2})\s+to\s+([A-Za-z]+)\s+(\d{1,2})\b`)
+var ontarioExceptionSingleRe = regexp.MustCompile(`(?i)\b([A-Za-z]+)\s+(\d{1,2})\b`)
+var anyCalendarYearRe = regexp.MustCompile(`(?i)Parliamentary calendar\s+\d{4}`)
+var ontarioCalendarDateRe = regexp.MustCompile(`\b(?:January|February|March|April|May|June|July|August|September|October|November|December)\s+\d{1,2},?\s+\d{4}\b`)
+var stripHTMLTagRe = regexp.MustCompile(`<[^>]+>`)
 
 // CrawlOntarioVPSittingDates fetches the Ontario legislature session index page
 // and returns the list of sitting dates that have a Votes and Proceedings document.
@@ -137,6 +144,128 @@ func crawlOntarioVPDay(vpURL string, parliament, session int, date string, clien
 // CrawlOntarioVPDay is the exported wrapper.
 func CrawlOntarioVPDay(vpURL string, parliament, session int, date string, client *http.Client) ([]ProvincialDivisionResult, error) {
 	return crawlOntarioVPDay(vpURL, parliament, session, date, client)
+}
+
+// OntarioCalendarDates parses the Ontario parliamentary calendar page for in-session dates.
+func OntarioCalendarDates(body string, year int) ([]string, bool) {
+	text := normalizeCalendarText(body)
+	yearText, ok := ontarioCalendarTextForYear(text, year)
+	if !ok {
+		return nil, false
+	}
+	exceptionsIdx := strings.Index(strings.ToLower(yearText), "with the following exceptions")
+	if exceptionsIdx < 0 {
+		return nil, false
+	}
+	prefix := yearText[:exceptionsIdx]
+	mainDates := ontarioCalendarDateRe.FindAllString(prefix, -1)
+	if len(mainDates) < 2 {
+		return nil, false
+	}
+	mainStart, err := time.Parse("January 2, 2006", mainDates[len(mainDates)-2])
+	if err != nil {
+		return nil, false
+	}
+	mainEnd, err := time.Parse("January 2, 2006", mainDates[len(mainDates)-1])
+	if err != nil {
+		return nil, false
+	}
+	mainStart = dayStartUTC(mainStart)
+	mainEnd = dayStartUTC(mainEnd)
+	exceptionsText := yearText[exceptionsIdx:]
+
+	excluded := map[string]struct{}{}
+	for _, m := range ontarioExceptionCrossMoRe.FindAllStringSubmatch(exceptionsText, -1) {
+		if len(m) != 5 {
+			continue
+		}
+		startDate, err1 := parseMonthDayWithYear(m[1], m[2], year)
+		endDate, err2 := parseMonthDayWithYear(m[3], m[4], year)
+		if err1 != nil || err2 != nil {
+			continue
+		}
+		for d := startDate; !d.After(endDate); d = d.AddDate(0, 0, 1) {
+			excluded[d.Format("2006-01-02")] = struct{}{}
+		}
+	}
+	for _, m := range ontarioExceptionSameMoRe.FindAllStringSubmatch(exceptionsText, -1) {
+		if len(m) != 4 {
+			continue
+		}
+		startDate, err1 := parseMonthDayWithYear(m[1], m[2], year)
+		endDate, err2 := parseMonthDayWithYear(m[1], m[3], year)
+		if err1 != nil || err2 != nil {
+			continue
+		}
+		for d := startDate; !d.After(endDate); d = d.AddDate(0, 0, 1) {
+			excluded[d.Format("2006-01-02")] = struct{}{}
+		}
+	}
+	for _, m := range ontarioExceptionSingleRe.FindAllStringSubmatch(exceptionsText, -1) {
+		if len(m) != 3 {
+			continue
+		}
+		d, err := parseMonthDayWithYear(m[1], m[2], year)
+		if err != nil {
+			continue
+		}
+		excluded[d.Format("2006-01-02")] = struct{}{}
+	}
+
+	var out []string
+	for d := mainStart; !d.After(mainEnd); d = d.AddDate(0, 0, 1) {
+		wd := d.Weekday()
+		if wd < time.Monday || wd > time.Thursday {
+			continue
+		}
+		iso := d.Format("2006-01-02")
+		if _, skip := excluded[iso]; skip {
+			continue
+		}
+		out = append(out, iso)
+	}
+	return out, true
+}
+
+func normalizeCalendarText(body string) string {
+	text := stripHTMLTagRe.ReplaceAllString(body, " ")
+	text = strings.ReplaceAll(text, "\u00a0", " ")
+	return strings.Join(strings.Fields(text), " ")
+}
+
+func parseMonthDayWithYear(month, day string, year int) (time.Time, error) {
+	dayNum, err := strconv.Atoi(strings.TrimSpace(day))
+	if err != nil {
+		return time.Time{}, err
+	}
+	dateStr := strings.TrimSpace(month) + " " + strconv.Itoa(dayNum) + ", " + strconv.Itoa(year)
+	t, err := time.Parse("January 2, 2006", dateStr)
+	if err != nil {
+		return time.Time{}, err
+	}
+	return dayStartUTC(t), nil
+}
+
+func dayStartUTC(t time.Time) time.Time {
+	return time.Date(t.Year(), t.Month(), t.Day(), 0, 0, 0, 0, time.UTC)
+}
+
+func ontarioCalendarTextForYear(text string, year int) (string, bool) {
+	marker := "Parliamentary calendar " + strconv.Itoa(year)
+	start := strings.Index(strings.ToLower(text), strings.ToLower(marker))
+	if start < 0 {
+		return "", false
+	}
+	rest := text[start:]
+	loc := anyCalendarYearRe.FindStringIndex(rest[len(marker):])
+	if loc == nil {
+		return rest, true
+	}
+	sectionEnd := len(marker) + loc[0]
+	if sectionEnd <= 0 || sectionEnd > len(rest) {
+		return rest, true
+	}
+	return rest[:sectionEnd], true
 }
 
 func normaliseOntarioEventText(text string) string {

@@ -601,6 +601,12 @@ func TestHandleHome_UsesSavedRepresentativesAndHidesLookupHero(t *testing.T) {
 	if !strings.Contains(body, "John Fraser") {
 		t.Fatalf("expected provincial representative name from local member in home page body")
 	}
+	if !strings.Contains(body, "href=\"/members/mp-ottawa-centre\"") {
+		t.Fatalf("expected federal representative name to link to member profile")
+	}
+	if !strings.Contains(body, "href=\"/members/mpp-ottawa-south\"") {
+		t.Fatalf("expected provincial representative name to link to member profile")
+	}
 	if strings.Contains(body, "Find Your Riding") {
 		t.Fatalf("expected lookup hero to be hidden once address is saved")
 	}
@@ -728,6 +734,231 @@ func TestHandleHome_UnauthenticatedUsesUnicodeRidingCookiesFromLookup(t *testing
 	body := homeRR.Body.String()
 	if !strings.Contains(body, federalRiding) || !strings.Contains(body, provincialRiding) {
 		t.Fatalf("expected unicode riding context from lookup cookies in home page body")
+	}
+}
+
+func TestHandleHome_ShowsRecentBillVotesForSelectedRepresentatives(t *testing.T) {
+	srv, st, conn := newTestServerWithConn(t)
+
+	if err := db.UpsertMember(conn, db.Member{
+		ID:              "mp-1",
+		Name:            "Jane MP",
+		Riding:          "Ottawa Centre",
+		Chamber:         "commons",
+		Active:          true,
+		LastScraped:     "2026-01-01T00:00:00Z",
+		GovernmentLevel: "federal",
+	}); err != nil {
+		t.Fatalf("UpsertMember mp-1: %v", err)
+	}
+	if err := db.UpsertMember(conn, db.Member{
+		ID:              "mpp-1",
+		Name:            "John MPP",
+		Riding:          "Ottawa South",
+		Chamber:         "ontario",
+		Active:          true,
+		LastScraped:     "2026-01-01T00:00:00Z",
+		GovernmentLevel: "provincial",
+	}); err != nil {
+		t.Fatalf("UpsertMember mpp-1: %v", err)
+	}
+	if err := db.UpsertMember(conn, db.Member{
+		ID:              "other-1",
+		Name:            "Another MP",
+		Riding:          "Elsewhere",
+		Chamber:         "commons",
+		Active:          true,
+		LastScraped:     "2026-01-01T00:00:00Z",
+		GovernmentLevel: "federal",
+	}); err != nil {
+		t.Fatalf("UpsertMember other-1: %v", err)
+	}
+
+	for _, bill := range []db.Bill{
+		{ID: "bill-fed-1", Parliament: 45, Session: 1, Number: "C-1", Title: "Federal bill one", LastScraped: "2026-01-01T00:00:00Z"},
+		{ID: "bill-fed-2", Parliament: 45, Session: 1, Number: "C-2", Title: "Federal bill two", LastScraped: "2026-01-01T00:00:00Z"},
+		{ID: "bill-prov-1", Parliament: 1, Session: 1, Number: "ON-1", Title: "Provincial bill one", LastScraped: "2026-01-01T00:00:00Z"},
+		{ID: "bill-other", Parliament: 45, Session: 1, Number: "C-999", Title: "Other bill", LastScraped: "2026-01-01T00:00:00Z"},
+	} {
+		if err := db.UpsertBill(conn, bill); err != nil {
+			t.Fatalf("UpsertBill %s: %v", bill.ID, err)
+		}
+	}
+
+	for _, div := range []db.Division{
+		{ID: "div-fed-old", Parliament: 45, Session: 1, Number: 1, Date: "2026-01-01", BillID: "bill-fed-1", Description: "Federal bill one older vote", Result: "Passed", Chamber: "commons", LastScraped: "2026-01-01T00:00:00Z"},
+		{ID: "div-fed-new", Parliament: 45, Session: 1, Number: 2, Date: "2026-02-01", BillID: "bill-fed-1", Description: "Federal bill one latest vote", Result: "Passed", Chamber: "commons", LastScraped: "2026-01-01T00:00:00Z"},
+		{ID: "div-fed-two", Parliament: 45, Session: 1, Number: 3, Date: "2026-01-15", BillID: "bill-fed-2", Description: "Federal bill two vote", Result: "Passed", Chamber: "commons", LastScraped: "2026-01-01T00:00:00Z"},
+		{ID: "div-prov-one", Parliament: 1, Session: 1, Number: 1, Date: "2026-01-20", BillID: "bill-prov-1", Description: "Provincial bill vote", Result: "Passed", Chamber: "ontario", LastScraped: "2026-01-01T00:00:00Z"},
+		{ID: "div-other", Parliament: 45, Session: 1, Number: 4, Date: "2026-02-03", BillID: "bill-other", Description: "Unrelated member vote", Result: "Passed", Chamber: "commons", LastScraped: "2026-01-01T00:00:00Z"},
+	} {
+		if err := db.UpsertDivision(conn, div); err != nil {
+			t.Fatalf("UpsertDivision %s: %v", div.ID, err)
+		}
+	}
+
+	for _, mv := range []struct {
+		divID    string
+		memberID string
+		vote     string
+	}{
+		{divID: "div-fed-old", memberID: "mp-1", vote: "Yea"},
+		{divID: "div-fed-new", memberID: "mp-1", vote: "Nay"},
+		{divID: "div-fed-two", memberID: "mp-1", vote: "Yea"},
+		{divID: "div-prov-one", memberID: "mpp-1", vote: "Yea"},
+		{divID: "div-other", memberID: "other-1", vote: "Nay"},
+	} {
+		if err := db.UpsertMemberVote(conn, mv.divID, mv.memberID, mv.vote); err != nil {
+			t.Fatalf("UpsertMemberVote %+v: %v", mv, err)
+		}
+	}
+
+	u, err := st.UpsertUser("home-votes@example.com")
+	if err != nil {
+		t.Fatalf("UpsertUser: %v", err)
+	}
+	if _, err := st.UpdateUserLocation(u.ID, "Ottawa Centre", "Ottawa South"); err != nil {
+		t.Fatalf("UpdateUserLocation: %v", err)
+	}
+	sid, err := st.CreateSession(u.ID, time.Hour)
+	if err != nil {
+		t.Fatalf("CreateSession: %v", err)
+	}
+
+	req := httptest.NewRequest(http.MethodGet, "/", nil)
+	req.AddCookie(&http.Cookie{Name: "od_session", Value: sid})
+	rr := httptest.NewRecorder()
+	srv.ServeHTTP(rr, req)
+	if rr.Code != http.StatusOK {
+		t.Fatalf("status=%d want %d", rr.Code, http.StatusOK)
+	}
+	body := rr.Body.String()
+	for _, expected := range []string{
+		"Federal bill one latest vote",
+		"Federal bill two vote",
+		"Provincial bill vote",
+		">Nay<",
+		">Yea<",
+	} {
+		if !strings.Contains(body, expected) {
+			t.Fatalf("expected homepage to contain %q", expected)
+		}
+	}
+	for _, excluded := range []string{
+		"Federal bill one older vote",
+		"Unrelated member vote",
+	} {
+		if strings.Contains(body, excluded) {
+			t.Fatalf("did not expect homepage to contain %q", excluded)
+		}
+	}
+}
+
+func TestRecentBillVotes_DeduplicatesAndFallsBackToNonBillDivisions(t *testing.T) {
+	// Bill-linked votes come first and are deduplicated; non-bill votes fill remaining slots.
+	got := recentBillVotes([]store.VoteRow{
+		{BillID: "", DivisionID: "d-0", Description: "No bill"},
+		{BillID: "b-1", DivisionID: "d-1", Description: "Latest for b-1"},
+		{BillID: "b-1", DivisionID: "d-1b", Description: "Older for b-1"},
+		{BillID: "b-2", DivisionID: "d-2", Description: "Only for b-2"},
+	}, 5)
+
+	if len(got) != 3 {
+		t.Fatalf("len=%d want 3 (2 bill + 1 non-bill fallback)", len(got))
+	}
+	if got[0].Description != "Latest for b-1" {
+		t.Fatalf("first description=%q want latest b-1 vote", got[0].Description)
+	}
+	if got[1].Description != "Only for b-2" {
+		t.Fatalf("second description=%q want b-2 vote", got[1].Description)
+	}
+	if got[2].Description != "No bill" {
+		t.Fatalf("third description=%q want fallback non-bill vote", got[2].Description)
+	}
+
+	// With a tight limit, non-bill votes should NOT appear if bill slots are full.
+	got2 := recentBillVotes([]store.VoteRow{
+		{BillID: "", DivisionID: "d-0", Description: "No bill"},
+		{BillID: "b-1", DivisionID: "d-1", Description: "B1 vote"},
+		{BillID: "b-2", DivisionID: "d-2", Description: "B2 vote"},
+	}, 2)
+	if len(got2) != 2 {
+		t.Fatalf("len=%d want 2", len(got2))
+	}
+	for _, v := range got2 {
+		if strings.TrimSpace(v.BillID) == "" {
+			t.Fatalf("expected only bill votes when limit is filled by bills, got non-bill: %q", v.Description)
+		}
+	}
+
+	// With only non-bill votes (e.g. provincial legislature), all slots fill from divisions.
+	got3 := recentBillVotes([]store.VoteRow{
+		{BillID: "", DivisionID: "d-a", Description: "Div A"},
+		{BillID: "", DivisionID: "d-b", Description: "Div B"},
+		{BillID: "", DivisionID: "d-a", Description: "Div A duplicate"},
+	}, 5)
+	if len(got3) != 2 {
+		t.Fatalf("len=%d want 2 unique non-bill votes", len(got3))
+	}
+
+	got4 := recentBillVotes([]store.VoteRow{
+		{BillID: "", DivisionID: "", Description: "No division ID"},
+		{BillID: "", DivisionID: "d-z", Description: "Has division ID"},
+	}, 5)
+	if len(got4) != 1 || got4[0].DivisionID != "d-z" {
+		t.Fatalf("expected only non-bill votes with division IDs, got %+v", got4)
+	}
+}
+
+func TestResolveRepresentativeMemberID_DoesNotFallbackToWrongGovernmentLevel(t *testing.T) {
+	srv, _, conn := newTestServerWithConn(t)
+	for _, member := range []db.Member{
+		{
+			ID:              "federal-ottawa-centre",
+			Name:            "Federal Rep",
+			Riding:          "Ottawa Centre",
+			Chamber:         "commons",
+			Active:          true,
+			GovernmentLevel: "federal",
+			LastScraped:     "2026-01-01T00:00:00Z",
+		},
+		{
+			ID:              "provincial-ottawa-centre",
+			Name:            "Provincial Rep",
+			Riding:          "Ottawa Centre",
+			Chamber:         "ontario",
+			Active:          true,
+			GovernmentLevel: "provincial",
+			LastScraped:     "2026-01-01T00:00:00Z",
+		},
+	} {
+		if err := db.UpsertMember(conn, member); err != nil {
+			t.Fatalf("UpsertMember %s: %v", member.ID, err)
+		}
+	}
+
+	federalID := srv.resolveRepresentativeMemberID(opennorth.Representative{
+		Name:         "No Match",
+		DistrictName: "Ottawa Centre",
+	}, true)
+	if federalID != "federal-ottawa-centre" {
+		t.Fatalf("federalID=%q want federal-ottawa-centre", federalID)
+	}
+
+	provincialID := srv.resolveRepresentativeMemberID(opennorth.Representative{
+		Name:         "No Match",
+		DistrictName: "Ottawa Centre",
+	}, false)
+	if provincialID != "provincial-ottawa-centre" {
+		t.Fatalf("provincialID=%q want provincial-ottawa-centre", provincialID)
+	}
+
+	missingLevelID := srv.resolveRepresentativeMemberID(opennorth.Representative{
+		Name:         "No Match",
+		DistrictName: "No Such Riding",
+	}, false)
+	if missingLevelID != "" {
+		t.Fatalf("missingLevelID=%q want empty", missingLevelID)
 	}
 }
 

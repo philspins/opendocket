@@ -7,7 +7,7 @@ import (
 	"github.com/philspins/open-democracy/internal/store"
 )
 
-templ Home(ps store.ParliamentStatus, bills []store.BillRow, divs []store.DivisionRow, savedAddress string, federalRep opennorth.Representative, provincialRep opennorth.Representative) {
+templ Home(ps store.ParliamentStatus, provincialVotes []store.VoteRow, federalVotes []store.VoteRow, savedAddress string, federalRep opennorth.Representative, provincialRep opennorth.Representative, provincialStatus string, federalStatus string) {
 	@Layout("Home", ps) {
 		{{
 			provParty := provincialRep.PartyName
@@ -41,9 +41,21 @@ templ Home(ps store.ParliamentStatus, bills []store.BillRow, divs []store.Divisi
 
 			<section class="rep-grid">
 				<div>
+					{{
+						provName, provRole := homeRepresentativeNameRole(provincialRep, "Your current provincial representative", "Provincial representative")
+					}}
 					<div class="px-5 py-3 text-sm" style={ partyBannerStyle(provParty) }>
 						<div class="flex items-start justify-between gap-3">
-							<h3 class="text-base font-bold leading-tight">{ homeRepresentativeHeading(provincialRep, "Your current provincial representative", "Provincial representative") }</h3>
+							<h3 class="text-base font-bold leading-tight">
+								if strings.TrimSpace(provincialRep.LocalMemberID) != "" {
+									<a href={ templ.SafeURL("/members/" + strings.TrimSpace(provincialRep.LocalMemberID)) } class="hover:underline">{ provName }</a>
+								} else {
+									{ provName }
+								}
+								if provRole != "" {
+									{ " (" + provRole + ")" }
+								}
+							</h3>
 							if strings.TrimSpace(provincialRep.DistrictName) != "" {
 								<h4 class="text-base font-semibold text-right leading-tight">{ strings.TrimSpace(provincialRep.DistrictName) }</h4>
 							}
@@ -53,37 +65,51 @@ templ Home(ps store.ParliamentStatus, bills []store.BillRow, divs []store.Divisi
 						}
 					</div>
 					<div class="px-5 py-2 text-sm text-gray-700 border-b border-gray-100">
-						Parliament is currently: <strong>{ statusPhrase(ps.Status) }</strong>
+						Parliament is currently: <strong>{ provincialStatus }</strong>
 					</div>
 					<div class="p-5 space-y-4">
 						<div class="title-row">
-							<h2 class="text-xl">Bills Category</h2>
-							<a href="/bills" class="text-sm text-blue-700 hover:underline">All bills →</a>
+							<h2 class="text-xl">Bills voted on by your rep</h2>
+							<a href="/votes" class="text-sm text-blue-700 hover:underline">All votes →</a>
 						</div>
 						<div class="space-y-3">
-							for _, b := range bills {
+							for _, v := range provincialVotes {
 								<div class="surface-card p-3">
 									<div class="flex items-center justify-between gap-2">
-										<a href={ templ.SafeURL("/bills/" + b.ID) } class="font-mono font-semibold text-blue-700">{ b.Number }</a>
-										if b.Category != "" {
-											<span class="text-xs px-2 py-0.5 rounded-full text-white" style={ CategoryBadgeStyle(b.Category) }>{ b.Category }</span>
+										if v.BillID != "" && v.BillNumber != "" {
+											<a href={ templ.SafeURL("/bills/" + v.BillID) } class="font-mono font-semibold text-blue-700">{ v.BillNumber }</a>
+										} else if v.BillNumber != "" {
+											<span class="font-mono font-semibold text-gray-700">{ v.BillNumber }</span>
 										}
+										<span class={ VoteBadgeClass(v.Vote) }>{ v.Vote }</span>
 									</div>
-									<p class="mt-2 text-sm text-gray-700 line-clamp-2">{ ShortOrFullTitle(b) }</p>
-									<p class="mt-2 text-xs text-gray-500">{ StageLabel(b.CurrentStage) } · { FormatDate(b.LastActivityDate) }</p>
+									<p class="mt-2 text-sm text-gray-700 line-clamp-2">{ v.Description }</p>
+									<p class="mt-2 text-xs text-gray-500">{ FormatDate(v.Date) }</p>
 								</div>
 							}
-							if len(bills) == 0 {
-								<div class="empty-state text-sm">No bills available yet.</div>
+							if len(provincialVotes) == 0 {
+								<div class="empty-state text-sm">No recorded bill votes yet.</div>
 							}
 						</div>
 					</div>
 				</div>
 
 				<div>
+					{{
+						fedName, fedRole := homeRepresentativeNameRole(federalRep, "Your current federal representative", "Federal representative")
+					}}
 					<div class="px-5 py-3 text-sm" style={ partyBannerStyle(federalParty) }>
 						<div class="flex items-start justify-between gap-3">
-							<h3 class="text-base font-bold leading-tight">{ homeRepresentativeHeading(federalRep, "Your current federal representative", "Federal representative") }</h3>
+							<h3 class="text-base font-bold leading-tight">
+								if strings.TrimSpace(federalRep.LocalMemberID) != "" {
+									<a href={ templ.SafeURL("/members/" + strings.TrimSpace(federalRep.LocalMemberID)) } class="hover:underline">{ fedName }</a>
+								} else {
+									{ fedName }
+								}
+								if fedRole != "" {
+									{ " (" + fedRole + ")" }
+								}
+							</h3>
 							if strings.TrimSpace(federalRep.DistrictName) != "" {
 								<h4 class="text-base font-semibold text-right leading-tight">{ strings.TrimSpace(federalRep.DistrictName) }</h4>
 							}
@@ -93,50 +119,32 @@ templ Home(ps store.ParliamentStatus, bills []store.BillRow, divs []store.Divisi
 						}
 					</div>
 					<div class="px-5 py-2 text-sm text-gray-700 border-b border-gray-100">
-						Parliament is currently: <strong>{ statusPhrase(ps.Status) }</strong>
+						Parliament is currently: <strong>{ federalStatus }</strong>
 					</div>
 					<div class="p-5 space-y-4">
 						<div class="title-row">
 							<h2 class="text-xl">Bills voted on by your rep</h2>
 							<a href="/votes" class="text-sm text-blue-700 hover:underline">All votes →</a>
 						</div>
-						<div class="table-shell overflow-x-auto">
-							<table class="min-w-full text-sm">
-								<thead>
-									<tr class="text-left text-xs text-gray-500 border-b border-gray-200">
-										<th class="px-4 py-3">Date</th>
-										<th class="px-4 py-3">Division</th>
-										<th class="px-4 py-3 text-right">How many voted</th>
-									</tr>
-								</thead>
-								<tbody class="divide-y divide-gray-100">
-									for _, d := range divs {
-										<tr>
-											<td class="px-4 py-2 text-gray-500 whitespace-nowrap">{ FormatDate(d.Date) }</td>
-											<td class="px-4 py-2">
-												if d.BillID != "" {
-													<a href={ templ.SafeURL("/bills/" + d.BillID) } class="font-medium text-blue-700 truncate max-w-xs hover:underline block">{ d.Description }</a>
-												} else {
-													<p class="font-medium text-gray-800 truncate max-w-xs">{ d.Description }</p>
-												}
-												if d.BillNumber != "" {
-													<a href={ templ.SafeURL("/bills/" + d.BillID) } class="font-mono text-blue-700 text-xs hover:underline">{ d.BillNumber }</a>
-												}
-											</td>
-											<td class="px-4 py-2 text-right font-semibold text-gray-700">{ fmt.Sprint(d.Yeas + d.Nays) }</td>
-										</tr>
-									}
-									if len(divs) == 0 {
-										<tr>
-											<td colspan="3" class="px-4 py-8 text-center text-gray-500">No votes recorded yet.</td>
-										</tr>
-									}
-								</tbody>
-							</table>
+						<div class="space-y-3">
+							for _, v := range federalVotes {
+								<div class="surface-card p-3">
+									<div class="flex items-center justify-between gap-2">
+										if v.BillID != "" && v.BillNumber != "" {
+											<a href={ templ.SafeURL("/bills/" + v.BillID) } class="font-mono font-semibold text-blue-700">{ v.BillNumber }</a>
+										} else if v.BillNumber != "" {
+											<span class="font-mono font-semibold text-gray-700">{ v.BillNumber }</span>
+										}
+										<span class={ VoteBadgeClass(v.Vote) }>{ v.Vote }</span>
+									</div>
+									<p class="mt-2 text-sm text-gray-700 line-clamp-2">{ v.Description }</p>
+									<p class="mt-2 text-xs text-gray-500">{ FormatDate(v.Date) }</p>
+								</div>
+							}
+							if len(federalVotes) == 0 {
+								<div class="empty-state text-sm">No recorded bill votes yet.</div>
+							}
 						</div>
-						<p class="text-xs text-gray-500">
-							General vote consensus snapshot: { fmt.Sprint(averageTurnout(divs)) } average voters per recorded division.
-						</p>
 					</div>
 				</div>
 			</section>
@@ -145,16 +153,16 @@ templ Home(ps store.ParliamentStatus, bills []store.BillRow, divs []store.Divisi
 				<h2 class="text-xl">Overall</h2>
 				<div class="metric-grid mt-4">
 					<div class="metric-card">
-						<p class="text-2xl font-bold text-gray-900">{ fmt.Sprint(len(bills)) }</p>
-						<p class="text-xs text-gray-500 mt-1">Recent bills tracked</p>
+						<p class="text-2xl font-bold text-gray-900">{ fmt.Sprint(len(provincialVotes)) }</p>
+						<p class="text-xs text-gray-500 mt-1">Recent provincial bill votes</p>
 					</div>
 					<div class="metric-card">
-						<p class="text-2xl font-bold text-gray-900">{ fmt.Sprint(len(divs)) }</p>
-						<p class="text-xs text-gray-500 mt-1">Recent divisions tracked</p>
+						<p class="text-2xl font-bold text-gray-900">{ fmt.Sprint(len(federalVotes)) }</p>
+						<p class="text-xs text-gray-500 mt-1">Recent federal bill votes</p>
 					</div>
 					<div class="metric-card">
-						<p class="text-2xl font-bold text-gray-900">{ fmt.Sprint(totalTurnout(divs)) }</p>
-						<p class="text-xs text-gray-500 mt-1">Total votes counted</p>
+						<p class="text-2xl font-bold text-gray-900">{ fmt.Sprint(len(provincialVotes) + len(federalVotes)) }</p>
+						<p class="text-xs text-gray-500 mt-1">Total representative bill votes shown</p>
 					</div>
 					<div class="metric-card">
 						<p class="text-2xl font-bold text-gray-900">{ fmt.Sprint(ps.Parliament) }{ ordinal(ps.Parliament) }</p>
@@ -166,7 +174,7 @@ templ Home(ps store.ParliamentStatus, bills []store.BillRow, divs []store.Divisi
 	}
 }
 
-func homeRepresentativeHeading(rep opennorth.Representative, fallbackName, fallbackRole string) string {
+func homeRepresentativeNameRole(rep opennorth.Representative, fallbackName, fallbackRole string) (string, string) {
 	name := strings.TrimSpace(rep.Name)
 	if name == "" {
 		name = fallbackName
@@ -175,6 +183,11 @@ func homeRepresentativeHeading(rep opennorth.Representative, fallbackName, fallb
 	if role == "" {
 		role = fallbackRole
 	}
+	return name, role
+}
+
+func homeRepresentativeHeading(rep opennorth.Representative, fallbackName, fallbackRole string) string {
+	name, role := homeRepresentativeNameRole(rep, fallbackName, fallbackRole)
 	if role == "" {
 		return name
 	}
@@ -190,19 +203,4 @@ func statusPhrase(status string) string {
 	default:
 		return "status unavailable"
 	}
-}
-
-func totalTurnout(divs []store.DivisionRow) int {
-	total := 0
-	for _, d := range divs {
-		total += d.Yeas + d.Nays
-	}
-	return total
-}
-
-func averageTurnout(divs []store.DivisionRow) int {
-	if len(divs) == 0 {
-		return 0
-	}
-	return totalTurnout(divs) / len(divs)
 }

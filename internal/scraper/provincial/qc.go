@@ -8,8 +8,10 @@ import (
 	"net/http"
 	neturl "net/url"
 	"regexp"
+	"sort"
 	"strconv"
 	"strings"
+	"time"
 
 	"github.com/PuerkitoBio/goquery"
 	"github.com/philspins/open-democracy/internal/utils"
@@ -307,4 +309,135 @@ func crawlQuebecVotes(indexURL string, legislature, session int, client *http.Cl
 // CrawlQuebecVotes crawls Quebec votes pages.
 func CrawlQuebecVotes(indexURL string, legislature, session int, client *http.Client) ([]ProvincialDivisionResult, error) {
 	return crawlQuebecVotes(indexURL, legislature, session, client)
+}
+
+// QuebecCalendarDatesFromPDF extracts Quebec assembly sitting dates from the calendar PDF.
+func QuebecCalendarDatesFromPDF(pdfBytes []byte, year int) ([]string, bool) {
+	text, err := extractPDFTextPages(pdfBytes, 2, 2)
+	if err != nil || strings.TrimSpace(text) == "" {
+		var err2 error
+		text, err2 = extractTextWithPDFToText(pdfBytes)
+		if err2 != nil || strings.TrimSpace(text) == "" {
+			return nil, false
+		}
+	}
+	return ParseQCScheduleText(text, year)
+}
+
+var qcDateRangeLongRe = regexp.MustCompile(`(\d{1,2})\s+(\S+)\s+au\s+(\d{1,2})\s+(\S+)\s+(\d{4})`)
+var qcDateRangeShortRe = regexp.MustCompile(`(\d{1,2})\s+au\s+(\d{1,2})\s+(\S+)\s+(\d{4})`)
+
+// ParseQCScheduleText parses Quebec assembly schedule text into sitting dates.
+func ParseQCScheduleText(text string, year int) ([]string, bool) {
+	textLower := strings.ToLower(text)
+	intensifIdx := strings.Index(textLower, "intensif")
+
+	var regularSection, intensiveSection string
+	if intensifIdx >= 0 {
+		regularSection = text[:intensifIdx]
+		intensiveSection = text[intensifIdx:]
+	} else {
+		regularSection = text
+	}
+
+	seen := map[string]struct{}{}
+
+	for _, rng := range parseQCDateRanges(regularSection, year) {
+		addSpecificWeekdays(seen, rng.start, rng.end,
+			[]time.Weekday{time.Tuesday, time.Wednesday, time.Thursday})
+	}
+	if intensiveSection != "" {
+		for _, rng := range parseQCDateRanges(intensiveSection, year) {
+			addSpecificWeekdays(seen, rng.start, rng.end,
+				[]time.Weekday{time.Tuesday, time.Wednesday, time.Thursday, time.Friday})
+		}
+	}
+
+	if len(seen) == 0 {
+		return nil, false
+	}
+	out := make([]string, 0, len(seen))
+	for d := range seen {
+		out = append(out, d)
+	}
+	sort.Strings(out)
+	return out, true
+}
+
+type qcDateRange struct{ start, end time.Time }
+
+func parseQCDateRanges(text string, year int) []qcDateRange {
+	var ranges []qcDateRange
+
+	for _, m := range qcDateRangeLongRe.FindAllStringSubmatch(text, -1) {
+		startDay, _ := strconv.Atoi(m[1])
+		startMonth := parseFrenchMonth(m[2])
+		endDay, _ := strconv.Atoi(m[3])
+		endMonth := parseFrenchMonth(m[4])
+		rangeYear, _ := strconv.Atoi(m[5])
+		if rangeYear != year || startMonth == 0 || endMonth == 0 {
+			continue
+		}
+		start := time.Date(year, time.Month(startMonth), startDay, 0, 0, 0, 0, time.UTC)
+		end := time.Date(year, time.Month(endMonth), endDay, 0, 0, 0, 0, time.UTC)
+		if !start.After(end) {
+			ranges = append(ranges, qcDateRange{start, end})
+		}
+	}
+
+	for _, m := range qcDateRangeShortRe.FindAllStringSubmatch(text, -1) {
+		startDay, _ := strconv.Atoi(m[1])
+		endDay, _ := strconv.Atoi(m[2])
+		month := parseFrenchMonth(m[3])
+		rangeYear, _ := strconv.Atoi(m[4])
+		if rangeYear != year || month == 0 {
+			continue
+		}
+		start := time.Date(year, time.Month(month), startDay, 0, 0, 0, 0, time.UTC)
+		end := time.Date(year, time.Month(month), endDay, 0, 0, 0, 0, time.UTC)
+		if !start.After(end) {
+			ranges = append(ranges, qcDateRange{start, end})
+		}
+	}
+	return ranges
+}
+
+var frenchMonthSubstrs = []struct {
+	sub   string
+	month int
+}{
+	{"janv", 1},
+	{"vrier", 2},
+	{"mars", 3},
+	{"avri", 4},
+	{"mai", 5},
+	{"juin", 6},
+	{"juil", 7},
+	{"ao", 8},
+	{"sept", 9},
+	{"octo", 10},
+	{"novem", 11},
+	{"cembre", 12},
+}
+
+func parseFrenchMonth(s string) int {
+	s = strings.ToLower(s)
+	for _, e := range frenchMonthSubstrs {
+		if strings.Contains(s, e.sub) {
+			return e.month
+		}
+	}
+	return 0
+}
+
+func addSpecificWeekdays(seen map[string]struct{}, start, end time.Time, weekdays []time.Weekday) {
+	wdSet := map[time.Weekday]bool{}
+	for _, wd := range weekdays {
+		wdSet[wd] = true
+	}
+	for d := dayStartUTC(start); !d.After(end); d = d.AddDate(0, 0, 1) {
+		if wdSet[d.Weekday()] {
+			seen[d.Format("2006-01-02")] = struct{}{}
+		}
+	}
 }
