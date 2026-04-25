@@ -1,4 +1,4 @@
-// Package scraper implements all the data scrapers for Open Democracy.
+// Package scraper implements all the data scrapers for Division Bell.
 //
 // Bills:
 //   - LEGISinfo RSS feed   → bill stubs

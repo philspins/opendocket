@@ -1,4 +1,4 @@
-// Command server starts the Open Democracy read-only web frontend.
+// Command server starts the Division Bell read-only web frontend.
 package main
 
 import (
@@ -30,7 +30,7 @@ func main() {
 	st := store.New(conn)
 	srv := server.New(st)
 
-	log.Printf("Open Democracy listening on %s", *addr)
+	log.Printf("Division Bell listening on %s", *addr)
 	if err := http.ListenAndServe(*addr, srv); err != nil {
 		log.Fatalf("server: %v", err)
 	}

@@ -1,4 +1,4 @@
-// Package db provides the SQLite schema and upsert helpers for Open Democracy.
+// Package db provides the SQLite schema and upsert helpers for Division Bell.
 //
 // Schema can be migrated to Postgres later by swapping the driver; all SQL
 // is standard ANSI with SQLite-compatible ON CONFLICT clauses.

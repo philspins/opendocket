@@ -62,14 +62,14 @@ func Home(ps store.ParliamentStatus, provincialVotes []store.VoteRow, federalVot
 				return templ_7745c5c3_Err
 			}
 			if !hasSavedRiding {
-				templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 2, "<section class=\"hero-panel\"><div class=\"title-row\"><div><span class=\"kicker\">Open Democracy Overview</span><h1 class=\"page-title mt-3\">Your representatives and what they are voting on</h1><p class=\"section-lead mt-3 max-w-2xl\">Follow bills and recorded divisions from the ")
+				templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 2, "<section class=\"hero-panel\"><div class=\"title-row\"><div><span class=\"kicker\">Division Bell</span><h1 class=\"page-title mt-3\">They vote in your name. See for yourself.</h1><p class=\"section-lead mt-3 max-w-2xl\">Every vote. Every division. Every member — federal Parliament and all ten provincial legislatures. Follow the ")
 				if templ_7745c5c3_Err != nil {
 					return templ_7745c5c3_Err
 				}
 				var templ_7745c5c3_Var3 string
 				templ_7745c5c3_Var3, templ_7745c5c3_Err = templ.JoinStringErrs(fmt.Sprint(ps.Parliament))
 				if templ_7745c5c3_Err != nil {
-					return templ.Error{Err: templ_7745c5c3_Err, FileName: `internal/templates/home.templ`, Line: 31, Col: 80}
+					return templ.Error{Err: templ_7745c5c3_Err, FileName: `internal/templates/home.templ`, Line: 31, Col: 147}
 				}
 				_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var3))
 				if templ_7745c5c3_Err != nil {
@@ -78,13 +78,13 @@ func Home(ps store.ParliamentStatus, provincialVotes []store.VoteRow, federalVot
 				var templ_7745c5c3_Var4 string
 				templ_7745c5c3_Var4, templ_7745c5c3_Err = templ.JoinStringErrs(ordinal(ps.Parliament))
 				if templ_7745c5c3_Err != nil {
-					return templ.Error{Err: templ_7745c5c3_Err, FileName: `internal/templates/home.templ`, Line: 31, Col: 106}
+					return templ.Error{Err: templ_7745c5c3_Err, FileName: `internal/templates/home.templ`, Line: 31, Col: 173}
 				}
 				_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var4))
 				if templ_7745c5c3_Err != nil {
 					return templ_7745c5c3_Err
 				}
-				templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 3, " Parliament, and quickly jump to your riding lookup.</p></div><div class=\"flex gap-3\"><a href=\"/riding\" class=\"btn btn-primary\">Find Your Riding</a> <a href=\"/members\" class=\"btn btn-secondary\">Federal MPs</a></div></div></section>")
+				templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 3, " Parliament and find your representatives.</p></div><div class=\"flex gap-3\"><a href=\"/riding\" class=\"btn btn-primary\">Find Your Riding</a> <a href=\"/members\" class=\"btn btn-secondary\">Federal MPs</a></div></div></section>")
 				if templ_7745c5c3_Err != nil {
 					return templ_7745c5c3_Err
 				}

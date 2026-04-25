@@ -1,4 +1,4 @@
-// Package templates provides templ components and helper functions for Open Democracy.
+// Package templates provides templ components and helper functions for Division Bell.
 package templates
 
 import (

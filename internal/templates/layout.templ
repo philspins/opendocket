@@ -8,10 +8,10 @@ templ Layout(title string, ps store.ParliamentStatus) {
 		<head>
 			<meta charset="UTF-8"/>
 			<meta name="viewport" content="width=device-width, initial-scale=1.0"/>
-			<title>{ title } — Open Democracy</title>
+			<title>{ title } — Division Bell</title>
 			<link rel="preconnect" href="https://fonts.googleapis.com"/>
 			<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin=""/>
-			<link href="https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,600;9..144,700&family=Manrope:wght@400;500;600;700&display=swap" rel="stylesheet"/>
+			<link href="https://fonts.googleapis.com/css2?family=Libre+Baskerville:ital,wght@0,400;0,700;1,400&family=DM+Sans:wght@400;500;600;700&family=Inconsolata:wght@400;500;600&display=swap" rel="stylesheet"/>
 			<script src="https://cdn.tailwindcss.com"></script>
 			<script>tailwind.config = { darkMode: 'class' }</script>
 			<!-- Dark mode init: run before render to avoid flash -->
@@ -26,29 +26,56 @@ templ Layout(title string, ps store.ParliamentStatus) {
 			</script>
 			<style>
 				:root {
-					--ink-900: #1a1a1a;
-					--ink-700: #2f3e55;
-					--ink-500: #5e6b7d;
-					--paper: #f6f8fb;
-					--paper-strong: #ffffff;
-					--line: #d5dce5;
-					--accent: #26374a;
-					--accent-strong: #1a2634;
-					--signal: #c8102e;
-					--focus: #0f62fe;
+					--color-bg:             #F4F4F5;  /* Off White */
+					--color-surface-1:      #FFFFFF;  /* White */
+					--color-border:         #E5E7EB;  /* Light border */
+					--color-primary:        #1B3A5C;  /* Parliamentary Navy */
+					--color-primary-bright: #4A6FA5;  /* Steel Blue */
+					--color-text-primary:   #1A1A1A;  /* Near Black */
+					--color-text-secondary: #6B7280;  /* Slate Grey */
+					--color-alert:          #C41E3A;  /* Parliamentary Red */
+					--color-positive:       #2D6A4F;  /* Dark Green */
+
+					/* Internal aliases for existing references */
+					--ink-900: var(--color-text-primary);
+					--ink-700: var(--color-primary-bright);
+					--ink-500: var(--color-text-secondary);
+					--paper: var(--color-bg);
+					--paper-strong: var(--color-surface-1);
+					--line: var(--color-border);
+					--accent: var(--color-primary);
+					--accent-strong: #14304d;
+					--signal: var(--color-alert);
+					--focus: var(--color-primary-bright);
 					--shadow: 0 8px 22px rgba(16, 24, 40, 0.08);
 				}
 
 				html.dark {
-					--ink-900: #e2e8f0;
-					--ink-700: #a8b8c8;
-					--ink-500: #7a8fa0;
-					--paper: #0f1923;
-					--paper-strong: #1a2535;
-					--line: #2a3a4e;
-					--accent: #4a8fc4;
-					--accent-strong: #357baa;
-					--focus: #60a5fa;
+					--color-bg:               #0D1117;  /* Midnight Ink */
+					--color-surface-1:        #161D27;  /* Deep Slate */
+					--color-surface-2:        #1E2A3A;  /* Raised Slate */
+					--color-border:           #243447;  /* Navy Divide */
+					--color-primary:          #2A5298;  /* Muted Navy */
+					--color-primary-bright:   #5B8DD9;  /* Clarity Blue */
+					--color-text-primary:     #E8E4DC;  /* Parchment */
+					--color-text-secondary:   #9BA3AF;  /* Warm Grey */
+					--color-text-muted:       #6B7280;  /* Faded Slate */
+					--color-alert:            #E03E55;  /* Tempered Red */
+					--color-alert-surface:    #2A1018;  /* Red Tint */
+					--color-positive:         #3D9970;  /* Forest */
+					--color-positive-surface: #0D2018;  /* Green Tint */
+					--color-data-mono:        #7BAFD4;  /* Code Slate */
+
+					/* Internal aliases for existing references */
+					--ink-900: var(--color-text-primary);
+					--ink-700: var(--color-text-secondary);
+					--ink-500: var(--color-text-muted);
+					--paper: var(--color-bg);
+					--paper-strong: var(--color-surface-1);
+					--line: var(--color-border);
+					--accent: var(--color-primary-bright);
+					--accent-strong: var(--color-primary);
+					--focus: var(--color-primary-bright);
 					--shadow: 0 8px 22px rgba(0, 0, 0, 0.35);
 				}
 
@@ -58,46 +85,43 @@ templ Layout(title string, ps store.ParliamentStatus) {
 				}
 
 				body {
-					font-family: "Noto Sans", "Segoe UI", sans-serif;
-					color: var(--ink-900);
-					background: linear-gradient(180deg, #f3f6fa 0%, var(--paper) 100%);
+					font-family: "DM Sans", "Segoe UI", sans-serif;
+					color: var(--color-text-primary);
+					background: var(--color-bg);
 					transition: background 200ms ease, color 200ms ease;
-				}
-
-				html.dark body {
-					background: linear-gradient(180deg, #0d1620 0%, var(--paper) 100%);
 				}
 
 				h1,
 				h2,
 				h3,
 				h4 {
-					font-family: "Noto Sans", "Segoe UI", sans-serif;
+					font-family: "Libre Baskerville", Georgia, serif;
 					letter-spacing: -0.01em;
 					font-weight: 700;
 				}
 
 				a {
-					color: var(--ink-700);
+					color: var(--color-primary-bright);
 					transition: color 160ms ease;
 				}
 
 				a:hover {
-					color: #1f4a78;
+					color: var(--color-primary);
 				}
 
 				.site-nav {
 					position: sticky;
 					top: 0;
 					z-index: 20;
-					background: rgba(255, 255, 255, 0.97);
-					border-bottom: 1px solid var(--line);
-					box-shadow: 0 1px 0 rgba(16, 24, 40, 0.04);
+					background: var(--color-primary);
+					border-bottom: 1px solid #14304d;
+					box-shadow: 0 1px 4px rgba(0, 0, 0, 0.18);
 					transition: background 200ms ease, border-color 200ms ease;
 				}
 
 				html.dark .site-nav {
-					background: rgba(15, 25, 35, 0.97);
+					background: var(--color-surface-1);
+					border-bottom-color: var(--color-border);
 				}
 
 				.nav-inner {
@@ -113,20 +137,21 @@ templ Layout(title string, ps store.ParliamentStatus) {
 				}
 
 				.nav-brand {
-					font-family: "Noto Sans", "Segoe UI", sans-serif;
+					font-family: "Libre Baskerville", Georgia, serif;
 					font-size: 1.16rem;
 					font-weight: 700;
-					color: var(--ink-900);
+					color: #ffffff;
+				}
+
+				html.dark .nav-brand {
+					color: var(--color-text-primary);
 				}
 
 				.nav-brand::before {
-					content: "";
+					content: "🔔";
 					display: inline-block;
-					width: 0.58rem;
-					height: 0.58rem;
-					margin-right: 0.55rem;
-					border-radius: 2px;
-					background: linear-gradient(180deg, var(--signal), #a10d24);
+					margin-right: 0.5rem;
+					font-size: 0.9rem;
 					vertical-align: middle;
 				}
 
@@ -136,8 +161,28 @@ templ Layout(title string, ps store.ParliamentStatus) {
 					align-items: center;
 					font-size: 0.9rem;
 					font-weight: 600;
-					color: var(--ink-500);
+					color: rgba(255, 255, 255, 0.85);
 					flex-wrap: wrap;
+				}
+
+				.nav-links a {
+					color: rgba(255, 255, 255, 0.85);
+				}
+
+				.nav-links a:hover {
+					color: #ffffff;
+				}
+
+				html.dark .nav-links {
+					color: var(--color-text-secondary);
+				}
+
+				html.dark .nav-links a {
+					color: var(--color-text-secondary);
+				}
+
+				html.dark .nav-links a:hover {
+					color: var(--color-text-primary);
 				}
 
 				.search-form {
@@ -164,12 +209,12 @@ templ Layout(title string, ps store.ParliamentStatus) {
 				.input-field,
 				select,
 				input[type="text"] {
-					border: 1px solid var(--line);
+					border: 1px solid var(--color-border);
 					border-radius: 6px;
 					padding: 0.56rem 0.72rem;
-					background: var(--paper-strong);
+					background: var(--color-surface-1);
 					font-size: 0.92rem;
-					color: var(--ink-900);
+					color: var(--color-text-primary);
 					outline: none;
 					transition: border-color 160ms ease, box-shadow 160ms ease, background 200ms ease, color 200ms ease;
 				}
@@ -177,8 +222,8 @@ templ Layout(title string, ps store.ParliamentStatus) {
 				.input-field:focus,
 				select:focus,
 				input[type="text"]:focus {
-					border-color: var(--focus);
-					box-shadow: 0 0 0 3px rgba(15, 98, 254, 0.18);
+					border-color: var(--color-primary-bright);
+					box-shadow: 0 0 0 3px rgba(74, 111, 165, 0.22);
 				}
 
 				.is-hidden {
@@ -204,45 +249,45 @@ templ Layout(title string, ps store.ParliamentStatus) {
 				}
 
 				.btn-primary {
-					background: var(--accent);
+					background: var(--color-primary);
 					color: #fff;
-					border-color: #1f2d3e;
+					border-color: #14304d;
 				}
 
 				.btn-primary:hover {
-					background: var(--accent-strong);
+					background: #14304d;
 					color: #fff;
 				}
 
 				.btn-secondary {
-					background: #ffffff;
-					border-color: #9aa6b5;
-					color: var(--ink-700);
+					background: rgba(255, 255, 255, 0.12);
+					border-color: rgba(255, 255, 255, 0.35);
+					color: #ffffff;
 				}
 
 				html.dark .btn-secondary {
-					background: var(--paper-strong);
-					border-color: var(--line);
-					color: var(--ink-700);
+					background: var(--color-surface-1);
+					border-color: var(--color-border);
+					color: var(--color-text-primary);
 				}
 
 				/* Theme toggle pill */
 				.theme-toggle {
 					display: inline-flex;
 					align-items: center;
-					background: #e2e8f0;
+					background: rgba(255, 255, 255, 0.15);
 					border-radius: 999px;
 					padding: 3px;
 					gap: 0;
-					border: 1px solid #c8d3dd;
+					border: 1px solid rgba(255, 255, 255, 0.25);
 					cursor: pointer;
 					transition: background 200ms ease, border-color 200ms ease;
 					flex-shrink: 0;
 				}
 
 				html.dark .theme-toggle {
-					background: #1e2f42;
-					border-color: var(--line);
+					background: var(--color-surface-2);
+					border-color: var(--color-border);
 				}
 
 				.theme-toggle-btn {
@@ -261,12 +306,12 @@ templ Layout(title string, ps store.ParliamentStatus) {
 				}
 
 				.theme-toggle-btn.active {
-					background: #ffffff;
-					box-shadow: 0 1px 4px rgba(0, 0, 0, 0.15);
+					background: rgba(255, 255, 255, 0.25);
+					box-shadow: 0 1px 4px rgba(0, 0, 0, 0.2);
 				}
 
 				html.dark .theme-toggle-btn.active {
-					background: #2e4460;
+					background: var(--color-primary);
 					box-shadow: 0 1px 4px rgba(0, 0, 0, 0.4);
 				}
 
@@ -280,7 +325,7 @@ templ Layout(title string, ps store.ParliamentStatus) {
 				}
 
 				.session-banner.in-session {
-					background: #1e7f4f;
+					background: var(--color-positive, #2D6A4F);
 				}
 
 				.session-banner.on-break {
@@ -299,15 +344,15 @@ templ Layout(title string, ps store.ParliamentStatus) {
 
 				.surface-card,
 				.bg-white.rounded-lg.border {
-					background: rgba(255, 255, 255, 0.98);
-					border: 1px solid var(--line);
+					background: var(--color-surface-1);
+					border: 1px solid var(--color-border);
 					border-radius: 8px;
 					box-shadow: var(--shadow);
 				}
 
 				html.dark .surface-card,
 				html.dark .bg-white.rounded-lg.border {
-					background: var(--paper-strong);
+					background: var(--color-surface-1);
 				}
 
 				/* Theme-aware panels for inner content cards */
@@ -318,42 +363,42 @@ templ Layout(title string, ps store.ParliamentStatus) {
 				}
 
 				html.dark .panel {
-					background: var(--paper-strong);
+					background: var(--color-surface-2);
 				}
 
 				/* Accent callout for the one-sentence summary banner */
 				.callout-info {
-					background: rgba(59, 130, 246, 0.08);
-					border-left: 4px solid #3b82f6;
+					background: rgba(74, 111, 165, 0.08);
+					border-left: 4px solid var(--color-primary-bright);
 					border-radius: 0 8px 8px 0;
 					padding: 1rem;
-					color: var(--ink-900);
+					color: var(--color-text-primary);
 				}
 
 				html.dark .callout-info {
-					background: rgba(96, 165, 250, 0.1);
-					border-left-color: #60a5fa;
+					background: rgba(91, 141, 217, 0.1);
+					border-left-color: var(--color-primary-bright);
 				}
 
 				.table-shell,
 				.overflow-x-auto.bg-white.rounded-lg.border {
 					border-radius: 8px;
-					border: 1px solid var(--line);
+					border: 1px solid var(--color-border);
 					box-shadow: none;
-					background: rgba(255, 255, 255, 0.98);
+					background: var(--color-surface-1);
 				}
 
 				html.dark .table-shell,
 				html.dark .overflow-x-auto.bg-white.rounded-lg.border {
-					background: var(--paper-strong);
+					background: var(--color-surface-1);
 				}
 
 				table thead tr {
-					background: #eef3f8;
+					background: #EEF3F8;
 				}
 
 				html.dark table thead tr {
-					background: #1e2f42;
+					background: var(--color-surface-2);
 				}
 
 				table tbody tr {
@@ -361,46 +406,47 @@ templ Layout(title string, ps store.ParliamentStatus) {
 				}
 
 				table tbody tr:hover {
-					background: #f8fbff;
+					background: #f4f8fd;
 				}
 
 				html.dark table tbody tr:hover {
-					background: #1e2d3e;
+					background: var(--color-surface-2);
 				}
 
 				.page-title {
 					font-size: clamp(1.7rem, 2vw, 2.2rem);
 					line-height: 1.1;
-					color: var(--ink-900);
+					color: var(--color-text-primary);
 				}
 
 				.kicker {
 					display: inline-block;
 					font-size: 0.74rem;
 					letter-spacing: 0.12em;
-					font-weight: 700;
+					font-family: "Inconsolata", monospace;
+					font-weight: 600;
 					text-transform: uppercase;
-					color: #23456f;
-					background: #e8eef6;
+					color: var(--color-primary);
+					background: rgba(27, 58, 92, 0.08);
 					padding: 0.3rem 0.55rem;
 					border-radius: 999px;
 				}
 
 				html.dark .kicker {
-					color: #7ab0e0;
-					background: #1a2f45;
+					color: var(--color-primary-bright);
+					background: rgba(91, 141, 217, 0.12);
 				}
 
 				.hero-panel {
-					border: 1px solid var(--line);
+					border: 1px solid var(--color-border);
 					border-radius: 8px;
 					padding: clamp(1.4rem, 3vw, 2.4rem);
-					background: linear-gradient(180deg, #f8fbff, #f2f6fb);
+					background: var(--color-surface-1);
 					box-shadow: none;
 				}
 
 				html.dark .hero-panel {
-					background: linear-gradient(180deg, #162030, #111c28);
+					background: var(--color-surface-1);
 				}
 
 				.title-row {
@@ -418,12 +464,12 @@ templ Layout(title string, ps store.ParliamentStatus) {
 					align-items: center;
 					padding: 0.95rem;
 					border-radius: 8px;
-					border: 1px solid var(--line);
-					background: rgba(255, 255, 255, 0.98);
+					border: 1px solid var(--color-border);
+					background: var(--color-surface-1);
 				}
 
 				html.dark .filter-shell {
-					background: var(--paper-strong);
+					background: var(--color-surface-1);
 				}
 
 				.metric-grid {
@@ -439,22 +485,22 @@ templ Layout(title string, ps store.ParliamentStatus) {
 					gap: 0;
 					border-radius: 1rem;
 					overflow: hidden;
-					border: 1px solid var(--line);
+					border: 1px solid var(--color-border);
 					box-shadow: 0 4px 16px rgba(16, 24, 40, 0.1);
-					background: rgba(255, 255, 255, 0.85);
+					background: var(--color-surface-1);
 				}
 
 				.rep-grid > div:first-child {
-					border-right: 1px solid var(--line);
+					border-right: 1px solid var(--color-border);
 				}
 
 				html.dark .rep-grid {
-					background: var(--paper-strong);
+					background: var(--color-surface-1);
 					box-shadow: 0 4px 16px rgba(0, 0, 0, 0.35);
 				}
 
 				html.dark .rep-grid > div:first-child {
-					border-right-color: var(--line);
+					border-right-color: var(--color-border);
 				}
 
 				@media (max-width: 768px) {
@@ -464,68 +510,77 @@ templ Layout(title string, ps store.ParliamentStatus) {
 
 					.rep-grid > div:first-child {
 						border-right: none;
-						border-bottom: 1px solid var(--line);
+						border-bottom: 1px solid var(--color-border);
 					}
 				}
 
 				.metric-card {
 					padding: 0.95rem;
 					border-radius: 8px;
-					border: 1px solid var(--line);
-					background: rgba(255, 255, 255, 0.98);
+					border: 1px solid var(--color-border);
+					background: var(--color-surface-1);
 					text-align: center;
 				}
 
 				html.dark .metric-card {
-					background: var(--paper-strong);
+					background: var(--color-surface-1);
 				}
 
 				.empty-state {
 					text-align: center;
 					padding: 2.6rem 1rem;
-					border: 1px dashed #b6c3d2;
+					border: 1px dashed var(--color-border);
 					border-radius: 8px;
-					color: var(--ink-500);
-					background: rgba(255, 255, 255, 0.92);
+					color: var(--color-text-secondary);
+					background: var(--color-surface-1);
 				}
 
 				html.dark .empty-state {
-					border-color: var(--line);
-					background: rgba(26, 37, 53, 0.7);
+					border-color: var(--color-border);
+					background: rgba(22, 29, 39, 0.7);
 				}
 
 				.section-lead {
 					font-size: 1.02rem;
 					line-height: 1.55;
-					color: var(--ink-500);
+					color: var(--color-text-secondary);
 				}
 
 				.footer-shell {
 					max-width: 1100px;
 					margin: 2.2rem auto 0;
 					padding: 1.4rem 1.1rem 2.4rem;
-					border-top: 1px solid #c7d1dc;
+					border-top: 1px solid var(--color-border);
 					font-size: 0.78rem;
-					color: var(--ink-500);
+					color: var(--color-text-secondary);
 					text-align: center;
 				}
 
 				html.dark .footer-shell {
-					border-top-color: var(--line);
+					border-top-color: var(--color-border);
 				}
 
 				/* Dark mode overrides for Tailwind color utilities used across templates */
-				html.dark .text-gray-900 { color: var(--ink-900); }
-				html.dark .text-gray-800 { color: var(--ink-700); }
-				html.dark .text-gray-700 { color: var(--ink-700); }
-				html.dark .text-gray-600 { color: var(--ink-500); }
-				html.dark .text-gray-500 { color: var(--ink-500); }
-				html.dark .text-blue-700 { color: var(--focus); }
-				html.dark .border-gray-100 { border-color: var(--line); }
-				html.dark .border-gray-200 { border-color: var(--line); }
-				html.dark .divide-gray-100 > * + * { border-color: var(--line); }
-				html.dark .divide-gray-200 > * + * { border-color: var(--line); }
-				html.dark .text-blue-700:hover { color: var(--accent); }
+				html.dark .text-gray-900 { color: var(--color-text-primary); }
+				html.dark .text-gray-800 { color: var(--color-text-primary); }
+				html.dark .text-gray-700 { color: var(--color-text-secondary); }
+				html.dark .text-gray-600 { color: var(--color-text-secondary); }
+				html.dark .text-gray-500 { color: var(--color-text-muted, #6B7280); }
+				html.dark .text-blue-700 { color: var(--color-primary-bright); }
+				html.dark .border-gray-100 { border-color: var(--color-border); }
+				html.dark .border-gray-200 { border-color: var(--color-border); }
+				html.dark .divide-gray-100 > * + * { border-color: var(--color-border); }
+				html.dark .divide-gray-200 > * + * { border-color: var(--color-border); }
+				html.dark .text-blue-700:hover { color: var(--color-primary); }
+
+				/* Monospace data elements */
+				.font-mono {
+					font-family: "Inconsolata", monospace;
+				}
+
+				html.dark .font-mono {
+					color: var(--color-data-mono, #7BAFD4);
+				}
 
 				@keyframes rise-in {
 					from {
@@ -569,7 +624,7 @@ templ Layout(title string, ps store.ParliamentStatus) {
 			<nav class="site-nav">
 				<div class="nav-inner">
 					<div class="flex items-center gap-5">
-						<a href="/" class="nav-brand">Open Democracy</a>
+						<a href="/" class="nav-brand">Division Bell</a>
 						<div class="nav-links">
 							<a href="/bills">Bills</a>
 							<a href="/votes">Votes</a>
@@ -610,8 +665,8 @@ templ Layout(title string, ps store.ParliamentStatus) {
 				{ children... }
 			</main>
 			<footer class="footer-shell">
-				<p>This project is funded by everyday taxpayers who believe in government transparency. Help us keep the lights on - <a href="https://buymeacoffee.com/opendemocracy">Donate here</a>.</p>
-				<p>Open Democracy — Data sourced from the Parliament of Canada Open Data portal</p>
+				<p>Division Bell — Every vote. Every member. Every time.</p>
+				<p>Data sourced from the Parliament of Canada Open Data portal and provincial legislatures. Non-partisan. Independent.</p>
 			</footer>
 			<script>
 				// Auth check
