@@ -25,7 +25,7 @@ templ Home(ps store.ParliamentStatus, provincialVotes []store.VoteRow, federalVo
 				<section class="hero-panel">
 					<div class="title-row">
 						<div>
-							<span class="kicker">Division Bell</span>
+							<span class="kicker">Open Docket</span>
 							<h1 class="page-title mt-3">They vote in your name. See for yourself.</h1>
 							<p class="section-lead mt-3 max-w-2xl">
 								Every vote. Every division. Every member — federal Parliament and all ten provincial legislatures. Follow the { fmt.Sprint(ps.Parliament) }{ ordinal(ps.Parliament) } Parliament and find your representatives.
@@ -37,6 +37,14 @@ templ Home(ps store.ParliamentStatus, provincialVotes []store.VoteRow, federalVo
 						</div>
 					</div>
 				</section>
+			} else {
+				<div class="title-row">
+					<div>
+						<span class="kicker">Today on the Docket</span>
+						<h1 class="page-title mt-2">{ fmt.Sprint(ps.Parliament) }{ ordinal(ps.Parliament) } Parliament</h1>
+					</div>
+					<a href="/votes" class="text-sm text-blue-700 hover:underline">All recorded votes →</a>
+				</div>
 			}
 
 			<section class="rep-grid">
@@ -57,15 +65,15 @@ templ Home(ps store.ParliamentStatus, provincialVotes []store.VoteRow, federalVo
 								}
 							</h3>
 							if strings.TrimSpace(provincialRep.DistrictName) != "" {
-								<h4 class="text-base font-semibold text-right leading-tight">{ strings.TrimSpace(provincialRep.DistrictName) }</h4>
+								<h4 class="text-sm font-semibold text-right leading-tight">{ strings.TrimSpace(provincialRep.DistrictName) }</h4>
 							}
 						</div>
 						if strings.TrimSpace(provParty) != "" {
-							<h4 class="mt-1 text-base font-semibold leading-tight">{ strings.TrimSpace(provParty) }</h4>
+							<h4 class="mt-1 text-sm font-semibold leading-tight">{ strings.TrimSpace(provParty) }</h4>
 						}
 					</div>
-					<div class="px-5 py-2 text-sm text-gray-700 border-b border-gray-100">
-						Parliament is currently: <strong>{ provincialStatus }</strong>
+					<div class="px-5 py-2 text-xs border-b border-gray-100" style="color: var(--color-text-secondary); font-family: 'Inconsolata', monospace; letter-spacing: 0.04em;">
+						Legislature: { provincialStatus }
 					</div>
 					<div class="p-5 space-y-4">
 						<div class="title-row">
@@ -111,15 +119,18 @@ templ Home(ps store.ParliamentStatus, provincialVotes []store.VoteRow, federalVo
 								}
 							</h3>
 							if strings.TrimSpace(federalRep.DistrictName) != "" {
-								<h4 class="text-base font-semibold text-right leading-tight">{ strings.TrimSpace(federalRep.DistrictName) }</h4>
+								<h4 class="text-sm font-semibold text-right leading-tight">{ strings.TrimSpace(federalRep.DistrictName) }</h4>
 							}
 						</div>
 						if strings.TrimSpace(federalParty) != "" {
-							<h4 class="mt-1 text-base font-semibold leading-tight">{ strings.TrimSpace(federalParty) }</h4>
+							<h4 class="mt-1 text-sm font-semibold leading-tight">{ strings.TrimSpace(federalParty) }</h4>
 						}
 					</div>
-					<div class="px-5 py-2 text-sm text-gray-700 border-b border-gray-100">
-						Parliament is currently: <strong>{ federalStatus }</strong>
+					<div class="px-5 py-2 text-xs border-b border-gray-100" style="color: var(--color-text-secondary); font-family: 'Inconsolata', monospace; letter-spacing: 0.04em;">
+						{ ps.Label }
+						if ps.Detail != "" {
+							— { ps.Detail }
+						}
 					</div>
 					<div class="p-5 space-y-4">
 						<div class="title-row">

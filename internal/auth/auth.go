@@ -44,7 +44,7 @@ func (s *sesVerificationSender) SendVerificationEmail(ctx context.Context, toEma
 	if s == nil || s.client == nil || s.fromEmail == "" {
 		return fmt.Errorf("ses sender not configured")
 	}
-	subject := "Division Bell verification code"
+	subject := "Open Docket verification code"
 	bodyText := fmt.Sprintf("Use this code to verify your email: %s\n\nOr verify with this link: %s\n\nIf you did not request this, you can ignore this email.", code, verifyURL)
 	bodyHTML := fmt.Sprintf("<p>Use this code to verify your email:</p><p><strong>%s</strong></p><p>Or verify with this link: <a href=\"%s\">Verify email</a></p><p>If you did not request this, you can ignore this email.</p>", code, verifyURL)
 	_, err := s.client.SendEmail(ctx, &sesv2.SendEmailInput{

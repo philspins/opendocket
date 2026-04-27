@@ -13,39 +13,39 @@ templ VotesFeed(ps store.ParliamentStatus, divs []store.DivisionRow, total int, 
 				<span class="text-sm text-gray-500">{ fmt.Sprint(total) } total</span>
 			</div>
 
-			<div class="table-shell overflow-x-auto bg-white rounded-lg border border-gray-200">
-				<table class="min-w-full text-sm">
+			<div class="table-shell">
+				<table class="vote-table min-w-full text-sm">
 					<thead>
-						<tr class="bg-gray-50 text-left text-xs text-gray-500 border-b border-gray-200">
+						<tr>
 							<th class="px-4 py-3">Date</th>
-							<th class="px-4 py-3">Description</th>
 							<th class="px-4 py-3">Bill</th>
+							<th class="px-4 py-3">Description</th>
 							<th class="px-4 py-3 text-right">Yeas</th>
 							<th class="px-4 py-3 text-right">Nays</th>
 							<th class="px-4 py-3">Result</th>
 							<th class="px-4 py-3">Chamber</th>
 						</tr>
 					</thead>
-					<tbody class="divide-y divide-gray-100">
+					<tbody>
 						for _, d := range divs {
-							<tr class="hover:bg-gray-50">
-								<td class="px-4 py-2 text-gray-500 whitespace-nowrap">{ FormatDate(d.Date) }</td>
-								<td class="px-4 py-2 max-w-sm truncate">
+							<tr>
+								<td class="px-4 py-2.5 col-date">{ FormatDate(d.Date) }</td>
+								<td class="px-4 py-2.5 col-bill">
+									if d.BillNumber != "" {
+										<a href={ templ.SafeURL("/bills/" + d.BillID) } class="hover:underline">{ d.BillNumber }</a>
+									}
+								</td>
+								<td class="px-4 py-2.5 col-description text-xs">
 									if d.BillID != "" {
-										<a href={ templ.SafeURL("/bills/" + d.BillID) } class="text-blue-700 hover:underline">{ d.Description }</a>
+										<a href={ templ.SafeURL("/bills/" + d.BillID) } class="hover:underline">{ d.Description }</a>
 									} else {
 										{ d.Description }
 									}
 								</td>
-								<td class="px-4 py-2">
-									if d.BillNumber != "" {
-										<a href={ templ.SafeURL("/bills/" + d.BillID) } class="text-blue-600 hover:underline font-mono">{ d.BillNumber }</a>
-									}
-								</td>
-								<td class="px-4 py-2 text-right text-green-600 font-medium">{ fmt.Sprint(d.Yeas) }</td>
-								<td class="px-4 py-2 text-right text-red-600 font-medium">{ fmt.Sprint(d.Nays) }</td>
-								<td class="px-4 py-2">{ d.Result }</td>
-								<td class="px-4 py-2 text-gray-500 capitalize">{ d.Chamber }</td>
+								<td class="px-4 py-2.5 col-yea text-right">{ fmt.Sprint(d.Yeas) }</td>
+								<td class="px-4 py-2.5 col-nay text-right">{ fmt.Sprint(d.Nays) }</td>
+								<td class="px-4 py-2.5 col-meta">{ d.Result }</td>
+								<td class="px-4 py-2.5 col-meta capitalize">{ d.Chamber }</td>
 							</tr>
 						}
 						if len(divs) == 0 {

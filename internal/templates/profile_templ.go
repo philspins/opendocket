@@ -64,13 +64,13 @@ func ProfilePage(ps store.ParliamentStatus, user store.UserRow, address string, 
 				return templ_7745c5c3_Err
 			}
 			if updated {
-				templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 3, "<div class=\"rounded-lg border border-green-200 bg-green-50 px-4 py-3 text-sm text-green-800\">Your saved riding information has been updated.</div>")
+				templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 3, "<div class=\"border border-green-200 bg-green-50 px-4 py-3 text-sm text-green-800\">Your saved riding information has been updated.</div>")
 				if templ_7745c5c3_Err != nil {
 					return templ_7745c5c3_Err
 				}
 			}
 			if lookupErr != "" {
-				templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 4, "<div class=\"rounded-lg border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-800\">")
+				templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 4, "<div class=\"border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-800\">")
 				if templ_7745c5c3_Err != nil {
 					return templ_7745c5c3_Err
 				}

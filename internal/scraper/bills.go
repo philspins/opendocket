@@ -1,4 +1,4 @@
-// Package scraper implements all the data scrapers for Division Bell.
+// Package scraper implements all the data scrapers for Open Docket.
 //
 // Bills:
 //   - LEGISinfo RSS feed   → bill stubs

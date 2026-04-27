@@ -1,4 +1,4 @@
-// Package templates provides templ components and helper functions for Division Bell.
+// Package templates provides templ components and helper functions for Open Docket.
 package templates
 
 import (
@@ -303,25 +303,25 @@ func VoteBadgeClass(vote string) string {
 // CategoryBadgeStyle returns an inline background-color style for a category badge.
 func CategoryBadgeStyle(category string) string {
 	colors := map[string]string{
-		"Budget":            "background-color:#3b82f6",
-		"Criminal Justice":  "background-color:#ef4444",
-		"Environment":       "background-color:#22c55e",
-		"Health":            "background-color:#ec4899",
-		"Housing":           "background-color:#f97316",
-		"Immigration":       "background-color:#8b5cf6",
-		"Indigenous":        "background-color:#d97706",
-		"Infrastructure":    "background-color:#6b7280",
-		"Justice":           "background-color:#dc2626",
-		"Labour":            "background-color:#0ea5e9",
-		"National Security": "background-color:#1d4ed8",
-		"Social Policy":     "background-color:#7c3aed",
-		"Trade":             "background-color:#059669",
-		"Veterans":          "background-color:#b45309",
+		"Budget":            "background-color:#1d4ed8", // blue-700 (was blue-500, 3.8:1 → 6.7:1)
+		"Criminal Justice":  "background-color:#b91c1c", // red-700  (was red-500, 3.8:1 → 6.3:1)
+		"Environment":       "background-color:#15803d", // green-700 (was green-500, 2.2:1 → 5.1:1)
+		"Health":            "background-color:#be185d", // pink-700  (was pink-500, 3.5:1 → 6.1:1)
+		"Housing":           "background-color:#c2410c", // orange-700 (was orange-500, 2.8:1 → 5.2:1)
+		"Immigration":       "background-color:#6d28d9", // violet-700 (was violet-500, 4.2:1 → 7.2:1)
+		"Indigenous":        "background-color:#92400e", // amber-800  (was amber-600, 3.2:1 → 7.0:1)
+		"Infrastructure":    "background-color:#6b7280", // gray-500   (5.0:1 ✓)
+		"Justice":           "background-color:#dc2626", // red-600    (4.9:1 ✓)
+		"Labour":            "background-color:#0369a1", // sky-700    (was sky-500, 2.6:1 → 6.1:1)
+		"National Security": "background-color:#1d4ed8", // blue-700   (6.7:1 ✓)
+		"Social Policy":     "background-color:#7c3aed", // violet-600 (5.8:1 ✓)
+		"Trade":             "background-color:#065f46", // emerald-800 (was emerald-600, 3.7:1 → 7.7:1)
+		"Veterans":          "background-color:#b45309", // amber-700  (5.0:1 ✓)
 	}
 	if c, ok := colors[category]; ok {
 		return c
 	}
-	return "background-color:#6b7280"
+	return "background-color:#4b5563"
 }
 
 // PageInfo holds pagination state for rendering prev/next links.

@@ -1,4 +1,4 @@
-// Command crawler is the Division Bell data-crawling CLI.
+// Command crawler is the Open Docket data-crawling CLI.
 //
 // Usage:
 //

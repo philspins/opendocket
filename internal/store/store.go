@@ -1,4 +1,4 @@
-// Package store provides read-only query helpers for the Division Bell web frontend.
+// Package store provides read-only query helpers for the Open Docket web frontend.
 package store
 
 import (
