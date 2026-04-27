@@ -397,7 +397,7 @@ func MemberProfile(ps store.ParliamentStatus, member store.MemberRow, votes []st
 			if templ_7745c5c3_Err != nil {
 				return templ_7745c5c3_Err
 			}
-			templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 36, "\" class=\"text-sm text-blue-600 hover:underline\">Compare with another MP →</a></div><!-- Vote history --><section id=\"member-votes-section\"><h2 class=\"text-lg font-semibold text-gray-800 mb-3\">Recent Votes</h2><div class=\"table-shell\"><table class=\"vote-table min-w-full text-sm\"><thead><tr><th class=\"px-4 py-2.5\">Date</th><th class=\"px-4 py-2.5\">Vote</th><th class=\"px-4 py-2.5\">Bill</th><th class=\"px-4 py-2.5\">Description</th><th class=\"px-4 py-2.5\">Result</th><th class=\"px-4 py-2.5\">Party</th></tr></thead> <tbody>")
+			templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 36, "\" class=\"text-sm text-blue-600 hover:underline\">Compare with another MP →</a></div><!-- Vote history --><section id=\"member-votes-section\"><h2 class=\"text-lg font-semibold text-gray-800 mb-3\">Recent Votes</h2><div class=\"table-shell\"><table class=\"vote-table min-w-full text-sm\"><thead><tr><th class=\"px-4 py-2.5\">Date</th><th class=\"px-4 py-2.5\">Vote</th><th class=\"px-4 py-2.5\">Bill</th><th class=\"px-4 py-2.5\">Description</th><th class=\"px-4 py-2.5\">Result</th><th class=\"px-4 py-2.5\">Alignment</th></tr></thead> <tbody>")
 			if templ_7745c5c3_Err != nil {
 				return templ_7745c5c3_Err
 			}
@@ -437,7 +437,7 @@ func MemberProfile(ps store.ParliamentStatus, member store.MemberRow, votes []st
 				if templ_7745c5c3_Err != nil {
 					return templ_7745c5c3_Err
 				}
-				var templ_7745c5c3_Var28 = []any{"px-4 py-2.5", VoteBadgeClass(v.Vote)}
+				var templ_7745c5c3_Var28 = []any{"px-4 py-2.5 col-vote", VoteBadgeClass(v.Vote)}
 				templ_7745c5c3_Err = templ.RenderCSSItems(ctx, templ_7745c5c3_Buffer, templ_7745c5c3_Var28...)
 				if templ_7745c5c3_Err != nil {
 					return templ_7745c5c3_Err
@@ -462,7 +462,7 @@ func MemberProfile(ps store.ParliamentStatus, member store.MemberRow, votes []st
 				var templ_7745c5c3_Var30 string
 				templ_7745c5c3_Var30, templ_7745c5c3_Err = templ.JoinStringErrs(v.Vote)
 				if templ_7745c5c3_Err != nil {
-					return templ.Error{Err: templ_7745c5c3_Err, FileName: `internal/templates/member_profile.templ`, Line: 115, Col: 69}
+					return templ.Error{Err: templ_7745c5c3_Err, FileName: `internal/templates/member_profile.templ`, Line: 115, Col: 78}
 				}
 				_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var30))
 				if templ_7745c5c3_Err != nil {
@@ -535,12 +535,12 @@ func MemberProfile(ps store.ParliamentStatus, member store.MemberRow, votes []st
 					return templ_7745c5c3_Err
 				}
 				if v.VotedWithParty {
-					templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 49, "<span class=\"col-yea text-xs\">✓ party</span>")
+					templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 49, "<span class=\"vote-yea text-xs\">✓ party</span>")
 					if templ_7745c5c3_Err != nil {
 						return templ_7745c5c3_Err
 					}
 				} else if v.PartyMajority != "" {
-					templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 50, "<span class=\"col-nay text-xs\">✗ rebel</span>")
+					templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 50, "<span class=\"vote-nay text-xs\">✗ rebel</span>")
 					if templ_7745c5c3_Err != nil {
 						return templ_7745c5c3_Err
 					}

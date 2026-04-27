@@ -262,13 +262,14 @@ func BillLevelLabel(b store.BillRow) string {
 	return "Federal"
 }
 
-// BillLevelBadgeClass returns Tailwind classes for federal/provincial bill badges.
+// BillLevelBadgeClass returns structural/background Tailwind classes for bill badges.
 func BillLevelBadgeClass(b store.BillRow) string {
 	if IsProvincialBill(b) {
-		return "text-xs px-2 py-0.5 rounded-full bg-emerald-100 text-emerald-800"
+		return "text-xs px-2 py-0.5 bg-fuchsia-300 font-medium"
 	}
-	return "text-xs px-2 py-0.5 rounded-full bg-sky-100 text-sky-800"
+	return "text-xs px-2 py-0.5 bg-lime-300 font-medium"
 }
+
 
 // PartyClass returns a Tailwind text-color class for a party name.
 func PartyClass(party string) string {
@@ -288,40 +289,59 @@ func PartyClass(party string) string {
 	}
 }
 
-// VoteBadgeClass returns a Tailwind text-color class for a vote value.
+// VoteBadgeClass returns a CSS class for a vote value.
 func VoteBadgeClass(vote string) string {
 	switch vote {
 	case "Yea":
-		return "font-medium text-green-600"
+		return "vote-yea"
 	case "Nay":
-		return "font-medium text-red-600"
+		return "vote-nay"
 	default:
-		return "text-gray-500"
+		return "vote-other"
 	}
 }
 
-// CategoryBadgeStyle returns an inline background-color style for a category badge.
-func CategoryBadgeStyle(category string) string {
+func categoryBGColor(category string) string {
 	colors := map[string]string{
-		"Budget":            "background-color:#1d4ed8", // blue-700 (was blue-500, 3.8:1 → 6.7:1)
-		"Criminal Justice":  "background-color:#b91c1c", // red-700  (was red-500, 3.8:1 → 6.3:1)
-		"Environment":       "background-color:#15803d", // green-700 (was green-500, 2.2:1 → 5.1:1)
-		"Health":            "background-color:#be185d", // pink-700  (was pink-500, 3.5:1 → 6.1:1)
-		"Housing":           "background-color:#c2410c", // orange-700 (was orange-500, 2.8:1 → 5.2:1)
-		"Immigration":       "background-color:#6d28d9", // violet-700 (was violet-500, 4.2:1 → 7.2:1)
-		"Indigenous":        "background-color:#92400e", // amber-800  (was amber-600, 3.2:1 → 7.0:1)
-		"Infrastructure":    "background-color:#6b7280", // gray-500   (5.0:1 ✓)
-		"Justice":           "background-color:#dc2626", // red-600    (4.9:1 ✓)
-		"Labour":            "background-color:#0369a1", // sky-700    (was sky-500, 2.6:1 → 6.1:1)
-		"National Security": "background-color:#1d4ed8", // blue-700   (6.7:1 ✓)
-		"Social Policy":     "background-color:#7c3aed", // violet-600 (5.8:1 ✓)
-		"Trade":             "background-color:#065f46", // emerald-800 (was emerald-600, 3.7:1 → 7.7:1)
-		"Veterans":          "background-color:#b45309", // amber-700  (5.0:1 ✓)
+		"Budget":            "#93c5fd",
+		"Criminal Justice":  "#fca5a5",
+		"Environment":       "#6ee7b7",
+		"Health":            "#f9a8d4",
+		"Housing":           "#fdba74",
+		"Immigration":       "#c4b5fd",
+		"Indigenous":        "#fcd34d",
+		"Infrastructure":    "#d1d5db",
+		"Justice":           "#fca5a5",
+		"Labour":            "#7dd3fc",
+		"National Security": "#93c5fd",
+		"Social Policy":     "#c4b5fd",
+		"Trade":             "#6ee7b7",
+		"Veterans":          "#fcd34d",
 	}
-	if c, ok := colors[category]; ok {
-		return c
+	if bg, ok := colors[category]; ok {
+		return bg
 	}
-	return "background-color:#4b5563"
+	return "#d1d5db"
+}
+
+// CategoryBadge returns a badge component with both background-color and text colour
+// set as inline styles, bypassing Templ's style-attribute sanitiser (which drops
+// everything after the first semicolon, making multi-property inline styles impossible).
+func CategoryBadge(category, classes string) templ.Component {
+	bg := categoryBGColor(category)
+	safe := strings.NewReplacer("&", "&amp;", "<", "&lt;", ">", "&gt;", `"`, "&quot;").Replace(category)
+	return templ.Raw(
+		`<span class="badge-category ` + classes + `" style="background-color:` + bg + `;color:#1a1a1a">` + safe + `</span>`,
+	)
+}
+
+// BillLevelBadge returns a Federal/Provincial badge with inline colour so it renders
+// correctly in both light and dark mode regardless of Tailwind cascade order.
+func BillLevelBadge(b store.BillRow) templ.Component {
+	if IsProvincialBill(b) {
+		return templ.Raw(`<span class="text-xs px-2 py-0.5 bg-fuchsia-300 font-medium" style="color:#1a1a1a">Provincial</span>`)
+	}
+	return templ.Raw(`<span class="text-xs px-2 py-0.5 bg-lime-300 font-medium" style="color:#1a1a1a">Federal</span>`)
 }
 
 // PageInfo holds pagination state for rendering prev/next links.
@@ -514,9 +534,9 @@ func safeMailtoURL(email string) templ.SafeURL {
 func GovernmentLevelBadge(level string) templ.Component {
 	switch strings.ToLower(level) {
 	case "federal":
-		return templ.Raw(`<span class="inline-block text-xs px-1.5 py-0.5 rounded bg-blue-100 text-blue-700 font-medium">Federal</span>`)
+		return templ.Raw(`<span class="inline-block text-xs px-1.5 py-0.5 bg-lime-300 font-medium" style="color:#1a1a1a">Federal</span>`)
 	case "provincial":
-		return templ.Raw(`<span class="inline-block text-xs px-1.5 py-0.5 rounded bg-purple-100 text-purple-700 font-medium">Provincial</span>`)
+		return templ.Raw(`<span class="inline-block text-xs px-1.5 py-0.5 bg-fuchsia-300 font-medium" style="color:#1a1a1a">Provincial</span>`)
 	default:
 		return templ.Raw(``)
 	}

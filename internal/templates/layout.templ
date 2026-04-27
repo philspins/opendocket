@@ -34,7 +34,7 @@ templ Layout(title string, ps store.ParliamentStatus) {
 					--color-text-primary:   #1A1A1A;  /* Near Black */
 					--color-text-secondary: #6B7280;  /* Slate Grey */
 					--color-alert:          #C41E3A;  /* Record Red */
-					--color-positive:       #2D6A4F;  /* Dark Green */
+					--color-positive:       #1a8c4e;  /* Bright Green */
 
 					/* Internal aliases */
 					--ink-900: var(--color-text-primary);
@@ -246,6 +246,13 @@ templ Layout(title string, ps store.ParliamentStatus) {
 					display: none !important;
 				}
 
+				/* Badge text: #1a1a1a regardless of Tailwind cascade or dark mode */
+				.badge-category,
+				.bg-lime-300,
+				.bg-fuchsia-300 {
+					color: #1a1a1a !important;
+				}
+
 				.btn {
 					display: inline-flex;
 					align-items: center;
@@ -362,7 +369,7 @@ templ Layout(title string, ps store.ParliamentStatus) {
 				.surface-card,
 				.bg-white.rounded-lg.border {
 					background: var(--color-surface-1);
-					border: 1px solid #1A1A1A;
+					border: 1px solid #6b7280;
 				}
 
 				html.dark .surface-card,
@@ -374,7 +381,7 @@ templ Layout(title string, ps store.ParliamentStatus) {
 				/* Theme-aware panels for inner content cards */
 				.panel {
 					background: #f4f7fb;
-					border: 1px solid #1A1A1A;
+					border: 1px solid #6b7280;
 					padding: 1rem;
 				}
 
@@ -398,7 +405,7 @@ templ Layout(title string, ps store.ParliamentStatus) {
 
 				.table-shell,
 				.overflow-x-auto.bg-white.rounded-lg.border {
-					border: 1px solid #1A1A1A;
+					border: 1px solid #6b7280;
 					background: var(--color-surface-1);
 					overflow-x: auto;
 				}
@@ -455,12 +462,24 @@ templ Layout(title string, ps store.ParliamentStatus) {
 				.vote-table td.col-date {
 					font-family: "Inconsolata", monospace;
 					font-size: 0.82rem;
-					color: var(--color-text-secondary);
+					color: var(--color-text-primary);
 					white-space: nowrap;
+					width: 7rem;
+				}
+				.vote-table td.col-vote {
+					width: 4.5rem;
+					white-space: nowrap;
+					font-family: "Libre Baskerville", Georgia, serif;
+					font-size: 0.78rem;
+					font-weight: 700;
+					text-transform: uppercase;
+					letter-spacing: 0.04em;
 				}
 				.vote-table td.col-bill {
 					width: 5.5rem;
 					white-space: nowrap;
+					font-family: "Inconsolata", monospace;
+					font-size: 0.88rem;
 				}
 				.vote-table td.col-bill a,
 				.vote-table td.col-bill span {
@@ -469,27 +488,44 @@ templ Layout(title string, ps store.ParliamentStatus) {
 					color: var(--color-primary-bright);
 				}
 				.vote-table td.col-description {
-					font-family: "Libre Baskerville", Georgia, serif;
-					font-size: 0.88rem;
+					font-family: "Inconsolata", monospace;
+					font-size: 0.85rem;
 					color: var(--color-text-primary);
-					width: 20rem;
+					width: 100%;
 					white-space: normal;
 					word-break: break-word;
 				}
+				/* Vote outcome classes — used on col-vote td and on inline spans */
+				.vote-table td.col-vote.vote-yea,
+				.vote-table .vote-yea {
+					color: var(--color-positive);
+				}
+				.vote-table td.col-vote.vote-nay,
+				.vote-table .vote-nay {
+					color: var(--color-alert);
+				}
+				.vote-table td.col-vote.vote-other,
+				.vote-table .vote-other {
+					color: var(--color-text-secondary);
+				}
 				.vote-table .col-yea,
 				.vote-table td.col-yea {
+					font-family: "Inconsolata", monospace;
 					color: var(--color-positive);
 					font-weight: 600;
 				}
 				.vote-table .col-nay,
 				.vote-table td.col-nay {
+					font-family: "Inconsolata", monospace;
 					color: var(--color-alert);
 					font-weight: 600;
 				}
 				.vote-table td.col-meta {
 					font-family: "Inconsolata", monospace;
 					font-size: 0.82rem;
-					color: var(--color-text-secondary);
+					color: var(--color-text-primary);
+					width: 7rem;
+					white-space: nowrap;
 				}
 
 				/* Vote row states (flagged / public-aligned) */
@@ -567,7 +603,7 @@ templ Layout(title string, ps store.ParliamentStatus) {
 					gap: 0.65rem;
 					align-items: center;
 					padding: 0.95rem;
-					border: 1px solid #1A1A1A;
+					border: 1px solid #6b7280;
 					background: var(--color-surface-1);
 				}
 
@@ -588,16 +624,17 @@ templ Layout(title string, ps store.ParliamentStatus) {
 					grid-template-columns: 1fr 1fr;
 					gap: 0;
 					overflow: hidden;
-					border: 1px solid var(--color-border);
+					border: 1px solid #6b7280;
 					background: var(--color-surface-1);
 				}
 
 				.rep-grid > div:first-child {
-					border-right: 1px solid var(--color-border);
+					border-right: 1px solid #6b7280;
 				}
 
 				html.dark .rep-grid {
 					background: var(--color-surface-1);
+					border-color: var(--color-border);
 				}
 
 				html.dark .rep-grid > div:first-child {
@@ -611,19 +648,41 @@ templ Layout(title string, ps store.ParliamentStatus) {
 
 					.rep-grid > div:first-child {
 						border-right: none;
-						border-bottom: 1px solid var(--color-border);
+						border-bottom: 1px solid #6b7280;
 					}
+
+					html.dark .rep-grid > div:first-child {
+						border-bottom-color: var(--color-border);
+					}
+				}
+
+				/* Nested cards: slightly darker than default border, lighter than near-black */
+				.surface-card .surface-card,
+				.rep-grid .surface-card {
+					border-color: #B0B7C0;
+				}
+
+				/* Metric cards nested inside surface-card (e.g. Overall section) stay softer */
+				.surface-card .metric-card {
+					border-color: var(--color-border);
+				}
+
+				html.dark .surface-card .surface-card,
+				html.dark .rep-grid .surface-card,
+				html.dark .surface-card .metric-card {
+					border-color: var(--color-border);
 				}
 
 				.metric-card {
 					padding: 0.95rem;
-					border: 1px solid var(--color-border);
+					border: 1px solid #6b7280;
 					background: var(--color-surface-1);
 					text-align: center;
 				}
 
 				html.dark .metric-card {
 					background: var(--color-surface-1);
+					border-color: var(--color-border);
 				}
 
 				.empty-state {
@@ -673,14 +732,15 @@ templ Layout(title string, ps store.ParliamentStatus) {
 					font-family: "Inconsolata", monospace;
 				}
 
-				html.dark .font-mono {
+				html.dark .font-mono:not(.badge-category) {
 					color: var(--color-data-mono, #7BAFD4);
 				}
 
 				/* Category / progress bar indicator pips */
 				.stage-pip {
-					height: 4px;
-					flex: 1;
+					width: 100%;
+					height: 6px;
+					border-radius: 3px;
 				}
 
 				.stage-pip.active { background: var(--color-primary); }

@@ -72,7 +72,7 @@ templ CompareMPs(ps store.ParliamentStatus, members []store.MemberRow, m1, m2 st
 					@memberCompactCard(m2)
 				</div>
 
-				<div class="surface-card border border-gray-200 p-6 text-center">
+				<div class="surface-card p-6 text-center">
 					if total > 0 {
 						<p class="text-4xl font-bold text-blue-700">{ fmt.Sprintf("%.0f%%", float64(overlap)/float64(total)*100) }</p>
 						<p class="text-gray-600 mt-1">Agreement rate</p>
@@ -130,7 +130,7 @@ templ CompareMPs(ps store.ParliamentStatus, members []store.MemberRow, m1, m2 st
 }
 
 templ memberCompactCard(m store.MemberRow) {
-	<div class="surface-card border border-gray-200 p-4">
+	<div class="surface-card p-4">
 		<div class="flex items-center gap-3">
 			if m.PhotoURL != "" {
 				<img src={ m.PhotoURL } alt={ m.Name } class="w-12 h-12 rounded-full object-cover"/>

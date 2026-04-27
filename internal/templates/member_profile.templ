@@ -102,7 +102,7 @@ templ MemberProfile(ps store.ParliamentStatus, member store.MemberRow, votes []s
 								<th class="px-4 py-2.5">Bill</th>
 								<th class="px-4 py-2.5">Description</th>
 								<th class="px-4 py-2.5">Result</th>
-								<th class="px-4 py-2.5">Party</th>
+								<th class="px-4 py-2.5">Alignment</th>
 							</tr>
 						</thead>
 						<tbody>
@@ -112,7 +112,7 @@ templ MemberProfile(ps store.ParliamentStatus, member store.MemberRow, votes []s
 									data-vote-row=""
 								>
 									<td class="px-4 py-2.5 col-date">{ FormatDate(v.Date) }</td>
-									<td class={ "px-4 py-2.5", VoteBadgeClass(v.Vote) }>{ v.Vote }</td>
+									<td class={ "px-4 py-2.5 col-vote", VoteBadgeClass(v.Vote) }>{ v.Vote }</td>
 									<td class="px-4 py-2.5 col-bill">
 										if v.BillNumber != "" {
 											<a href={ templ.SafeURL("/bills/" + v.BillID) } class="hover:underline">{ v.BillNumber }</a>
@@ -122,9 +122,9 @@ templ MemberProfile(ps store.ParliamentStatus, member store.MemberRow, votes []s
 									<td class="px-4 py-2.5 col-meta">{ v.Result }</td>
 									<td class="px-4 py-2.5 col-meta">
 										if v.VotedWithParty {
-											<span class="col-yea text-xs">✓ party</span>
+											<span class="vote-yea text-xs">✓ party</span>
 										} else if v.PartyMajority != "" {
-											<span class="col-nay text-xs">✗ rebel</span>
+											<span class="vote-nay text-xs">✗ rebel</span>
 										}
 									</td>
 								</tr>

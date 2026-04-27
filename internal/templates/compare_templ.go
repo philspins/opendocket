@@ -345,7 +345,7 @@ func CompareMPs(ps store.ParliamentStatus, members []store.MemberRow, m1, m2 sto
 				if templ_7745c5c3_Err != nil {
 					return templ_7745c5c3_Err
 				}
-				templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 41, "</div><div class=\"surface-card border border-gray-200 p-6 text-center\">")
+				templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 41, "</div><div class=\"surface-card p-6 text-center\">")
 				if templ_7745c5c3_Err != nil {
 					return templ_7745c5c3_Err
 				}
@@ -652,7 +652,7 @@ func memberCompactCard(m store.MemberRow) templ.Component {
 			templ_7745c5c3_Var33 = templ.NopComponent
 		}
 		ctx = templ.ClearChildren(ctx)
-		templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 69, "<div class=\"surface-card border border-gray-200 p-4\"><div class=\"flex items-center gap-3\">")
+		templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 69, "<div class=\"surface-card p-4\"><div class=\"flex items-center gap-3\">")
 		if templ_7745c5c3_Err != nil {
 			return templ_7745c5c3_Err
 		}
