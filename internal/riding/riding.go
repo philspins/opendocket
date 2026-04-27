@@ -5,7 +5,6 @@ import (
 	"fmt"
 	"log"
 	"net/http"
-	"os"
 	"strings"
 
 	"github.com/philspins/open-democracy/internal/opennorth"
@@ -38,7 +37,7 @@ func New(st *store.Store, googleMapsKey string) *Service {
 	return &Service{
 		store:         st,
 		googleMapsKey: strings.TrimSpace(googleMapsKey),
-		placesApiKey:  strings.TrimSpace(os.Getenv("GOOGLE_PLACES_API_KEY")),
+		placesApiKey:  strings.TrimSpace(googleMapsKey),
 		geocodeFn:     opennorth.GeocodeAddress,
 		repsFn:        opennorth.GetRepresentativesByLatLng,
 	}

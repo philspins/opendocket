@@ -10,59 +10,56 @@ templ CompareMPs(ps store.ParliamentStatus, members []store.MemberRow, m1, m2 st
 		<div class="space-y-6">
 			<h1 class="text-2xl font-bold text-gray-900">Compare MPs</h1>
 
-			<form id="compare-form" method="GET" action="/compare" class="filter-shell space-y-3 w-full">
-				<div class={ templ.KV("grid grid-cols-1 gap-3", true), templ.KV("md:grid-cols-3", level == "provincial"), templ.KV("md:grid-cols-2", level != "provincial") }>
-					<div>
-						<label class="text-xs text-gray-500 block mb-1">Government level</label>
-						<select name="level" class="input-field px-3 py-1.5 text-sm w-full" onchange="this.form.submit()">
-							<option value="federal" selected?={ level == "federal" }>Federal</option>
-							<option value="provincial" selected?={ level == "provincial" }>Provincial</option>
-						</select>
-					</div>
-					if level == "provincial" {
-						<div>
+			<form id="compare-form" method="GET" action="/compare" class="filter-shell w-full">
+				<div class="flex gap-3 items-end w-full">
+					<!-- 4-column grid: col1+col2 = Rep1 width, col3+col4 = Rep2 width -->
+					<div class="flex-1" style="display:grid; grid-template-columns:repeat(4,1fr); gap:0.75rem">
+						<div style="grid-column:1; grid-row:1">
+							<label class="text-xs text-gray-500 block mb-1">Government level</label>
+							<select name="level" class="input-field px-3 py-1.5 text-sm w-full" onchange="this.form.submit()">
+								<option value="federal" selected?={ level == "federal" }>Federal</option>
+								<option value="provincial" selected?={ level == "provincial" }>Provincial</option>
+							</select>
+						</div>
+						<div style="grid-column:2; grid-row:1">
 							<label class="text-xs text-gray-500 block mb-1">Province</label>
-							<select name="province" class="input-field px-3 py-1.5 text-sm w-full" onchange="this.form.submit()">
+							<select name="province" class="input-field px-3 py-1.5 text-sm w-full" disabled?={ level != "provincial" } onchange="this.form.submit()">
 								<option value="" selected?={ province == "" }>All provinces</option>
 								for _, pv := range provinces {
 									<option value={ pv } selected?={ province == pv }>{ pv }</option>
 								}
 							</select>
 						</div>
-					}
-					<div>
-						<label class="text-xs text-gray-500 block mb-1">Party</label>
-						<select name="party" class="input-field px-3 py-1.5 text-sm w-full" onchange="this.form.submit()">
-							<option value="" selected?={ party == "" }>All parties</option>
-							for _, p := range parties {
-								<option value={ p } selected?={ party == p }>{ p }</option>
-							}
-						</select>
+						<div style="grid-column:3/span 2; grid-row:1">
+							<label class="text-xs text-gray-500 block mb-1">Party</label>
+							<select name="party" class="input-field px-3 py-1.5 text-sm w-full" onchange="this.form.submit()">
+								<option value="" selected?={ party == "" }>All parties</option>
+								for _, p := range parties {
+									<option value={ p } selected?={ party == p }>{ p }</option>
+								}
+							</select>
+						</div>
+						<div style="grid-column:1/span 2; grid-row:2">
+							<label class="text-xs text-gray-500 block mb-1">Representative 1</label>
+							<select name="a" class="input-field px-3 py-1.5 text-sm w-full" onchange="this.form.submit()">
+								<option value="">Select a representative</option>
+								for _, m := range members {
+									<option value={ m.ID } selected?={ m1.ID == m.ID }>{ m.Name } ({ m.Party })</option>
+								}
+							</select>
+						</div>
+						<div style="grid-column:3/span 2; grid-row:2">
+							<label class="text-xs text-gray-500 block mb-1">Representative 2</label>
+							<select name="b" class="input-field px-3 py-1.5 text-sm w-full" onchange="this.form.submit()">
+								<option value="">Select a representative</option>
+								for _, m := range members {
+									<option value={ m.ID } selected?={ m2.ID == m.ID }>{ m.Name } ({ m.Party })</option>
+								}
+							</select>
+						</div>
 					</div>
-				</div>
-				<div class="grid grid-cols-1 md:grid-cols-2 gap-3">
-					<div>
-						<label class="text-xs text-gray-500 block mb-1">Representative 1</label>
-						<select name="a" class="input-field px-3 py-1.5 text-sm w-full" onchange="this.form.submit()">
-							<option value="">Select a representative</option>
-							for _, m := range members {
-								<option value={ m.ID } selected?={ m1.ID == m.ID }>{ m.Name } ({ m.Party })</option>
-							}
-						</select>
-					</div>
-					<div>
-						<label class="text-xs text-gray-500 block mb-1">Representative 2</label>
-						<select name="b" class="input-field px-3 py-1.5 text-sm w-full" onchange="this.form.submit()">
-							<option value="">Select a representative</option>
-							for _, m := range members {
-								<option value={ m.ID } selected?={ m2.ID == m.ID }>{ m.Name } ({ m.Party })</option>
-							}
-						</select>
-					</div>
-				</div>
-				<div class="flex items-center justify-center gap-3">
-					<button type="submit" class="btn btn-primary text-sm">Compare</button>
-					<a href="/compare" class="text-sm text-gray-500 hover:underline">Clear</a>
+					<!-- Clear link: aligned to bottom of flex row = bottom of Rep row -->
+					<a href="/compare" class="text-sm text-gray-500 hover:underline shrink-0 self-end pb-[0.44rem]">Clear</a>
 				</div>
 			</form>
 

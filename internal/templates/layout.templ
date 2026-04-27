@@ -242,6 +242,11 @@ templ Layout(title string, ps store.ParliamentStatus) {
 					border-color: var(--color-primary-bright);
 				}
 
+				select:disabled {
+					opacity: 0.4;
+					cursor: not-allowed;
+				}
+
 				.is-hidden {
 					display: none !important;
 				}
@@ -820,6 +825,7 @@ templ Layout(title string, ps store.ParliamentStatus) {
 			<main class="site-main">
 				{ children... }
 			</main>
+			@AddressAutocompleteScript(PlacesAPIKey())
 			<footer class="footer-shell">
 				<p>Open Docket — The official record. Made open.</p>
 				<p>Data sourced from the Parliament of Canada Open Data portal and provincial legislatures. Non-partisan. Independent.</p>

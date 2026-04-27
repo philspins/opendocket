@@ -11,7 +11,7 @@ templ MemberProfile(ps store.ParliamentStatus, member store.MemberRow, votes []s
 			<a href="/members" class="text-sm text-blue-600 hover:underline">← Members</a>
 
 			<!-- Header -->
-			<div class="surface-card border border-gray-200 p-6 flex items-start gap-6">
+			<div class="surface-card p-6 flex items-start gap-6">
 				if member.PhotoURL != "" {
 					<img src={ member.PhotoURL } alt={ member.Name } class="w-24 h-24 rounded-full object-cover flex-shrink-0"/>
 				} else {
@@ -42,19 +42,19 @@ templ MemberProfile(ps store.ParliamentStatus, member store.MemberRow, votes []s
 
 			<!-- Stats -->
 			<div class="grid grid-cols-2 sm:grid-cols-4 gap-4">
-				<div class="surface-card border border-gray-200 p-4 text-center">
+				<div class="surface-card p-4 text-center">
 					<p class="text-2xl font-bold text-gray-900">{ fmt.Sprint(stats.TotalVotes) }</p>
 					<p class="text-sm text-gray-500">Total Votes</p>
 				</div>
-				<div class="surface-card border border-gray-200 p-4 text-center">
+				<div class="surface-card p-4 text-center">
 					<p class="text-2xl font-bold text-green-600">{ fmt.Sprint(stats.PartyLinePct) }%</p>
 					<p class="text-sm text-gray-500">Party Line</p>
 				</div>
-				<div class="surface-card border border-gray-200 p-4 text-center">
+				<div class="surface-card p-4 text-center">
 					<p class="text-2xl font-bold text-orange-500">{ fmt.Sprint(stats.RebelPct) }%</p>
 					<p class="text-sm text-gray-500">Against Party</p>
 				</div>
-				<div class="surface-card border border-gray-200 p-4 text-center">
+				<div class="surface-card p-4 text-center">
 					<p class="text-2xl font-bold text-gray-500">{ fmt.Sprint(stats.MissedPct) }%</p>
 					<p class="text-sm text-gray-500">Missed Votes</p>
 				</div>
@@ -62,7 +62,7 @@ templ MemberProfile(ps store.ParliamentStatus, member store.MemberRow, votes []s
 
 			<!-- Category Scorecards -->
 			if len(catScores) > 0 {
-				<section class="surface-card border border-gray-200 p-6">
+				<section class="surface-card p-6">
 					<h2 class="text-lg font-semibold text-gray-800 mb-4">Voting by Category</h2>
 					<div class="space-y-3">
 						for _, cs := range catScores {
@@ -141,7 +141,7 @@ templ MemberProfile(ps store.ParliamentStatus, member store.MemberRow, votes []s
 			</section>
 
 			<!-- Follow + policy actions -->
-			<section class="surface-card border border-gray-200 p-4 space-y-4">
+			<section class="surface-card p-4 space-y-4">
 				<h2 class="text-lg font-semibold text-gray-800">Engage With This MP</h2>
 				<form method="POST" action="/api/follow" class="grid sm:grid-cols-3 gap-3">
 					<input type="hidden" name="member_id" value={ member.ID }/>

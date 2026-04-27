@@ -529,6 +529,13 @@ func safeMailtoURL(email string) templ.SafeURL {
 	return templ.SafeURL("mailto:" + email)
 }
 
+// PlacesAPIKey returns the Google Maps API key used for the Places autocomplete
+// widget. It reads GOOGLE_MAPS_API_KEY from the environment so the layout can
+// inject the autocomplete script on every page without extra template parameters.
+func PlacesAPIKey() string {
+	return strings.TrimSpace(os.Getenv("GOOGLE_MAPS_API_KEY"))
+}
+
 // GovernmentLevelBadge returns a small inline badge component for the member's
 // government level ("federal" or "provincial"). Unknown values render as "".
 func GovernmentLevelBadge(level string) templ.Component {

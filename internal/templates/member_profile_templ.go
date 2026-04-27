@@ -46,7 +46,7 @@ func MemberProfile(ps store.ParliamentStatus, member store.MemberRow, votes []st
 				}()
 			}
 			ctx = templ.InitializeContext(ctx)
-			templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 1, "<div class=\"space-y-6\"><a href=\"/members\" class=\"text-sm text-blue-600 hover:underline\">← Members</a><!-- Header --><div class=\"surface-card border border-gray-200 p-6 flex items-start gap-6\">")
+			templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 1, "<div class=\"space-y-6\"><a href=\"/members\" class=\"text-sm text-blue-600 hover:underline\">← Members</a><!-- Header --><div class=\"surface-card p-6 flex items-start gap-6\">")
 			if templ_7745c5c3_Err != nil {
 				return templ_7745c5c3_Err
 			}
@@ -247,7 +247,7 @@ func MemberProfile(ps store.ParliamentStatus, member store.MemberRow, votes []st
 					return templ_7745c5c3_Err
 				}
 			}
-			templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 22, "</div></div></div><!-- Stats --><div class=\"grid grid-cols-2 sm:grid-cols-4 gap-4\"><div class=\"surface-card border border-gray-200 p-4 text-center\"><p class=\"text-2xl font-bold text-gray-900\">")
+			templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 22, "</div></div></div><!-- Stats --><div class=\"grid grid-cols-2 sm:grid-cols-4 gap-4\"><div class=\"surface-card p-4 text-center\"><p class=\"text-2xl font-bold text-gray-900\">")
 			if templ_7745c5c3_Err != nil {
 				return templ_7745c5c3_Err
 			}
@@ -260,7 +260,7 @@ func MemberProfile(ps store.ParliamentStatus, member store.MemberRow, votes []st
 			if templ_7745c5c3_Err != nil {
 				return templ_7745c5c3_Err
 			}
-			templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 23, "</p><p class=\"text-sm text-gray-500\">Total Votes</p></div><div class=\"surface-card border border-gray-200 p-4 text-center\"><p class=\"text-2xl font-bold text-green-600\">")
+			templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 23, "</p><p class=\"text-sm text-gray-500\">Total Votes</p></div><div class=\"surface-card p-4 text-center\"><p class=\"text-2xl font-bold text-green-600\">")
 			if templ_7745c5c3_Err != nil {
 				return templ_7745c5c3_Err
 			}
@@ -273,7 +273,7 @@ func MemberProfile(ps store.ParliamentStatus, member store.MemberRow, votes []st
 			if templ_7745c5c3_Err != nil {
 				return templ_7745c5c3_Err
 			}
-			templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 24, "%</p><p class=\"text-sm text-gray-500\">Party Line</p></div><div class=\"surface-card border border-gray-200 p-4 text-center\"><p class=\"text-2xl font-bold text-orange-500\">")
+			templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 24, "%</p><p class=\"text-sm text-gray-500\">Party Line</p></div><div class=\"surface-card p-4 text-center\"><p class=\"text-2xl font-bold text-orange-500\">")
 			if templ_7745c5c3_Err != nil {
 				return templ_7745c5c3_Err
 			}
@@ -286,7 +286,7 @@ func MemberProfile(ps store.ParliamentStatus, member store.MemberRow, votes []st
 			if templ_7745c5c3_Err != nil {
 				return templ_7745c5c3_Err
 			}
-			templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 25, "%</p><p class=\"text-sm text-gray-500\">Against Party</p></div><div class=\"surface-card border border-gray-200 p-4 text-center\"><p class=\"text-2xl font-bold text-gray-500\">")
+			templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 25, "%</p><p class=\"text-sm text-gray-500\">Against Party</p></div><div class=\"surface-card p-4 text-center\"><p class=\"text-2xl font-bold text-gray-500\">")
 			if templ_7745c5c3_Err != nil {
 				return templ_7745c5c3_Err
 			}
@@ -304,7 +304,7 @@ func MemberProfile(ps store.ParliamentStatus, member store.MemberRow, votes []st
 				return templ_7745c5c3_Err
 			}
 			if len(catScores) > 0 {
-				templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 27, "<section class=\"surface-card border border-gray-200 p-6\"><h2 class=\"text-lg font-semibold text-gray-800 mb-4\">Voting by Category</h2><div class=\"space-y-3\">")
+				templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 27, "<section class=\"surface-card p-6\"><h2 class=\"text-lg font-semibold text-gray-800 mb-4\">Voting by Category</h2><div class=\"space-y-3\">")
 				if templ_7745c5c3_Err != nil {
 					return templ_7745c5c3_Err
 				}
@@ -564,7 +564,7 @@ func MemberProfile(ps store.ParliamentStatus, member store.MemberRow, votes []st
 			if templ_7745c5c3_Err != nil {
 				return templ_7745c5c3_Err
 			}
-			templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 54, "</section><!-- Follow + policy actions --><section class=\"surface-card border border-gray-200 p-4 space-y-4\"><h2 class=\"text-lg font-semibold text-gray-800\">Engage With This MP</h2><form method=\"POST\" action=\"/api/follow\" class=\"grid sm:grid-cols-3 gap-3\"><input type=\"hidden\" name=\"member_id\" value=\"")
+			templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 54, "</section><!-- Follow + policy actions --><section class=\"surface-card p-4 space-y-4\"><h2 class=\"text-lg font-semibold text-gray-800\">Engage With This MP</h2><form method=\"POST\" action=\"/api/follow\" class=\"grid sm:grid-cols-3 gap-3\"><input type=\"hidden\" name=\"member_id\" value=\"")
 			if templ_7745c5c3_Err != nil {
 				return templ_7745c5c3_Err
 			}
