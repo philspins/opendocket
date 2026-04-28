@@ -8,12 +8,13 @@
 *.test
 *.out
 
-# Go module cache (do not commit)
+# Go & Node.js caches (do not commit)
 vendor/
+node_modules/
 
 # Open Democracy runtime files
-*.db
-*.sqlite
+/open-democracy-crawler
+/open-democracy-server
 
 # Editor / OS
 .DS_Store
@@ -23,20 +24,16 @@ vendor/
 *.swo
 .claude/*
 
+# SQLite files
+*.db
+*.sqlite
 *.db-shm
 *.db-wal
 *.db-wal
 *.db-shm
-.env
-/open-democracy-crawler
-/open-democracy-server
-/open-democracy-crawler.exe
-/open-democracy-server.exe
-*.pem
 
 # ignore sensitive files
 sshlogin.sh
 upload_db.sh
-
-# Node.js stuff
-node_modules/
+*.pem
+.env
