@@ -19,6 +19,8 @@ templ Home(ps store.ParliamentStatus, provincialVotes []store.VoteRow, federalVo
 				federalParty = defaultFederalParty()
 			}
 			hasSavedRiding := strings.TrimSpace(savedAddress) != ""
+			hasProvincialRep := strings.TrimSpace(provincialRep.Name) != ""
+			hasFederalRep := strings.TrimSpace(federalRep.Name) != ""
 		}}
 		<div class="space-y-6">
 			if !hasSavedRiding {
@@ -49,114 +51,130 @@ templ Home(ps store.ParliamentStatus, provincialVotes []store.VoteRow, federalVo
 
 			<section class="rep-grid">
 				<div>
-					{{
-						provName, provRole := homeRepresentativeNameRole(provincialRep, "Your current provincial representative", "Provincial representative")
-					}}
-					<div class="px-5 py-3 text-sm" style={ partyBannerStyle(provParty) }>
-						<div class="flex items-start justify-between gap-3">
-							<h3 class="text-base font-bold leading-tight">
-								if strings.TrimSpace(provincialRep.LocalMemberID) != "" {
-									<a href={ templ.SafeURL("/members/" + strings.TrimSpace(provincialRep.LocalMemberID)) } class="hover:underline">{ provName }</a>
-								} else {
-									{ provName }
+					if !hasProvincialRep {
+						<div class="surface-card p-6 flex flex-col items-center text-center space-y-3">
+							<p class="text-base font-semibold">Provincial representative not found</p>
+							<p class="section-lead text-sm max-w-xs">Your provincial riding hasn't been set up yet. Enter your address to find your local representative.</p>
+							<a href="/riding" class="btn btn-primary text-sm mt-2">Find Your Riding</a>
+						</div>
+					} else {
+						{{
+							provName, provRole := homeRepresentativeNameRole(provincialRep, "Your current provincial representative", "Provincial representative")
+						}}
+						<div class="px-5 py-3 text-sm" style={ partyBannerStyle(provParty) }>
+							<div class="flex items-start justify-between gap-3">
+								<h3 class="text-base font-bold leading-tight">
+									if strings.TrimSpace(provincialRep.LocalMemberID) != "" {
+										<a href={ templ.SafeURL("/members/" + strings.TrimSpace(provincialRep.LocalMemberID)) } class="hover:underline">{ provName }</a>
+									} else {
+										{ provName }
+									}
+									if provRole != "" {
+										{ " (" + provRole + ")" }
+									}
+								</h3>
+								if strings.TrimSpace(provincialRep.DistrictName) != "" {
+									<h4 class="text-sm font-semibold text-right leading-tight">{ strings.TrimSpace(provincialRep.DistrictName) }</h4>
 								}
-								if provRole != "" {
-									{ " (" + provRole + ")" }
-								}
-							</h3>
-							if strings.TrimSpace(provincialRep.DistrictName) != "" {
-								<h4 class="text-sm font-semibold text-right leading-tight">{ strings.TrimSpace(provincialRep.DistrictName) }</h4>
+							</div>
+							if strings.TrimSpace(provParty) != "" {
+								<h4 class="mt-1 text-sm font-semibold leading-tight">{ strings.TrimSpace(provParty) }</h4>
 							}
 						</div>
-						if strings.TrimSpace(provParty) != "" {
-							<h4 class="mt-1 text-sm font-semibold leading-tight">{ strings.TrimSpace(provParty) }</h4>
-						}
-					</div>
-					<div class="px-5 py-2 text-xs border-b border-gray-100" style="color: var(--color-text-secondary); font-family: 'Inconsolata', monospace; letter-spacing: 0.04em;">
-						Legislature: { provincialStatus }
-					</div>
-					<div class="p-5 space-y-4">
-						<div class="title-row">
-							<h2 class="text-xl">Bills voted on by your rep</h2>
-							<a href="/votes" class="text-sm text-blue-700 hover:underline">All votes →</a>
+						<div class="px-5 py-2 text-xs border-b border-gray-100" style="color: var(--color-text-secondary); font-family: 'Inconsolata', monospace; letter-spacing: 0.04em;">
+							Legislature: { provincialStatus }
 						</div>
-						<div class="space-y-3">
-							for _, v := range provincialVotes {
-								<div class="surface-card p-3">
-									<div class="flex items-center justify-between gap-2">
-										if v.BillID != "" && v.BillNumber != "" {
-											<a href={ templ.SafeURL("/bills/" + v.BillID) } class="font-mono font-semibold text-blue-700">{ v.BillNumber }</a>
-										} else if v.BillNumber != "" {
-											<span class="font-mono font-semibold text-gray-700">{ v.BillNumber }</span>
-										}
-										<span class={ VoteBadgeClass(v.Vote) }>{ v.Vote }</span>
+						<div class="p-5 space-y-4">
+							<div class="title-row">
+								<h2 class="text-xl">Bills voted on by your rep</h2>
+								<a href="/votes" class="text-sm text-blue-700 hover:underline">All votes →</a>
+							</div>
+							<div class="space-y-3">
+								for _, v := range provincialVotes {
+									<div class="surface-card p-3">
+										<div class="flex items-center justify-between gap-2">
+											if v.BillID != "" && v.BillNumber != "" {
+												<a href={ templ.SafeURL("/bills/" + v.BillID) } class="font-mono font-semibold text-blue-700">{ v.BillNumber }</a>
+											} else if v.BillNumber != "" {
+												<span class="font-mono font-semibold text-gray-700">{ v.BillNumber }</span>
+											}
+											<span class={ VoteBadgeClass(v.Vote) }>{ v.Vote }</span>
+										</div>
+										<p class="mt-2 text-sm text-gray-700 line-clamp-2">{ v.Description }</p>
+										<p class="mt-2 text-xs text-gray-500">{ FormatDate(v.Date) }</p>
 									</div>
-									<p class="mt-2 text-sm text-gray-700 line-clamp-2">{ v.Description }</p>
-									<p class="mt-2 text-xs text-gray-500">{ FormatDate(v.Date) }</p>
-								</div>
-							}
-							if len(provincialVotes) == 0 {
-								<div class="empty-state text-sm">No recorded bill votes yet.</div>
-							}
+								}
+								if len(provincialVotes) == 0 {
+									<div class="empty-state text-sm">No recorded bill votes yet.</div>
+								}
+							</div>
 						</div>
-					</div>
+					}
 				</div>
 
 				<div>
-					{{
-						fedName, fedRole := homeRepresentativeNameRole(federalRep, "Your current federal representative", "Federal representative")
-					}}
-					<div class="px-5 py-3 text-sm" style={ partyBannerStyle(federalParty) }>
-						<div class="flex items-start justify-between gap-3">
-							<h3 class="text-base font-bold leading-tight">
-								if strings.TrimSpace(federalRep.LocalMemberID) != "" {
-									<a href={ templ.SafeURL("/members/" + strings.TrimSpace(federalRep.LocalMemberID)) } class="hover:underline">{ fedName }</a>
-								} else {
-									{ fedName }
+					if !hasFederalRep {
+						<div class="surface-card p-6 flex flex-col items-center text-center space-y-3">
+							<p class="text-base font-semibold">Federal representative not found</p>
+							<p class="section-lead text-sm max-w-xs">Your federal riding hasn't been set up yet. Enter your address to find your local representative.</p>
+							<a href="/riding" class="btn btn-primary text-sm mt-2">Find Your Riding</a>
+						</div>
+					} else {
+						{{
+							fedName, fedRole := homeRepresentativeNameRole(federalRep, "Your current federal representative", "Federal representative")
+						}}
+						<div class="px-5 py-3 text-sm" style={ partyBannerStyle(federalParty) }>
+							<div class="flex items-start justify-between gap-3">
+								<h3 class="text-base font-bold leading-tight">
+									if strings.TrimSpace(federalRep.LocalMemberID) != "" {
+										<a href={ templ.SafeURL("/members/" + strings.TrimSpace(federalRep.LocalMemberID)) } class="hover:underline">{ fedName }</a>
+									} else {
+										{ fedName }
+									}
+									if fedRole != "" {
+										{ " (" + fedRole + ")" }
+									}
+								</h3>
+								if strings.TrimSpace(federalRep.DistrictName) != "" {
+									<h4 class="text-sm font-semibold text-right leading-tight">{ strings.TrimSpace(federalRep.DistrictName) }</h4>
 								}
-								if fedRole != "" {
-									{ " (" + fedRole + ")" }
-								}
-							</h3>
-							if strings.TrimSpace(federalRep.DistrictName) != "" {
-								<h4 class="text-sm font-semibold text-right leading-tight">{ strings.TrimSpace(federalRep.DistrictName) }</h4>
+							</div>
+							if strings.TrimSpace(federalParty) != "" {
+								<h4 class="mt-1 text-sm font-semibold leading-tight">{ strings.TrimSpace(federalParty) }</h4>
 							}
 						</div>
-						if strings.TrimSpace(federalParty) != "" {
-							<h4 class="mt-1 text-sm font-semibold leading-tight">{ strings.TrimSpace(federalParty) }</h4>
-						}
-					</div>
-					<div class="px-5 py-2 text-xs border-b border-gray-100" style="color: var(--color-text-secondary); font-family: 'Inconsolata', monospace; letter-spacing: 0.04em;">
-						{ ps.Label }
-						if ps.Detail != "" {
-							— { ps.Detail }
-						}
-					</div>
-					<div class="p-5 space-y-4">
-						<div class="title-row">
-							<h2 class="text-xl">Bills voted on by your rep</h2>
-							<a href="/votes" class="text-sm text-blue-700 hover:underline">All votes →</a>
+						<div class="px-5 py-2 text-xs border-b border-gray-100" style="color: var(--color-text-secondary); font-family: 'Inconsolata', monospace; letter-spacing: 0.04em;">
+							{ ps.Label }
+							if ps.Detail != "" {
+								— { ps.Detail }
+							}
 						</div>
-						<div class="space-y-3">
-							for _, v := range federalVotes {
-								<div class="surface-card p-3">
-									<div class="flex items-center justify-between gap-2">
-										if v.BillID != "" && v.BillNumber != "" {
-											<a href={ templ.SafeURL("/bills/" + v.BillID) } class="font-mono font-semibold text-blue-700">{ v.BillNumber }</a>
-										} else if v.BillNumber != "" {
-											<span class="font-mono font-semibold text-gray-700">{ v.BillNumber }</span>
-										}
-										<span class={ VoteBadgeClass(v.Vote) }>{ v.Vote }</span>
+						<div class="p-5 space-y-4">
+							<div class="title-row">
+								<h2 class="text-xl">Bills voted on by your rep</h2>
+								<a href="/votes" class="text-sm text-blue-700 hover:underline">All votes →</a>
+							</div>
+							<div class="space-y-3">
+								for _, v := range federalVotes {
+									<div class="surface-card p-3">
+										<div class="flex items-center justify-between gap-2">
+											if v.BillID != "" && v.BillNumber != "" {
+												<a href={ templ.SafeURL("/bills/" + v.BillID) } class="font-mono font-semibold text-blue-700">{ v.BillNumber }</a>
+											} else if v.BillNumber != "" {
+												<span class="font-mono font-semibold text-gray-700">{ v.BillNumber }</span>
+											}
+											<span class={ VoteBadgeClass(v.Vote) }>{ v.Vote }</span>
+										</div>
+										<p class="mt-2 text-sm text-gray-700 line-clamp-2">{ v.Description }</p>
+										<p class="mt-2 text-xs text-gray-500">{ FormatDate(v.Date) }</p>
 									</div>
-									<p class="mt-2 text-sm text-gray-700 line-clamp-2">{ v.Description }</p>
-									<p class="mt-2 text-xs text-gray-500">{ FormatDate(v.Date) }</p>
-								</div>
-							}
-							if len(federalVotes) == 0 {
-								<div class="empty-state text-sm">No recorded bill votes yet.</div>
-							}
+								}
+								if len(federalVotes) == 0 {
+									<div class="empty-state text-sm">No recorded bill votes yet.</div>
+								}
+							</div>
 						</div>
-					</div>
+					}
 				</div>
 			</section>
 

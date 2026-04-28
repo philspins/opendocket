@@ -854,6 +854,96 @@ func TestHandleHome_ShowsRecentBillVotesForSelectedRepresentatives(t *testing.T)
 	}
 }
 
+func TestHandleHome_ShowsProvincialPlaceholderWhenOnlyFederalRidingSet(t *testing.T) {
+	srv, st, conn := newTestServerWithConn(t)
+	if err := db.UpsertMember(conn, db.Member{
+		ID:              "mp-ottawa-centre-prov",
+		Name:            "Yasir Naqvi",
+		Party:           "Liberal",
+		Riding:          "Ottawa Centre",
+		Chamber:         "commons",
+		Active:          true,
+		LastScraped:     "2026-01-01T00:00:00Z",
+		GovernmentLevel: "federal",
+	}); err != nil {
+		t.Fatalf("UpsertMember: %v", err)
+	}
+	u, err := st.UpsertUser("home-fed-only@example.com")
+	if err != nil {
+		t.Fatalf("UpsertUser: %v", err)
+	}
+	if _, err := st.UpdateUserLocation(u.ID, "Ottawa Centre", ""); err != nil {
+		t.Fatalf("UpdateUserLocation: %v", err)
+	}
+	sid, err := st.CreateSession(u.ID, time.Hour)
+	if err != nil {
+		t.Fatalf("CreateSession: %v", err)
+	}
+
+	req := httptest.NewRequest(http.MethodGet, "/", nil)
+	req.AddCookie(&http.Cookie{Name: "od_session", Value: sid})
+	rr := httptest.NewRecorder()
+	srv.ServeHTTP(rr, req)
+	if rr.Code != http.StatusOK {
+		t.Fatalf("status=%d want %d", rr.Code, http.StatusOK)
+	}
+	body := rr.Body.String()
+	if !strings.Contains(body, "Provincial representative not found") {
+		t.Fatalf("expected provincial placeholder when provincial riding is not set")
+	}
+	if strings.Contains(body, "Federal representative not found") {
+		t.Fatalf("did not expect federal placeholder when federal riding is set")
+	}
+	if !strings.Contains(body, "Yasir Naqvi") {
+		t.Fatalf("expected federal representative name to be shown")
+	}
+}
+
+func TestHandleHome_ShowsFederalPlaceholderWhenOnlyProvincialRidingSet(t *testing.T) {
+	srv, st, conn := newTestServerWithConn(t)
+	if err := db.UpsertMember(conn, db.Member{
+		ID:              "mpp-ottawa-south-fed",
+		Name:            "John Fraser",
+		Party:           "Ontario Liberal Party",
+		Riding:          "Ottawa South",
+		Chamber:         "ontario",
+		Active:          true,
+		LastScraped:     "2026-01-01T00:00:00Z",
+		GovernmentLevel: "provincial",
+	}); err != nil {
+		t.Fatalf("UpsertMember: %v", err)
+	}
+	u, err := st.UpsertUser("home-prov-only@example.com")
+	if err != nil {
+		t.Fatalf("UpsertUser: %v", err)
+	}
+	if _, err := st.UpdateUserLocation(u.ID, "", "Ottawa South"); err != nil {
+		t.Fatalf("UpdateUserLocation: %v", err)
+	}
+	sid, err := st.CreateSession(u.ID, time.Hour)
+	if err != nil {
+		t.Fatalf("CreateSession: %v", err)
+	}
+
+	req := httptest.NewRequest(http.MethodGet, "/", nil)
+	req.AddCookie(&http.Cookie{Name: "od_session", Value: sid})
+	rr := httptest.NewRecorder()
+	srv.ServeHTTP(rr, req)
+	if rr.Code != http.StatusOK {
+		t.Fatalf("status=%d want %d", rr.Code, http.StatusOK)
+	}
+	body := rr.Body.String()
+	if !strings.Contains(body, "Federal representative not found") {
+		t.Fatalf("expected federal placeholder when federal riding is not set")
+	}
+	if strings.Contains(body, "Provincial representative not found") {
+		t.Fatalf("did not expect provincial placeholder when provincial riding is set")
+	}
+	if !strings.Contains(body, "John Fraser") {
+		t.Fatalf("expected provincial representative name to be shown")
+	}
+}
+
 func TestRecentBillVotes_DeduplicatesAndFallsBackToNonBillDivisions(t *testing.T) {
 	// Bill-linked votes come first and are deduplicated; non-bill votes fill remaining slots.
 	got := recentBillVotes([]store.VoteRow{
