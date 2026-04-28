@@ -15,39 +15,48 @@ templ BillsFeed(ps store.ParliamentStatus, bills []store.BillRow, total int, f s
 
 			<!-- Filters -->
 			<form method="GET" action="/bills" class="filter-shell">
-				<input type="text" name="q" value={ f.Search } placeholder="Search bills…"
-					class="input-field w-48"/>
-				<select name="stage" class="input-field">
-					<option value="">All Stages</option>
-					for _, s := range Stages {
-						<option value={ s } selected?={ f.Stage == s }>{ StageLabel(s) }</option>
-					}
-				</select>
-				<select name="category" class="input-field">
-					<option value="">All Categories</option>
-					for _, c := range Categories {
-						<option value={ c } selected?={ f.Category == c }>{ c }</option>
-					}
-				</select>
-				<select name="chamber" class="input-field">
-					<option value="">Both Chambers</option>
-					<option value="commons" selected?={ f.Chamber == "commons" }>House</option>
-					<option value="senate" selected?={ f.Chamber == "senate" }>Senate</option>
-				</select>
-				<select name="level" class="input-field">
-					<option value="">Federal + Provincial</option>
-					<option value="federal" selected?={ f.Level == "federal" }>Federal only</option>
-					<option value="provincial" selected?={ f.Level == "provincial" }>Provincial only</option>
-				</select>
-				<select name="sort" class="input-field">
-					<option value="" selected?={ f.Sort == "" }>Latest Activity</option>
-					<option value="date_asc" selected?={ f.Sort == "date_asc" }>Oldest First</option>
-					<option value="stage" selected?={ f.Sort == "stage" }>Stage</option>
-					<option value="category" selected?={ f.Sort == "category" }>Category</option>
-					<option value="auto" selected?={ f.Sort == "auto" }>Auto (Personalized)</option>
-				</select>
-				<button type="submit" class="btn btn-primary">Filter</button>
-				<a href="/bills" class="text-sm text-gray-500 hover:underline">Clear</a>
+				<div class="flex flex-col sm:flex-row gap-3 w-full">
+					<!-- Left: filters (~3/4) -->
+					<div class="flex flex-wrap gap-2 items-center flex-1">
+						<input type="text" name="q" value={ f.Search } placeholder="Search bills…"
+							class="input-field w-40"/>
+						<select name="stage" class="input-field">
+							<option value="">All Stages</option>
+							for _, s := range Stages {
+								<option value={ s } selected?={ f.Stage == s }>{ StageLabel(s) }</option>
+							}
+						</select>
+						<select name="category" class="input-field">
+							<option value="">All Categories</option>
+							for _, c := range Categories {
+								<option value={ c } selected?={ f.Category == c }>{ c }</option>
+							}
+						</select>
+						<select name="chamber" class="input-field">
+							<option value="">Both Chambers</option>
+							<option value="commons" selected?={ f.Chamber == "commons" }>House</option>
+							<option value="senate" selected?={ f.Chamber == "senate" }>Senate</option>
+						</select>
+						<select name="level" class="input-field">
+							<option value="">Federal + Provincial</option>
+							<option value="federal" selected?={ f.Level == "federal" }>Federal only</option>
+							<option value="provincial" selected?={ f.Level == "provincial" }>Provincial only</option>
+						</select>
+						<button type="submit" class="btn btn-primary">Filter</button>
+						<a href="/bills" class="text-sm text-gray-500 hover:underline">Clear</a>
+					</div>
+					<!-- Right: sort (~1/4) -->
+					<div class="flex items-center gap-2 sm:w-56 shrink-0 sm:border-l sm:border-gray-300 sm:pl-3">
+						<select name="sort" class="input-field flex-1">
+							<option value="" selected?={ f.Sort == "" }>Latest Activity</option>
+							<option value="date_asc" selected?={ f.Sort == "date_asc" }>Oldest First</option>
+							<option value="stage" selected?={ f.Sort == "stage" }>Stage</option>
+							<option value="category" selected?={ f.Sort == "category" }>Category</option>
+							<option value="auto" selected?={ f.Sort == "auto" }>Auto (Personalized)</option>
+						</select>
+						<button type="submit" class="btn btn-secondary shrink-0">Sort</button>
+					</div>
+				</div>
 			</form>
 			if f.Sort == "auto" && len(f.PreferredCategories) == 0 && len(f.SubscribedBillIDs) == 0 {
 				<div class="rounded-lg border border-blue-200 bg-blue-50 px-4 py-3 text-sm text-blue-800">
