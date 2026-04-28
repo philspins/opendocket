@@ -5,7 +5,7 @@ import (
 	"github.com/philspins/opendocket/internal/store"
 )
 
-templ ProfilePage(ps store.ParliamentStatus, user store.UserRow, address string, reps []opennorth.Representative, federalRep opennorth.Representative, provincialRep opennorth.Representative, lookupErr string, updated bool, placesApiKey string) {
+templ ProfilePage(ps store.ParliamentStatus, user store.UserRow, address string, reps []opennorth.Representative, federalRep opennorth.Representative, provincialRep opennorth.Representative, lookupErr string, updated bool, placesApiKey string, federalRidings []string, provincialRidings []string) {
 	@Layout("Profile", ps) {
 		<div class="space-y-6">
 			<section class="surface-card p-6 space-y-4">
@@ -37,6 +37,37 @@ templ ProfilePage(ps store.ParliamentStatus, user store.UserRow, address string,
 					<button type="submit" class="btn btn-primary">Update Riding</button>
 					<a href="/profile" class="text-sm text-gray-500 hover:underline">Reset</a>
 				</form>
+
+				if len(federalRidings) > 0 || len(provincialRidings) > 0 {
+					<div class="border-t border-gray-100 pt-4 space-y-3">
+						<p class="text-sm text-gray-500">Can&#39;t find your riding by address? Select manually:</p>
+						<form method="POST" action="/profile" class="flex flex-wrap gap-3 items-end">
+							if len(federalRidings) > 0 {
+								<div class="flex flex-col gap-1">
+									<label class="text-xs text-gray-500" for="federal_riding">Federal riding</label>
+									<select id="federal_riding" name="federal_riding" class="input-field px-3 py-2 text-sm">
+										<option value="">— select —</option>
+										for _, r := range federalRidings {
+											<option value={ r } selected?={ r == user.FederalRidingID }>{ r }</option>
+										}
+									</select>
+								</div>
+							}
+							if len(provincialRidings) > 0 {
+								<div class="flex flex-col gap-1">
+									<label class="text-xs text-gray-500" for="provincial_riding">Provincial riding</label>
+									<select id="provincial_riding" name="provincial_riding" class="input-field px-3 py-2 text-sm">
+										<option value="">— select —</option>
+										for _, r := range provincialRidings {
+											<option value={ r } selected?={ r == user.ProvincialRidingID }>{ r }</option>
+										}
+									</select>
+								</div>
+							}
+							<button type="submit" class="btn btn-primary">Save</button>
+						</form>
+					</div>
+				}
 			</section>
 
 			if len(profileRepresentativeCards(reps, federalRep, provincialRep)) > 0 {
