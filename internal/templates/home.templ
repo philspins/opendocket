@@ -52,7 +52,7 @@ templ Home(ps store.ParliamentStatus, provincialVotes []store.VoteRow, federalVo
 			<section class="rep-grid">
 				<div>
 					if !hasProvincialRep {
-						<div class="surface-card p-6 flex flex-col items-center text-center space-y-3">
+						<div class="surface-card p-6 flex flex-col items-center text-center space-y-3 h-full">
 							<p class="text-base font-semibold">Provincial representative not found</p>
 							<p class="section-lead text-sm max-w-xs">Your provincial riding hasn't been set up yet. Enter your address to find your local representative.</p>
 						</div>
@@ -113,7 +113,7 @@ templ Home(ps store.ParliamentStatus, provincialVotes []store.VoteRow, federalVo
 
 				<div>
 					if !hasFederalRep {
-						<div class="surface-card p-6 flex flex-col items-center text-center space-y-3">
+						<div class="surface-card p-6 flex flex-col items-center text-center space-y-3 h-full">
 							<p class="text-base font-semibold">Federal representative not found</p>
 							<p class="section-lead text-sm max-w-xs">Your federal riding hasn't been set up yet. Enter your address to find your local representative.</p>
 						</div>

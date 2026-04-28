@@ -123,7 +123,7 @@ func Home(ps store.ParliamentStatus, provincialVotes []store.VoteRow, federalVot
 				return templ_7745c5c3_Err
 			}
 			if !hasProvincialRep {
-				templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 7, "<div class=\"surface-card p-6 flex flex-col items-center text-center space-y-3\"><p class=\"text-base font-semibold\">Provincial representative not found</p><p class=\"section-lead text-sm max-w-xs\">Your provincial riding hasn't been set up yet. Enter your address to find your local representative.</p></div>")
+				templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 7, "<div class=\"surface-card p-6 flex flex-col items-center text-center space-y-3 h-full\"><p class=\"text-base font-semibold\">Provincial representative not found</p><p class=\"section-lead text-sm max-w-xs\">Your provincial riding hasn't been set up yet. Enter your address to find your local representative.</p></div>")
 				if templ_7745c5c3_Err != nil {
 					return templ_7745c5c3_Err
 				}
@@ -399,7 +399,7 @@ func Home(ps store.ParliamentStatus, provincialVotes []store.VoteRow, federalVot
 				return templ_7745c5c3_Err
 			}
 			if !hasFederalRep {
-				templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 36, "<div class=\"surface-card p-6 flex flex-col items-center text-center space-y-3\"><p class=\"text-base font-semibold\">Federal representative not found</p><p class=\"section-lead text-sm max-w-xs\">Your federal riding hasn't been set up yet. Enter your address to find your local representative.</p></div>")
+				templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 36, "<div class=\"surface-card p-6 flex flex-col items-center text-center space-y-3 h-full\"><p class=\"text-base font-semibold\">Federal representative not found</p><p class=\"section-lead text-sm max-w-xs\">Your federal riding hasn't been set up yet. Enter your address to find your local representative.</p></div>")
 				if templ_7745c5c3_Err != nil {
 					return templ_7745c5c3_Err
 				}
