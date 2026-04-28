@@ -20,9 +20,9 @@ import (
 	"strings"
 	"time"
 
-	"github.com/philspins/open-democracy/internal/db"
-	"github.com/philspins/open-democracy/internal/scraper/provincial"
-	"github.com/philspins/open-democracy/internal/utils"
+	"github.com/philspins/opendocket/internal/db"
+	"github.com/philspins/opendocket/internal/scraper/provincial"
+	"github.com/philspins/opendocket/internal/utils"
 )
 
 var legislatureCalendarSources = map[string]string{
@@ -108,7 +108,7 @@ func crawlLegislatureCalendarDates(client *http.Client, jurisdiction, url string
 	if err != nil {
 		return nil, err
 	}
-	req.Header.Set("User-Agent", "Mozilla/5.0 (compatible; OpenDemocracyCrawler/1.0; +https://github.com/philspins/open-democracy)")
+	req.Header.Set("User-Agent", "Mozilla/5.0 (compatible; OpenDemocracyCrawler/1.0; +https://github.com/philspins/opendocket)")
 	req.Header.Set("Accept", "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8")
 	req.Header.Set("Accept-Language", "en-CA,en;q=0.9")
 	resp, err := client.Do(req)

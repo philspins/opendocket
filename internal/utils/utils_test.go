@@ -3,7 +3,7 @@ package utils_test
 import (
 	"testing"
 
-	"github.com/philspins/open-democracy/internal/utils"
+	"github.com/philspins/opendocket/internal/utils"
 )
 
 // ── ExtractBillID ─────────────────────────────────────────────────────────────

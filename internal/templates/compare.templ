@@ -2,7 +2,7 @@ package templates
 
 import (
 	"fmt"
-	"github.com/philspins/open-democracy/internal/store"
+	"github.com/philspins/opendocket/internal/store"
 )
 
 templ CompareMPs(ps store.ParliamentStatus, members []store.MemberRow, m1, m2 store.MemberRow, level, province, party string, provinces, parties []string, overlap, total int, sharedVotes []store.SharedVoteRow) {
@@ -10,59 +10,56 @@ templ CompareMPs(ps store.ParliamentStatus, members []store.MemberRow, m1, m2 st
 		<div class="space-y-6">
 			<h1 class="text-2xl font-bold text-gray-900">Compare MPs</h1>
 
-			<form id="compare-form" method="GET" action="/compare" class="bg-white rounded-lg border border-gray-200 p-4 space-y-3 w-full">
-				<div class={ templ.KV("grid grid-cols-1 gap-3", true), templ.KV("md:grid-cols-3", level == "provincial"), templ.KV("md:grid-cols-2", level != "provincial") }>
-					<div>
-						<label class="text-xs text-gray-500 block mb-1">Government level</label>
-						<select name="level" class="border border-gray-300 rounded px-3 py-1.5 text-sm w-full" onchange="this.form.submit()">
-							<option value="federal" selected?={ level == "federal" }>Federal</option>
-							<option value="provincial" selected?={ level == "provincial" }>Provincial</option>
-						</select>
-					</div>
-					if level == "provincial" {
-						<div>
+			<form id="compare-form" method="GET" action="/compare" class="filter-shell w-full">
+				<div class="flex gap-3 items-end w-full">
+					<!-- 4-column grid: col1+col2 = Rep1 width, col3+col4 = Rep2 width -->
+					<div class="flex-1" style="display:grid; grid-template-columns:repeat(4,1fr); gap:0.75rem">
+						<div style="grid-column:1; grid-row:1">
+							<label class="text-xs text-gray-500 block mb-1">Government level</label>
+							<select name="level" class="input-field px-3 py-1.5 text-sm w-full" onchange="this.form.submit()">
+								<option value="federal" selected?={ level == "federal" }>Federal</option>
+								<option value="provincial" selected?={ level == "provincial" }>Provincial</option>
+							</select>
+						</div>
+						<div style="grid-column:2; grid-row:1">
 							<label class="text-xs text-gray-500 block mb-1">Province</label>
-							<select name="province" class="border border-gray-300 rounded px-3 py-1.5 text-sm w-full" onchange="this.form.submit()">
+							<select name="province" class="input-field px-3 py-1.5 text-sm w-full" disabled?={ level != "provincial" } onchange="this.form.submit()">
 								<option value="" selected?={ province == "" }>All provinces</option>
 								for _, pv := range provinces {
 									<option value={ pv } selected?={ province == pv }>{ pv }</option>
 								}
 							</select>
 						</div>
-					}
-					<div>
-						<label class="text-xs text-gray-500 block mb-1">Party</label>
-						<select name="party" class="border border-gray-300 rounded px-3 py-1.5 text-sm w-full" onchange="this.form.submit()">
-							<option value="" selected?={ party == "" }>All parties</option>
-							for _, p := range parties {
-								<option value={ p } selected?={ party == p }>{ p }</option>
-							}
-						</select>
+						<div style="grid-column:3/span 2; grid-row:1">
+							<label class="text-xs text-gray-500 block mb-1">Party</label>
+							<select name="party" class="input-field px-3 py-1.5 text-sm w-full" onchange="this.form.submit()">
+								<option value="" selected?={ party == "" }>All parties</option>
+								for _, p := range parties {
+									<option value={ p } selected?={ party == p }>{ p }</option>
+								}
+							</select>
+						</div>
+						<div style="grid-column:1/span 2; grid-row:2">
+							<label class="text-xs text-gray-500 block mb-1">Representative 1</label>
+							<select name="a" class="input-field px-3 py-1.5 text-sm w-full" onchange="this.form.submit()">
+								<option value="">Select a representative</option>
+								for _, m := range members {
+									<option value={ m.ID } selected?={ m1.ID == m.ID }>{ m.Name } ({ m.Party })</option>
+								}
+							</select>
+						</div>
+						<div style="grid-column:3/span 2; grid-row:2">
+							<label class="text-xs text-gray-500 block mb-1">Representative 2</label>
+							<select name="b" class="input-field px-3 py-1.5 text-sm w-full" onchange="this.form.submit()">
+								<option value="">Select a representative</option>
+								for _, m := range members {
+									<option value={ m.ID } selected?={ m2.ID == m.ID }>{ m.Name } ({ m.Party })</option>
+								}
+							</select>
+						</div>
 					</div>
-				</div>
-				<div class="grid grid-cols-1 md:grid-cols-2 gap-3">
-					<div>
-						<label class="text-xs text-gray-500 block mb-1">Representative 1</label>
-						<select name="a" class="border border-gray-300 rounded px-3 py-1.5 text-sm w-full" onchange="this.form.submit()">
-							<option value="">Select a representative</option>
-							for _, m := range members {
-								<option value={ m.ID } selected?={ m1.ID == m.ID }>{ m.Name } ({ m.Party })</option>
-							}
-						</select>
-					</div>
-					<div>
-						<label class="text-xs text-gray-500 block mb-1">Representative 2</label>
-						<select name="b" class="border border-gray-300 rounded px-3 py-1.5 text-sm w-full" onchange="this.form.submit()">
-							<option value="">Select a representative</option>
-							for _, m := range members {
-								<option value={ m.ID } selected?={ m2.ID == m.ID }>{ m.Name } ({ m.Party })</option>
-							}
-						</select>
-					</div>
-				</div>
-				<div class="flex items-center justify-center gap-3">
-					<button type="submit" class="bg-blue-600 text-white px-4 py-2 rounded text-sm hover:bg-blue-700">Compare</button>
-					<a href="/compare" class="text-sm text-gray-500 hover:underline">Clear</a>
+					<!-- Clear link: aligned to bottom of flex row = bottom of Rep row -->
+					<a href="/compare" class="text-sm text-gray-500 hover:underline shrink-0 self-end pb-[0.44rem]">Clear</a>
 				</div>
 			</form>
 
@@ -72,7 +69,7 @@ templ CompareMPs(ps store.ParliamentStatus, members []store.MemberRow, m1, m2 st
 					@memberCompactCard(m2)
 				</div>
 
-				<div class="bg-white rounded-lg border border-gray-200 p-6 text-center">
+				<div class="surface-card p-6 text-center">
 					if total > 0 {
 						<p class="text-4xl font-bold text-blue-700">{ fmt.Sprintf("%.0f%%", float64(overlap)/float64(total)*100) }</p>
 						<p class="text-gray-600 mt-1">Agreement rate</p>
@@ -84,34 +81,34 @@ templ CompareMPs(ps store.ParliamentStatus, members []store.MemberRow, m1, m2 st
 
 				<section id="compare-votes-section">
 					<h2 class="text-lg font-semibold text-gray-800 mb-3">Votes in Common</h2>
-					<div class="overflow-x-auto bg-white rounded-lg border border-gray-200">
-						<table class="min-w-full text-sm">
+					<div class="table-shell">
+						<table class="vote-table min-w-full text-sm">
 							<thead>
-								<tr class="bg-gray-50 text-left text-xs text-gray-500 border-b">
-									<th class="px-4 py-2">Date</th>
-									<th class="px-4 py-2">Bill</th>
-									<th class="px-4 py-2">Description</th>
-									<th class="px-4 py-2">Result</th>
-									<th class="px-4 py-2">{ m1.Name }</th>
-									<th class="px-4 py-2">{ m2.Name }</th>
+								<tr>
+									<th class="px-4 py-2.5">Date</th>
+									<th class="px-4 py-2.5">Bill</th>
+									<th class="px-4 py-2.5">Description</th>
+									<th class="px-4 py-2.5">Result</th>
+									<th class="px-4 py-2.5">{ m1.Name }</th>
+									<th class="px-4 py-2.5">{ m2.Name }</th>
 								</tr>
 							</thead>
-							<tbody class="divide-y divide-gray-100">
+							<tbody>
 								for i, v := range sharedVotes {
 									<tr
-										class={ "hover:bg-gray-50", templ.KV("hidden", i >= MemberVotesPerPage) }
+										class={ templ.KV("hidden", i >= MemberVotesPerPage) }
 										data-shared-vote-row=""
 									>
-										<td class="px-4 py-2 text-gray-500 whitespace-nowrap">{ FormatDate(v.Date) }</td>
-										<td class="px-4 py-2">
+										<td class="px-4 py-2.5 col-date">{ FormatDate(v.Date) }</td>
+										<td class="px-4 py-2.5 col-bill">
 											if v.BillNumber != "" {
-												<a href={ templ.SafeURL("/bills/" + v.BillID) } class="text-blue-600 hover:underline font-mono">{ v.BillNumber }</a>
+												<a href={ templ.SafeURL("/bills/" + v.BillID) } class="hover:underline">{ v.BillNumber }</a>
 											}
 										</td>
-										<td class="px-4 py-2 max-w-xs truncate text-gray-700">{ v.Description }</td>
-										<td class="px-4 py-2 text-gray-500">{ v.Result }</td>
-										<td class={ "px-4 py-2", VoteBadgeClass(v.Member1Vote) }>{ v.Member1Vote }</td>
-										<td class={ "px-4 py-2", VoteBadgeClass(v.Member2Vote) }>{ v.Member2Vote }</td>
+										<td class="px-4 py-2.5 col-description max-w-xs truncate">{ v.Description }</td>
+										<td class="px-4 py-2.5 col-meta">{ v.Result }</td>
+										<td class={ "px-4 py-2.5", VoteBadgeClass(v.Member1Vote) }>{ v.Member1Vote }</td>
+										<td class={ "px-4 py-2.5", VoteBadgeClass(v.Member2Vote) }>{ v.Member2Vote }</td>
 									</tr>
 								}
 								if len(sharedVotes) == 0 {
@@ -130,12 +127,12 @@ templ CompareMPs(ps store.ParliamentStatus, members []store.MemberRow, m1, m2 st
 }
 
 templ memberCompactCard(m store.MemberRow) {
-	<div class="bg-white rounded-lg border border-gray-200 p-4">
+	<div class="surface-card p-4">
 		<div class="flex items-center gap-3">
 			if m.PhotoURL != "" {
 				<img src={ m.PhotoURL } alt={ m.Name } class="w-12 h-12 rounded-full object-cover"/>
 			} else {
-				<div class="w-12 h-12 rounded-full bg-gray-200 flex items-center justify-center text-gray-400 text-lg font-semibold">
+				<div class="w-12 h-12 bg-gray-200 flex items-center justify-center text-gray-400 text-lg font-semibold">
 					{ string([]rune(m.Name)[0:1]) }
 				</div>
 			}

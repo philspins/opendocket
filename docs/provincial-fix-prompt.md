@@ -13,13 +13,13 @@ These are my findings:
 - NB: fully functional for some MPPs, others missing Voting by Category and Recent Votes (example problem slug: /members/nb-legislature-wilson-sherry)
 - BC: fully functional for some MPPs, others missing Voting by Category (example problem slug: /members/bc-legislature-christine-boyle)
 - AB: Photos work; no data in Voting by Category or Recent Votes data (example problem slug: `/members/alberta-legislature-member-information?mid=0924&legl=31&from=mla_home`)
-- MB: Photos not showing on localhost, but are showing on open-democracy.ca; no data in Voting by Category or Recent Votes data (example problem slug: /members/manitoba-legislature-sala.html)
-- SK: Photos not showing on localhost, but are showing on open-democracy.ca; no data in Voting by Category or Recent Votes data (example problem slug: /members/saskatchewan-legislature-member-details?first=Betty&last=Nippi-Albright)
+- MB: Photos not showing on localhost, but are showing on opendocket.ca; no data in Voting by Category or Recent Votes data (example problem slug: /members/manitoba-legislature-sala.html)
+- SK: Photos not showing on localhost, but are showing on opendocket.ca; no data in Voting by Category or Recent Votes data (example problem slug: /members/saskatchewan-legislature-member-details?first=Betty&last=Nippi-Albright)
 - NL: No photo data, showing first name initial in photo frame; no data in Voting by Category or Recent Votes data (Example problem slug: /members/newfoundland-labrador-legislature-jeff-dwyer)
-- NS: Photos not showing on localhost, but are showing on open-democracy.ca; no data in Voting by Category or Recent Votes data (example problem slug: /members/nova-scotia-legislature-adegoke-fadare)
+- NS: Photos not showing on localhost, but are showing on opendocket.ca; no data in Voting by Category or Recent Votes data (example problem slug: /members/nova-scotia-legislature-adegoke-fadare)
 - PE: photos work correctly; no data in Voting by Category or Recent Votes
 - QC: photos work correctly; some members have data under Recent Votes, no data in Voting by Category (example MPP with no voting data /members/quebec-assemblee-nationale-zaga-mendez-alejandra-19263)
-- SK: Photos not showing on localhost, but are showing on open-democracy.ca; no data in Voting by Category or Recent Votes
+- SK: Photos not showing on localhost, but are showing on opendocket.ca; no data in Voting by Category or Recent Votes
 
 My task for you:
 1. Please perform an analysis to determine what the problem is for each province, and create a detailed implementation plan that will fix each province. Use sub-agents to split up this work and execute in parralel.

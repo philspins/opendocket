@@ -5,13 +5,12 @@ import (
 	"fmt"
 	"log"
 	"net/http"
-	"os"
 	"strings"
 
-	"github.com/philspins/open-democracy/internal/opennorth"
-	"github.com/philspins/open-democracy/internal/scraper"
-	"github.com/philspins/open-democracy/internal/store"
-	"github.com/philspins/open-democracy/internal/templates"
+	"github.com/philspins/opendocket/internal/opennorth"
+	"github.com/philspins/opendocket/internal/scraper"
+	"github.com/philspins/opendocket/internal/store"
+	"github.com/philspins/opendocket/internal/templates"
 )
 
 type LookupResult struct {
@@ -38,7 +37,7 @@ func New(st *store.Store, googleMapsKey string) *Service {
 	return &Service{
 		store:         st,
 		googleMapsKey: strings.TrimSpace(googleMapsKey),
-		placesApiKey:  strings.TrimSpace(os.Getenv("GOOGLE_PLACES_API_KEY")),
+		placesApiKey:  strings.TrimSpace(googleMapsKey),
 		geocodeFn:     opennorth.GeocodeAddress,
 		repsFn:        opennorth.GetRepresentativesByLatLng,
 	}

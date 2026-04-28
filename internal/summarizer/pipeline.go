@@ -26,7 +26,7 @@ import (
 
 	"github.com/PuerkitoBio/goquery"
 	"github.com/pdfcpu/pdfcpu/pkg/api"
-	"github.com/philspins/open-democracy/internal/utils"
+	"github.com/philspins/opendocket/internal/utils"
 	"golang.org/x/net/html"
 )
 

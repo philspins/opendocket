@@ -1,8 +1,8 @@
 pid=$(lsof -ti:8080) && [ -n "$pid" ] && kill "$pid"
-cd open-democracy
-cp open-democracy.d* ../
+cd opendocket
+cp opendocket.d* ../
 git pull
-cp ../open-democracy.d* .
+cp ../opendocket.d* .
 ./scripts/install.sh
 make build
 screen -dmS web make server

@@ -7,10 +7,10 @@ import (
 	"strings"
 	"time"
 
-	"github.com/philspins/open-democracy/internal/opennorth"
-	"github.com/philspins/open-democracy/internal/riding"
-	"github.com/philspins/open-democracy/internal/store"
-	"github.com/philspins/open-democracy/internal/templates"
+	"github.com/philspins/opendocket/internal/opennorth"
+	"github.com/philspins/opendocket/internal/riding"
+	"github.com/philspins/opendocket/internal/store"
+	"github.com/philspins/opendocket/internal/templates"
 )
 
 const (

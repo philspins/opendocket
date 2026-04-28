@@ -10,8 +10,8 @@ import (
 	"testing"
 	"time"
 
-	"github.com/philspins/open-democracy/internal/db"
-	"github.com/philspins/open-democracy/internal/store"
+	"github.com/philspins/opendocket/internal/db"
+	"github.com/philspins/opendocket/internal/store"
 )
 
 type roundTripFunc func(*http.Request) (*http.Response, error)
@@ -271,7 +271,7 @@ func TestHandleGoogleLogin_SetsStateCookieAndRedirect(t *testing.T) {
 func TestHandleGoogleLogin_UsesOAuthCallbackOverride(t *testing.T) {
 	svc, _ := newTestService(t)
 	t.Setenv("GOOGLE_CLIENT_ID", "google-client")
-	t.Setenv("OAUTH_CALLBACK_URL", "https://open-democracy.ca/auth/google/callback")
+	t.Setenv("OAUTH_CALLBACK_URL", "https://opendocket.ca/auth/google/callback")
 
 	req := httptest.NewRequest(http.MethodGet, "/auth/google/login", nil)
 	rr := httptest.NewRecorder()
@@ -286,7 +286,7 @@ func TestHandleGoogleLogin_UsesOAuthCallbackOverride(t *testing.T) {
 	if err != nil {
 		t.Fatalf("parse location: %v", err)
 	}
-	if got, want := u.Query().Get("redirect_uri"), "https://open-democracy.ca/auth/google/callback"; got != want {
+	if got, want := u.Query().Get("redirect_uri"), "https://opendocket.ca/auth/google/callback"; got != want {
 		t.Fatalf("redirect_uri=%q want %q", got, want)
 	}
 }

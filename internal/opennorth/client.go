@@ -10,7 +10,7 @@ import (
 	"net/http"
 	"net/url"
 
-	"github.com/philspins/open-democracy/internal/utils"
+	"github.com/philspins/opendocket/internal/utils"
 )
 
 const (

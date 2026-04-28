@@ -6,7 +6,7 @@ import (
 	"strings"
 	"time"
 
-	"github.com/philspins/open-democracy/internal/store"
+	"github.com/philspins/opendocket/internal/store"
 )
 
 func (s *Service) SessionUser(r *http.Request) (store.UserRow, bool) {

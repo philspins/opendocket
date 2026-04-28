@@ -5,7 +5,7 @@ import (
 	"testing"
 
 	"github.com/a-h/templ"
-	"github.com/philspins/open-democracy/internal/store"
+	"github.com/philspins/opendocket/internal/store"
 )
 
 func TestLoadPartyTheme_NoEnvVarFallbacksSuccessfully(t *testing.T) {

@@ -2,7 +2,7 @@ package templates
 
 import (
 	"fmt"
-	"github.com/philspins/open-democracy/internal/store"
+	"github.com/philspins/opendocket/internal/store"
 )
 
 templ MemberProfile(ps store.ParliamentStatus, member store.MemberRow, votes []store.VoteRow, stats store.MemberStats, catScores []store.CategoryScore) {
@@ -11,7 +11,7 @@ templ MemberProfile(ps store.ParliamentStatus, member store.MemberRow, votes []s
 			<a href="/members" class="text-sm text-blue-600 hover:underline">← Members</a>
 
 			<!-- Header -->
-			<div class="bg-white rounded-lg border border-gray-200 p-6 flex items-start gap-6">
+			<div class="surface-card p-6 flex items-start gap-6">
 				if member.PhotoURL != "" {
 					<img src={ member.PhotoURL } alt={ member.Name } class="w-24 h-24 rounded-full object-cover flex-shrink-0"/>
 				} else {
@@ -42,19 +42,19 @@ templ MemberProfile(ps store.ParliamentStatus, member store.MemberRow, votes []s
 
 			<!-- Stats -->
 			<div class="grid grid-cols-2 sm:grid-cols-4 gap-4">
-				<div class="bg-white rounded-lg border border-gray-200 p-4 text-center">
+				<div class="surface-card p-4 text-center">
 					<p class="text-2xl font-bold text-gray-900">{ fmt.Sprint(stats.TotalVotes) }</p>
 					<p class="text-sm text-gray-500">Total Votes</p>
 				</div>
-				<div class="bg-white rounded-lg border border-gray-200 p-4 text-center">
+				<div class="surface-card p-4 text-center">
 					<p class="text-2xl font-bold text-green-600">{ fmt.Sprint(stats.PartyLinePct) }%</p>
 					<p class="text-sm text-gray-500">Party Line</p>
 				</div>
-				<div class="bg-white rounded-lg border border-gray-200 p-4 text-center">
+				<div class="surface-card p-4 text-center">
 					<p class="text-2xl font-bold text-orange-500">{ fmt.Sprint(stats.RebelPct) }%</p>
 					<p class="text-sm text-gray-500">Against Party</p>
 				</div>
-				<div class="bg-white rounded-lg border border-gray-200 p-4 text-center">
+				<div class="surface-card p-4 text-center">
 					<p class="text-2xl font-bold text-gray-500">{ fmt.Sprint(stats.MissedPct) }%</p>
 					<p class="text-sm text-gray-500">Missed Votes</p>
 				</div>
@@ -62,7 +62,7 @@ templ MemberProfile(ps store.ParliamentStatus, member store.MemberRow, votes []s
 
 			<!-- Category Scorecards -->
 			if len(catScores) > 0 {
-				<section class="bg-white rounded-lg border border-gray-200 p-6">
+				<section class="surface-card p-6">
 					<h2 class="text-lg font-semibold text-gray-800 mb-4">Voting by Category</h2>
 					<div class="space-y-3">
 						for _, cs := range catScores {
@@ -73,10 +73,10 @@ templ MemberProfile(ps store.ParliamentStatus, member store.MemberRow, votes []s
 										{ fmt.Sprint(cs.Yeas) } Yea · { fmt.Sprint(cs.Nays) } Nay · { fmt.Sprint(cs.YeaPct) }% Yea
 									</span>
 								</div>
-								<div class="w-full bg-red-500 rounded-full h-2">
+								<div class="w-full h-1" style="background: var(--color-alert)">
 									<div
-										class="bg-green-500 h-2 rounded-full"
-										style={ fmt.Sprintf("width: %d%%", cs.YeaPct) }
+										class="h-1"
+										style={ fmt.Sprintf("width: %d%%; background: var(--color-positive)", cs.YeaPct) }
 									></div>
 								</div>
 							</div>
@@ -93,38 +93,38 @@ templ MemberProfile(ps store.ParliamentStatus, member store.MemberRow, votes []s
 			<!-- Vote history -->
 			<section id="member-votes-section">
 				<h2 class="text-lg font-semibold text-gray-800 mb-3">Recent Votes</h2>
-				<div class="overflow-x-auto bg-white rounded-lg border border-gray-200">
-					<table class="min-w-full text-sm">
+				<div class="table-shell">
+					<table class="vote-table min-w-full text-sm">
 						<thead>
-							<tr class="bg-gray-50 text-left text-xs text-gray-500 border-b">
-								<th class="px-4 py-2">Date</th>
-								<th class="px-4 py-2">Vote</th>
-								<th class="px-4 py-2">Bill</th>
-								<th class="px-4 py-2">Description</th>
-								<th class="px-4 py-2">Result</th>
-								<th class="px-4 py-2">Party</th>
+							<tr>
+								<th class="px-4 py-2.5">Date</th>
+								<th class="px-4 py-2.5">Vote</th>
+								<th class="px-4 py-2.5">Bill</th>
+								<th class="px-4 py-2.5">Description</th>
+								<th class="px-4 py-2.5">Result</th>
+								<th class="px-4 py-2.5">Alignment</th>
 							</tr>
 						</thead>
-						<tbody class="divide-y divide-gray-100">
+						<tbody>
 							for i, v := range votes {
 								<tr
-									class={ "hover:bg-gray-50", templ.KV("hidden", i >= MemberVotesPerPage) }
+									class={ templ.KV("hidden", i >= MemberVotesPerPage) }
 									data-vote-row=""
 								>
-									<td class="px-4 py-2 text-gray-500 whitespace-nowrap">{ FormatDate(v.Date) }</td>
-									<td class={ "px-4 py-2", VoteBadgeClass(v.Vote) }>{ v.Vote }</td>
-									<td class="px-4 py-2">
+									<td class="px-4 py-2.5 col-date">{ FormatDate(v.Date) }</td>
+									<td class={ "px-4 py-2.5 col-vote", VoteBadgeClass(v.Vote) }>{ v.Vote }</td>
+									<td class="px-4 py-2.5 col-bill">
 										if v.BillNumber != "" {
-											<a href={ templ.SafeURL("/bills/" + v.BillID) } class="text-blue-600 hover:underline font-mono">{ v.BillNumber }</a>
+											<a href={ templ.SafeURL("/bills/" + v.BillID) } class="hover:underline">{ v.BillNumber }</a>
 										}
 									</td>
-									<td class="px-4 py-2 max-w-xs truncate text-gray-700">{ v.Description }</td>
-									<td class="px-4 py-2 text-gray-500">{ v.Result }</td>
-									<td class="px-4 py-2">
+									<td class="px-4 py-2.5 col-description">{ v.Description }</td>
+									<td class="px-4 py-2.5 col-meta">{ v.Result }</td>
+									<td class="px-4 py-2.5 col-meta">
 										if v.VotedWithParty {
-											<span class="text-green-600 text-xs">✓ party</span>
+											<span class="vote-yea text-xs">✓ party</span>
 										} else if v.PartyMajority != "" {
-											<span class="text-red-600 text-xs">✗ rebel</span>
+											<span class="vote-nay text-xs">✗ rebel</span>
 										}
 									</td>
 								</tr>
@@ -141,7 +141,7 @@ templ MemberProfile(ps store.ParliamentStatus, member store.MemberRow, votes []s
 			</section>
 
 			<!-- Follow + policy actions -->
-			<section class="bg-white rounded-lg border border-gray-200 p-4 space-y-4">
+			<section class="surface-card p-4 space-y-4">
 				<h2 class="text-lg font-semibold text-gray-800">Engage With This MP</h2>
 				<form method="POST" action="/api/follow" class="grid sm:grid-cols-3 gap-3">
 					<input type="hidden" name="member_id" value={ member.ID }/>

@@ -1,6 +1,8 @@
-# open-democracy
+# Division Bell
 
 A Canadian civic transparency platform built almost entirely on existing open government data.
+
+**They vote in your name. See for yourself.**
 
 Built with the **GOAT Stack**: Go · Templ · Alpine.js · Tailwind CSS.
 
@@ -26,8 +28,8 @@ Built with the **GOAT Stack**: Go · Templ · Alpine.js · Tailwind CSS.
 | `ANTHROPIC_API_KEY` | Only for AI summaries | summarizer | Enables Claude API fallback summaries (`summary_ai`) |
 | `ANTHROPIC_MODEL` | No | summarizer | Claude model ID/alias override (default first try: `claude-sonnet-4-6`) |
 | `PARTY_THEME_FILE` | No | frontend templates | Override path for party/province style config (default `config/party-theme.json`) |
-| `OAUTH_BASE_URL` | Recommended for auth/OAuth | server | Public app base URL used to build verification and OAuth callback URLs (e.g. `https://open-democracy.ca`) |
-| `SES_FROM_EMAIL` | Yes for verification email delivery | server | Verified SES sender address used for outgoing verification emails (e.g. `contact@open-democracy.ca`) |
+| `OAUTH_BASE_URL` | Recommended for auth/OAuth | server | Public app base URL used to build verification and OAuth callback URLs (e.g. `https://divisionbell.ca`) |
+| `SES_FROM_EMAIL` | Yes for verification email delivery | server | Verified SES sender address used for outgoing verification emails (e.g. `contact@divisionbell.ca`) |
 | `TRUST_PROXY` | Yes when behind ALB/reverse proxy | server | Set `true` when running behind a trusted reverse proxy (e.g. AWS ALB). Enables: real client IP from `X-Forwarded-For`/`X-Real-IP` for rate-limiting; HTTP→HTTPS redirect (when `OAUTH_BASE_URL` is `https://`); `Strict-Transport-Security` header on HTTPS responses |
 | `GOOGLE_CLIENT_ID` | Only for Google login | server | Google OAuth client ID |
 | `GOOGLE_CLIENT_SECRET` | Only for Google login | server | Google OAuth client secret |
@@ -53,13 +55,13 @@ Auth/OAuth examples:
 
 ```bash
 # Base URL used in OAuth callbacks and verification links
-OAUTH_BASE_URL=https://open-democracy.ca
+OAUTH_BASE_URL=https://divisionbell.ca
 
 # Enable proxy-header trust (required when running behind AWS ALB)
 TRUST_PROXY=true
 
 # SES sender (must be verified in SES)
-SES_FROM_EMAIL=contact@open-democracy.ca
+SES_FROM_EMAIL=contact@divisionbell.ca
 
 # Optional explicit AWS credentials (if not using role/profile)
 AWS_REGION=ca-central-1
@@ -88,16 +90,16 @@ FACEBOOK_CLIENT_SECRET=...
 go mod download
 
 # Compile the crawler binary
-go build -o open-democracy-crawler ./cmd/crawler
+go build -o opendocket-crawler ./cmd/crawler
 
 # Compile the web server binary
-go build -o open-democracy-server ./cmd/server
+go build -o opendocket-server ./cmd/server
 
 # Regenerate templ-generated Go files (needed after editing *.templ files)
 go run github.com/a-h/templ/cmd/templ@v0.3.1001 generate
 
 # Verify the build
-./open-democracy-crawler --help
+./opendocket-crawler --help
 ```
 
 ---
@@ -124,38 +126,38 @@ All 95 tests are offline — they use `httptest.Server` and temporary SQLite fil
 
 ## Using the crawler CLI
 
-The `open-democracy-crawler` binary fetches data from Canadian public government sources and writes it to a local SQLite database.
+The `opendocket-crawler` binary fetches data from Canadian public government sources and writes it to a local SQLite database.
 
 ### One-shot crawl (all domains)
 
 ```bash
-./open-democracy-crawler --db open-democracy.db
+./opendocket-crawler --db opendocket.db
 ```
 
 ### Crawl specific domains
 
 ```bash
 # Bills only (LEGISinfo RSS + detail + Library of Parliament summaries)
-./open-democracy-crawler --bills
+./opendocket-crawler --bills
 
 # House of Commons votes only
-./open-democracy-crawler --votes
+./opendocket-crawler --votes
 
 # Senate votes only
-./open-democracy-crawler --senate
+./opendocket-crawler --senate
 
 # MP profiles only
-./open-democracy-crawler --members
+./opendocket-crawler --members
 
 # Sitting calendar only
-./open-democracy-crawler --calendar
+./opendocket-crawler --calendar
 ```
 
 ### Flags
 
 | Flag | Default | Description |
 |---|---|---|
-| `--db PATH` | `open-democracy.db` | Path to the SQLite database file |
+| `--db PATH` | `opendocket.db` | Path to the SQLite database file |
 | `--delay MS` | `500` | Milliseconds to sleep between HTTP requests |
 | `--parallelism N` | `5` | Max domain crawlers running concurrently (env: `CRAWLER_PARALLELISM`) |
 | `--schedule` | — | Run the background scheduler (blocks indefinitely) |
@@ -167,13 +169,13 @@ By default all five domain crawlers (calendar, bills, members, votes, senate) ru
 
 ```bash
 # Run at most 2 crawlers at a time
-./open-democracy-crawler --parallelism 2
+./opendocket-crawler --parallelism 2
 
 # Using the environment variable
-CRAWLER_PARALLELISM=2 ./open-democracy-crawler
+CRAWLER_PARALLELISM=2 ./opendocket-crawler
 
 # Sequential (safe for low-resource environments)
-./open-democracy-crawler --parallelism 1
+./opendocket-crawler --parallelism 1
 ```
 
 The semaphore pattern is used internally: a buffered channel of size N limits the number of goroutines that may execute concurrently. Each domain crawler acquires a slot on start and releases it when done.
@@ -190,7 +192,7 @@ The scheduler runs four jobs:
 | AI summarization fallback | Daily at 05:00 UTC |
 
 ```bash
-./open-democracy-crawler --schedule --db open-democracy.db
+./opendocket-crawler --schedule --db opendocket.db
 ```
 
 If `ANTHROPIC_API_KEY` is not set, the AI summarization job will not be able to generate Claude summaries.
@@ -202,7 +204,7 @@ PEI calendar OCR gracefully degrades if `pdftoppm`/`tesseract` are unavailable; 
 
 ```bash
 # Runs the read-only frontend on http://127.0.0.1:8080
-go run ./cmd/server -db open-democracy.db -addr :8080
+go run ./cmd/server -db opendocket.db -addr :8080
 ```
 
 The server expects a populated SQLite database. Run the crawler first (one-shot or scheduler mode) to ingest data.

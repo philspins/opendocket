@@ -1,4 +1,4 @@
-// Command server starts the Open Democracy read-only web frontend.
+// Command server starts the Open Docket read-only web frontend.
 package main
 
 import (
@@ -6,10 +6,10 @@ import (
 	"log"
 	"net/http"
 
-	"github.com/philspins/open-democracy/internal/db"
-	"github.com/philspins/open-democracy/internal/server"
-	"github.com/philspins/open-democracy/internal/store"
-	"github.com/philspins/open-democracy/internal/utils"
+	"github.com/philspins/opendocket/internal/db"
+	"github.com/philspins/opendocket/internal/server"
+	"github.com/philspins/opendocket/internal/store"
+	"github.com/philspins/opendocket/internal/utils"
 )
 
 func main() {
@@ -30,7 +30,7 @@ func main() {
 	st := store.New(conn)
 	srv := server.New(st)
 
-	log.Printf("Open Democracy listening on %s", *addr)
+	log.Printf("Open Docket listening on %s", *addr)
 	if err := http.ListenAndServe(*addr, srv); err != nil {
 		log.Fatalf("server: %v", err)
 	}

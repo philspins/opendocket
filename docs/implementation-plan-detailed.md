@@ -131,7 +131,7 @@ CREATE INDEX idx_bills_category ON bills(category);
 
 ```go
 // cmd/crawler/main.go — entry point
-// Run with: go run ./cmd/crawler --db open-democracy.db
+// Run with: go run ./cmd/crawler --db opendocket.db
 // Scheduled with robfig/cron (see internal/scheduler/scheduler.go)
 
 package main
@@ -142,12 +142,12 @@ import (
     "net/http"
     "time"
 
-    "github.com/philspins/open-democracy/internal/db"
-    "github.com/philspins/open-democracy/internal/scraper"
-    "github.com/philspins/open-democracy/internal/utils"
+    "github.com/philspins/opendocket/internal/db"
+    "github.com/philspins/opendocket/internal/scraper"
+    "github.com/philspins/opendocket/internal/utils"
 )
 
-const userAgent = "Open Democracy/1.0 (open-democracy.ca; contact@open-democracy.ca)"
+const userAgent = "Open Democracy/1.0 (opendocket.ca; contact@opendocket.ca)"
 // ↑ Always identify yourself to government scrapers. Be polite.
 
 func crawlBillsFromRSS(database *sql.DB) error {
@@ -834,7 +834,7 @@ func SendWeeklyDigest(ctx context.Context, db *sql.DB, userID string) error {
     html := renderDigestHTML(user, groupByMP(recentVotes), time.Now())
 
     body, _ := json.Marshal(DigestEmail{
-        From:    "Open Democracy <digest@open-democracy.ca>",
+        From:    "Open Democracy <digest@opendocket.ca>",
         To:      user.Email,
         Subject: fmt.Sprintf("Your MPs voted on %d bills this week", len(recentVotes)),
         Html:    html,
@@ -942,7 +942,7 @@ function policyFormData(email, mpName, riding) {
                 this.body,
                 `\n\n---\n`,
                 this.constituencyNote ? `I am a constituent in ${riding}.\n` : "",
-                "Sent via Open Democracy (open-democracy.ca)",
+                "Sent via Open Democracy (opendocket.ca)",
             ].join("");
             return `mailto:${email}?subject=${sub}&body=${encodeURIComponent(txt)}`;
         },

@@ -1,4 +1,4 @@
-// Package db provides the SQLite schema and upsert helpers for Open Democracy.
+// Package db provides the SQLite schema and upsert helpers for Open Docket.
 //
 // Schema can be migrated to Postgres later by swapping the driver; all SQL
 // is standard ANSI with SQLite-compatible ON CONFLICT clauses.
@@ -15,7 +15,7 @@ import (
 )
 
 // DefaultPath is the SQLite database file used when no path is provided.
-const DefaultPath = "open-democracy.db"
+const DefaultPath = "opendocket.db"
 
 // Open returns an initialised *sql.DB with WAL mode and FK enforcement.
 func Open(path string) (*sql.DB, error) {

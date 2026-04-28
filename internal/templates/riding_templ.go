@@ -9,8 +9,8 @@ import "github.com/a-h/templ"
 import templruntime "github.com/a-h/templ/runtime"
 
 import (
-	"github.com/philspins/open-democracy/internal/opennorth"
-	"github.com/philspins/open-democracy/internal/store"
+	"github.com/philspins/opendocket/internal/opennorth"
+	"github.com/philspins/opendocket/internal/store"
 )
 
 func RidingLookup(ps store.ParliamentStatus, address string, reps []opennorth.Representative, lookupErr string, placesApiKey string) templ.Component {
@@ -59,12 +59,12 @@ func RidingLookup(ps store.ParliamentStatus, address string, reps []opennorth.Re
 			if templ_7745c5c3_Err != nil {
 				return templ_7745c5c3_Err
 			}
-			templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 2, "\" placeholder=\"e.g. 123 Main St, Toronto, ON\" class=\"border border-gray-300 rounded px-3 py-2 text-sm w-96 max-w-full\" autocomplete=\"off\"> <button type=\"submit\" class=\"bg-blue-600 text-white px-4 py-2 rounded text-sm hover:bg-blue-700\">Find My Representatives</button></form>")
+			templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 2, "\" placeholder=\"e.g. 123 Main St, Toronto, ON\" class=\"input-field px-3 py-2 text-sm w-96 max-w-full\" autocomplete=\"off\"> <button type=\"submit\" class=\"btn btn-primary text-sm\">Find My Representatives</button></form>")
 			if templ_7745c5c3_Err != nil {
 				return templ_7745c5c3_Err
 			}
 			if lookupErr != "" {
-				templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 3, "<div class=\"bg-red-50 border border-red-200 rounded-lg p-4 text-red-800\"><p>")
+				templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 3, "<div class=\"bg-red-50 border border-red-200 p-4 text-red-800\"><p>")
 				if templ_7745c5c3_Err != nil {
 					return templ_7745c5c3_Err
 				}
@@ -112,7 +112,7 @@ func RidingLookup(ps store.ParliamentStatus, address string, reps []opennorth.Re
 						return templ_7745c5c3_Err
 					}
 				} else {
-					templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 8, "<div class=\"bg-yellow-50 border border-yellow-200 rounded-lg p-4 text-yellow-800\"><p>No representatives found for \"")
+					templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 8, "<div class=\"bg-yellow-50 border border-yellow-200 p-4 text-yellow-800\"><p>No representatives found for \"")
 					if templ_7745c5c3_Err != nil {
 						return templ_7745c5c3_Err
 					}
@@ -132,10 +132,6 @@ func RidingLookup(ps store.ParliamentStatus, address string, reps []opennorth.Re
 				}
 			}
 			templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 10, "</div>")
-			if templ_7745c5c3_Err != nil {
-				return templ_7745c5c3_Err
-			}
-			templ_7745c5c3_Err = AddressAutocompleteScript(placesApiKey).Render(ctx, templ_7745c5c3_Buffer)
 			if templ_7745c5c3_Err != nil {
 				return templ_7745c5c3_Err
 			}
@@ -170,7 +166,7 @@ func openNorthRepCard(rep opennorth.Representative) templ.Component {
 			templ_7745c5c3_Var7 = templ.NopComponent
 		}
 		ctx = templ.ClearChildren(ctx)
-		templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 11, "<div class=\"bg-white border border-gray-200 rounded-lg p-4 shadow-sm\"><div class=\"flex items-start gap-3\">")
+		templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 11, "<div class=\"surface-card p-4\"><div class=\"flex items-start gap-3\">")
 		if templ_7745c5c3_Err != nil {
 			return templ_7745c5c3_Err
 		}
@@ -182,7 +178,7 @@ func openNorthRepCard(rep opennorth.Representative) templ.Component {
 			var templ_7745c5c3_Var8 string
 			templ_7745c5c3_Var8, templ_7745c5c3_Err = templ.JoinStringErrs(rep.PhotoURL)
 			if templ_7745c5c3_Err != nil {
-				return templ.Error{Err: templ_7745c5c3_Err, FileName: `internal/templates/riding.templ`, Line: 54, Col: 27}
+				return templ.Error{Err: templ_7745c5c3_Err, FileName: `internal/templates/riding.templ`, Line: 53, Col: 27}
 			}
 			_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var8))
 			if templ_7745c5c3_Err != nil {
@@ -195,7 +191,7 @@ func openNorthRepCard(rep opennorth.Representative) templ.Component {
 			var templ_7745c5c3_Var9 string
 			templ_7745c5c3_Var9, templ_7745c5c3_Err = templ.JoinStringErrs(rep.Name)
 			if templ_7745c5c3_Err != nil {
-				return templ.Error{Err: templ_7745c5c3_Err, FileName: `internal/templates/riding.templ`, Line: 54, Col: 44}
+				return templ.Error{Err: templ_7745c5c3_Err, FileName: `internal/templates/riding.templ`, Line: 53, Col: 44}
 			}
 			_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var9))
 			if templ_7745c5c3_Err != nil {
@@ -206,14 +202,14 @@ func openNorthRepCard(rep opennorth.Representative) templ.Component {
 				return templ_7745c5c3_Err
 			}
 		} else {
-			templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 15, "<div class=\"w-12 h-12 rounded-full bg-gray-200 flex items-center justify-center flex-shrink-0 text-gray-500 font-bold text-lg\">")
+			templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 15, "<div class=\"w-12 h-12 bg-gray-200 flex items-center justify-center flex-shrink-0 text-gray-500 font-bold text-lg\">")
 			if templ_7745c5c3_Err != nil {
 				return templ_7745c5c3_Err
 			}
 			var templ_7745c5c3_Var10 string
 			templ_7745c5c3_Var10, templ_7745c5c3_Err = templ.JoinStringErrs(initial(rep.Name))
 			if templ_7745c5c3_Err != nil {
-				return templ.Error{Err: templ_7745c5c3_Err, FileName: `internal/templates/riding.templ`, Line: 57, Col: 24}
+				return templ.Error{Err: templ_7745c5c3_Err, FileName: `internal/templates/riding.templ`, Line: 56, Col: 24}
 			}
 			_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var10))
 			if templ_7745c5c3_Err != nil {
@@ -236,7 +232,7 @@ func openNorthRepCard(rep opennorth.Representative) templ.Component {
 			var templ_7745c5c3_Var11 templ.SafeURL
 			templ_7745c5c3_Var11, templ_7745c5c3_Err = templ.JoinURLErrs(templ.SafeURL("/members/" + rep.LocalMemberID))
 			if templ_7745c5c3_Err != nil {
-				return templ.Error{Err: templ_7745c5c3_Err, FileName: `internal/templates/riding.templ`, Line: 62, Col: 61}
+				return templ.Error{Err: templ_7745c5c3_Err, FileName: `internal/templates/riding.templ`, Line: 61, Col: 61}
 			}
 			_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var11))
 			if templ_7745c5c3_Err != nil {
@@ -249,7 +245,7 @@ func openNorthRepCard(rep opennorth.Representative) templ.Component {
 			var templ_7745c5c3_Var12 string
 			templ_7745c5c3_Var12, templ_7745c5c3_Err = templ.JoinStringErrs(rep.Name)
 			if templ_7745c5c3_Err != nil {
-				return templ.Error{Err: templ_7745c5c3_Err, FileName: `internal/templates/riding.templ`, Line: 62, Col: 139}
+				return templ.Error{Err: templ_7745c5c3_Err, FileName: `internal/templates/riding.templ`, Line: 61, Col: 139}
 			}
 			_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var12))
 			if templ_7745c5c3_Err != nil {
@@ -267,7 +263,7 @@ func openNorthRepCard(rep opennorth.Representative) templ.Component {
 			var templ_7745c5c3_Var13 string
 			templ_7745c5c3_Var13, templ_7745c5c3_Err = templ.JoinStringErrs(rep.Name)
 			if templ_7745c5c3_Err != nil {
-				return templ.Error{Err: templ_7745c5c3_Err, FileName: `internal/templates/riding.templ`, Line: 64, Col: 61}
+				return templ.Error{Err: templ_7745c5c3_Err, FileName: `internal/templates/riding.templ`, Line: 63, Col: 61}
 			}
 			_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var13))
 			if templ_7745c5c3_Err != nil {
@@ -285,7 +281,7 @@ func openNorthRepCard(rep opennorth.Representative) templ.Component {
 		var templ_7745c5c3_Var14 string
 		templ_7745c5c3_Var14, templ_7745c5c3_Err = templ.JoinStringErrs(rep.ElectedOffice)
 		if templ_7745c5c3_Err != nil {
-			return templ.Error{Err: templ_7745c5c3_Err, FileName: `internal/templates/riding.templ`, Line: 66, Col: 101}
+			return templ.Error{Err: templ_7745c5c3_Err, FileName: `internal/templates/riding.templ`, Line: 65, Col: 101}
 		}
 		_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var14))
 		if templ_7745c5c3_Err != nil {
@@ -321,7 +317,7 @@ func openNorthRepCard(rep opennorth.Representative) templ.Component {
 			var templ_7745c5c3_Var17 string
 			templ_7745c5c3_Var17, templ_7745c5c3_Err = templ.JoinStringErrs(rep.PartyName)
 			if templ_7745c5c3_Err != nil {
-				return templ.Error{Err: templ_7745c5c3_Err, FileName: `internal/templates/riding.templ`, Line: 68, Col: 77}
+				return templ.Error{Err: templ_7745c5c3_Err, FileName: `internal/templates/riding.templ`, Line: 67, Col: 77}
 			}
 			_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var17))
 			if templ_7745c5c3_Err != nil {
@@ -339,7 +335,7 @@ func openNorthRepCard(rep opennorth.Representative) templ.Component {
 		var templ_7745c5c3_Var18 string
 		templ_7745c5c3_Var18, templ_7745c5c3_Err = templ.JoinStringErrs(rep.DistrictName)
 		if templ_7745c5c3_Err != nil {
-			return templ.Error{Err: templ_7745c5c3_Err, FileName: `internal/templates/riding.templ`, Line: 70, Col: 71}
+			return templ.Error{Err: templ_7745c5c3_Err, FileName: `internal/templates/riding.templ`, Line: 69, Col: 71}
 		}
 		_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var18))
 		if templ_7745c5c3_Err != nil {
@@ -357,7 +353,7 @@ func openNorthRepCard(rep opennorth.Representative) templ.Component {
 			var templ_7745c5c3_Var19 templ.SafeURL
 			templ_7745c5c3_Var19, templ_7745c5c3_Err = templ.JoinURLErrs(safeMailtoURL(rep.Email))
 			if templ_7745c5c3_Err != nil {
-				return templ.Error{Err: templ_7745c5c3_Err, FileName: `internal/templates/riding.templ`, Line: 73, Col: 40}
+				return templ.Error{Err: templ_7745c5c3_Err, FileName: `internal/templates/riding.templ`, Line: 72, Col: 40}
 			}
 			_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var19))
 			if templ_7745c5c3_Err != nil {
@@ -376,7 +372,7 @@ func openNorthRepCard(rep opennorth.Representative) templ.Component {
 			var templ_7745c5c3_Var20 templ.SafeURL
 			templ_7745c5c3_Var20, templ_7745c5c3_Err = templ.JoinURLErrs(safeExternalURL(rep.URL))
 			if templ_7745c5c3_Err != nil {
-				return templ.Error{Err: templ_7745c5c3_Err, FileName: `internal/templates/riding.templ`, Line: 76, Col: 40}
+				return templ.Error{Err: templ_7745c5c3_Err, FileName: `internal/templates/riding.templ`, Line: 75, Col: 40}
 			}
 			_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var20))
 			if templ_7745c5c3_Err != nil {
@@ -396,7 +392,7 @@ func openNorthRepCard(rep opennorth.Representative) templ.Component {
 				var templ_7745c5c3_Var21 string
 				templ_7745c5c3_Var21, templ_7745c5c3_Err = templ.JoinStringErrs(office.Type)
 				if templ_7745c5c3_Err != nil {
-					return templ.Error{Err: templ_7745c5c3_Err, FileName: `internal/templates/riding.templ`, Line: 80, Col: 56}
+					return templ.Error{Err: templ_7745c5c3_Err, FileName: `internal/templates/riding.templ`, Line: 79, Col: 56}
 				}
 				_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var21))
 				if templ_7745c5c3_Err != nil {
@@ -409,7 +405,7 @@ func openNorthRepCard(rep opennorth.Representative) templ.Component {
 				var templ_7745c5c3_Var22 string
 				templ_7745c5c3_Var22, templ_7745c5c3_Err = templ.JoinStringErrs(office.Tel)
 				if templ_7745c5c3_Err != nil {
-					return templ.Error{Err: templ_7745c5c3_Err, FileName: `internal/templates/riding.templ`, Line: 80, Col: 72}
+					return templ.Error{Err: templ_7745c5c3_Err, FileName: `internal/templates/riding.templ`, Line: 79, Col: 72}
 				}
 				_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var22))
 				if templ_7745c5c3_Err != nil {

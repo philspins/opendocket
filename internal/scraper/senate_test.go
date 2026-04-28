@@ -3,7 +3,7 @@ package scraper_test
 import (
 	"testing"
 
-	"github.com/philspins/open-democracy/internal/scraper"
+	"github.com/philspins/opendocket/internal/scraper"
 )
 
 // ── CrawlSenateVotesIndex ──────────────────────────────────────────────────────

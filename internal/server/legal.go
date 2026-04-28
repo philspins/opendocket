@@ -13,7 +13,7 @@ import (
 	"os"
 	"strings"
 
-	"github.com/philspins/open-democracy/internal/templates"
+	"github.com/philspins/opendocket/internal/templates"
 )
 
 func (s *Server) handlePrivacy(w http.ResponseWriter, r *http.Request) {

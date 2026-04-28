@@ -1,4 +1,4 @@
-// Package scraper implements all the data scrapers for Open Democracy.
+// Package scraper implements all the data scrapers for Open Docket.
 //
 // Bills:
 //   - LEGISinfo RSS feed   → bill stubs
@@ -16,7 +16,7 @@ import (
 
 	"github.com/PuerkitoBio/goquery"
 	"github.com/mmcdole/gofeed"
-	"github.com/philspins/open-democracy/internal/utils"
+	"github.com/philspins/opendocket/internal/utils"
 )
 
 // ── constants ─────────────────────────────────────────────────────────────────

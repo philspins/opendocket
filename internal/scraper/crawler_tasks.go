@@ -13,9 +13,9 @@ import (
 	"sync"
 	"time"
 
-	"github.com/philspins/open-democracy/internal/db"
-	"github.com/philspins/open-democracy/internal/scraper/provincial"
-	"github.com/philspins/open-democracy/internal/utils"
+	"github.com/philspins/opendocket/internal/db"
+	"github.com/philspins/opendocket/internal/scraper/provincial"
+	"github.com/philspins/opendocket/internal/utils"
 	"golang.org/x/sync/errgroup"
 )
 
