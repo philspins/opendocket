@@ -6,7 +6,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/philspins/open-democracy/internal/scheduler"
+	"github.com/philspins/opendocket/internal/scheduler"
 )
 
 // ── New / cron registration ───────────────────────────────────────────────────

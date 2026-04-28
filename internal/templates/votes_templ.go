@@ -10,7 +10,7 @@ import templruntime "github.com/a-h/templ/runtime"
 
 import (
 	"fmt"
-	"github.com/philspins/open-democracy/internal/store"
+	"github.com/philspins/opendocket/internal/store"
 )
 
 func VotesFeed(ps store.ParliamentStatus, divs []store.DivisionRow, total int, page int) templ.Component {

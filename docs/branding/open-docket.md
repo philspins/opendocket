@@ -34,7 +34,7 @@ The platform is built entirely on open government data. No proprietary sources. 
 
 It is the successor project to a civic tech effort previously developed under the working name *Open Democracy* (`open-democracy.ca`).
 
-**GitHub:** `github.com/philspins/open-democracy`  
+**GitHub:** `github.com/philspins/opendocket`  
 **Tech stack:** Go · Templ · Alpine.js · Tailwind · SQLite → Postgres · Claude API
 
 ---

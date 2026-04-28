@@ -8,8 +8,8 @@ import (
 	"time"
 
 	_ "github.com/mattn/go-sqlite3"
-	"github.com/philspins/open-democracy/internal/db"
-	"github.com/philspins/open-democracy/internal/store"
+	"github.com/philspins/opendocket/internal/db"
+	"github.com/philspins/opendocket/internal/store"
 )
 
 func tempDB(t *testing.T) *sql.DB {

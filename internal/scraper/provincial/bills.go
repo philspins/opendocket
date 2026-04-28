@@ -8,8 +8,8 @@ import (
 	"strings"
 
 	"github.com/PuerkitoBio/goquery"
-	"github.com/philspins/open-democracy/internal/urlutil"
-	"github.com/philspins/open-democracy/internal/utils"
+	"github.com/philspins/opendocket/internal/urlutil"
+	"github.com/philspins/opendocket/internal/utils"
 )
 
 // ProvincialBillStub is a lightweight bill record scraped from a provincial

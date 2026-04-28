@@ -6,10 +6,10 @@ import (
 	"log"
 	"net/http"
 
-	"github.com/philspins/open-democracy/internal/db"
-	"github.com/philspins/open-democracy/internal/server"
-	"github.com/philspins/open-democracy/internal/store"
-	"github.com/philspins/open-democracy/internal/utils"
+	"github.com/philspins/opendocket/internal/db"
+	"github.com/philspins/opendocket/internal/server"
+	"github.com/philspins/opendocket/internal/store"
+	"github.com/philspins/opendocket/internal/utils"
 )
 
 func main() {

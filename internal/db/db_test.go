@@ -5,7 +5,7 @@ import (
 	"path/filepath"
 	"testing"
 
-	"github.com/philspins/open-democracy/internal/db"
+	"github.com/philspins/opendocket/internal/db"
 )
 
 func tempDB(t *testing.T) *sql.DB {

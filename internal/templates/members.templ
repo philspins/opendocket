@@ -1,6 +1,6 @@
 package templates
 
-import "github.com/philspins/open-democracy/internal/store"
+import "github.com/philspins/opendocket/internal/store"
 
 templ MembersDirectory(ps store.ParliamentStatus, members []store.MemberRow, search, party, province, riding, governmentLevel string, parties, provinces, ridings []string) {
 	@Layout("Members of Parliament", ps) {
@@ -28,8 +28,8 @@ templ MembersDirectory(ps store.ParliamentStatus, members []store.MemberRow, sea
 						<option value={ rd } selected?={ riding == rd }>{ rd }</option>
 					}
 				</select>
-				<select name="level" class="input-field w-36">
-					<option value="" selected?={ governmentLevel == "" }>All levels</option>
+				<select name="level" class="input-field w-46">
+					<option value="" selected?={ governmentLevel == "" }>Federal &amp; Provincial</option>
 					<option value="federal" selected?={ governmentLevel == "federal" }>Federal</option>
 					<option value="provincial" selected?={ governmentLevel == "provincial" }>Provincial</option>
 				</select>

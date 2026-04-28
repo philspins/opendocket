@@ -90,16 +90,16 @@ FACEBOOK_CLIENT_SECRET=...
 go mod download
 
 # Compile the crawler binary
-go build -o open-democracy-crawler ./cmd/crawler
+go build -o opendocket-crawler ./cmd/crawler
 
 # Compile the web server binary
-go build -o open-democracy-server ./cmd/server
+go build -o opendocket-server ./cmd/server
 
 # Regenerate templ-generated Go files (needed after editing *.templ files)
 go run github.com/a-h/templ/cmd/templ@v0.3.1001 generate
 
 # Verify the build
-./open-democracy-crawler --help
+./opendocket-crawler --help
 ```
 
 ---
@@ -126,38 +126,38 @@ All 95 tests are offline — they use `httptest.Server` and temporary SQLite fil
 
 ## Using the crawler CLI
 
-The `open-democracy-crawler` binary fetches data from Canadian public government sources and writes it to a local SQLite database.
+The `opendocket-crawler` binary fetches data from Canadian public government sources and writes it to a local SQLite database.
 
 ### One-shot crawl (all domains)
 
 ```bash
-./open-democracy-crawler --db open-democracy.db
+./opendocket-crawler --db opendocket.db
 ```
 
 ### Crawl specific domains
 
 ```bash
 # Bills only (LEGISinfo RSS + detail + Library of Parliament summaries)
-./open-democracy-crawler --bills
+./opendocket-crawler --bills
 
 # House of Commons votes only
-./open-democracy-crawler --votes
+./opendocket-crawler --votes
 
 # Senate votes only
-./open-democracy-crawler --senate
+./opendocket-crawler --senate
 
 # MP profiles only
-./open-democracy-crawler --members
+./opendocket-crawler --members
 
 # Sitting calendar only
-./open-democracy-crawler --calendar
+./opendocket-crawler --calendar
 ```
 
 ### Flags
 
 | Flag | Default | Description |
 |---|---|---|
-| `--db PATH` | `open-democracy.db` | Path to the SQLite database file |
+| `--db PATH` | `opendocket.db` | Path to the SQLite database file |
 | `--delay MS` | `500` | Milliseconds to sleep between HTTP requests |
 | `--parallelism N` | `5` | Max domain crawlers running concurrently (env: `CRAWLER_PARALLELISM`) |
 | `--schedule` | — | Run the background scheduler (blocks indefinitely) |
@@ -169,13 +169,13 @@ By default all five domain crawlers (calendar, bills, members, votes, senate) ru
 
 ```bash
 # Run at most 2 crawlers at a time
-./open-democracy-crawler --parallelism 2
+./opendocket-crawler --parallelism 2
 
 # Using the environment variable
-CRAWLER_PARALLELISM=2 ./open-democracy-crawler
+CRAWLER_PARALLELISM=2 ./opendocket-crawler
 
 # Sequential (safe for low-resource environments)
-./open-democracy-crawler --parallelism 1
+./opendocket-crawler --parallelism 1
 ```
 
 The semaphore pattern is used internally: a buffered channel of size N limits the number of goroutines that may execute concurrently. Each domain crawler acquires a slot on start and releases it when done.
@@ -192,7 +192,7 @@ The scheduler runs four jobs:
 | AI summarization fallback | Daily at 05:00 UTC |
 
 ```bash
-./open-democracy-crawler --schedule --db open-democracy.db
+./opendocket-crawler --schedule --db opendocket.db
 ```
 
 If `ANTHROPIC_API_KEY` is not set, the AI summarization job will not be able to generate Claude summaries.
@@ -204,7 +204,7 @@ PEI calendar OCR gracefully degrades if `pdftoppm`/`tesseract` are unavailable; 
 
 ```bash
 # Runs the read-only frontend on http://127.0.0.1:8080
-go run ./cmd/server -db open-democracy.db -addr :8080
+go run ./cmd/server -db opendocket.db -addr :8080
 ```
 
 The server expects a populated SQLite database. Run the crawler first (one-shot or scheduler mode) to ingest data.

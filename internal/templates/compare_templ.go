@@ -10,7 +10,7 @@ import templruntime "github.com/a-h/templ/runtime"
 
 import (
 	"fmt"
-	"github.com/philspins/open-democracy/internal/store"
+	"github.com/philspins/opendocket/internal/store"
 )
 
 func CompareMPs(ps store.ParliamentStatus, members []store.MemberRow, m1, m2 store.MemberRow, level, province, party string, provinces, parties []string, overlap, total int, sharedVotes []store.SharedVoteRow) templ.Component {

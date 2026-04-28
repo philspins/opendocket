@@ -3,7 +3,7 @@ package templates
 import (
 	"testing"
 
-	"github.com/philspins/open-democracy/internal/opennorth"
+	"github.com/philspins/opendocket/internal/opennorth"
 )
 
 func TestHomeRepresentativeHeading_IncludesOffice(t *testing.T) {

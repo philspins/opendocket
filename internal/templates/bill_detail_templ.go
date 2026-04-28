@@ -10,7 +10,7 @@ import templruntime "github.com/a-h/templ/runtime"
 
 import (
 	"fmt"
-	"github.com/philspins/open-democracy/internal/store"
+	"github.com/philspins/opendocket/internal/store"
 )
 
 func BillDetail(ps store.ParliamentStatus, bill store.BillRow, stages []store.BillStageRow, divs []store.DivisionRow, reactions store.BillReactionCounts, isAuthenticated bool) templ.Component {
@@ -68,7 +68,7 @@ func BillDetail(ps store.ParliamentStatus, bill store.BillRow, stages []store.Bi
 				return templ_7745c5c3_Err
 			}
 			if bill.Category != "" {
-				templ_7745c5c3_Err = CategoryBadge(bill.Category, "text-sm px-2 py-0.5").Render(ctx, templ_7745c5c3_Buffer)
+				templ_7745c5c3_Err = CategoryBadge(bill.Category, "text-xs px-2 py-0.5").Render(ctx, templ_7745c5c3_Buffer)
 				if templ_7745c5c3_Err != nil {
 					return templ_7745c5c3_Err
 				}

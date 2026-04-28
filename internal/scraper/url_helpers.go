@@ -1,7 +1,7 @@
 package scraper
 
 import (
-	"github.com/philspins/open-democracy/internal/urlutil"
+	"github.com/philspins/opendocket/internal/urlutil"
 )
 
 func resolveRelativeURL(baseURL, href string) string {

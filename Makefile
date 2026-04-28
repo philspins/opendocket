@@ -1,10 +1,10 @@
 SHELL := /bin/bash
 
 # Configurable variables
-DB ?= open-democracy.db
+DB ?= opendocket.db
 ADDR ?= :8080
-CRAWLER_BIN ?= open-democracy-crawler
-SERVER_BIN ?= open-democracy-server
+CRAWLER_BIN ?= opendocket-crawler
+SERVER_BIN ?= opendocket-server
 CRAWLER_FLAGS ?= $(FLAGS)
 
 .PHONY: help build build-crawler build-server crawler server test templ clean

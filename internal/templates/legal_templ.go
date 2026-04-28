@@ -8,7 +8,7 @@ package templates
 import "github.com/a-h/templ"
 import templruntime "github.com/a-h/templ/runtime"
 
-import "github.com/philspins/open-democracy/internal/store"
+import "github.com/philspins/opendocket/internal/store"
 
 func PrivacyPolicyPage(ps store.ParliamentStatus) templ.Component {
 	return templruntime.GeneratedTemplate(func(templ_7745c5c3_Input templruntime.GeneratedComponentInput) (templ_7745c5c3_Err error) {

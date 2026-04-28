@@ -1,6 +1,6 @@
 package scraper
 
-import "github.com/philspins/open-democracy/internal/scraper/provincial"
+import "github.com/philspins/opendocket/internal/scraper/provincial"
 
 type ProvincialBillStub = provincial.ProvincialBillStub
 type ProvincialMemberVote = provincial.ProvincialMemberVote

@@ -12,12 +12,12 @@ import (
 	"strings"
 	"time"
 
-	"github.com/philspins/open-democracy/internal/auth"
-	"github.com/philspins/open-democracy/internal/opennorth"
-	"github.com/philspins/open-democracy/internal/riding"
-	"github.com/philspins/open-democracy/internal/scraper"
-	"github.com/philspins/open-democracy/internal/store"
-	"github.com/philspins/open-democracy/internal/templates"
+	"github.com/philspins/opendocket/internal/auth"
+	"github.com/philspins/opendocket/internal/opennorth"
+	"github.com/philspins/opendocket/internal/riding"
+	"github.com/philspins/opendocket/internal/scraper"
+	"github.com/philspins/opendocket/internal/store"
+	"github.com/philspins/opendocket/internal/templates"
 )
 
 // localRidingContextToken indicates local riding context exists without exposing

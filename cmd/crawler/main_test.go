@@ -16,9 +16,9 @@ import (
 	"testing"
 	"time"
 
-	"github.com/philspins/open-democracy/internal/db"
-	"github.com/philspins/open-democracy/internal/scraper"
-	"github.com/philspins/open-democracy/internal/summarizer"
+	"github.com/philspins/opendocket/internal/db"
+	"github.com/philspins/opendocket/internal/scraper"
+	"github.com/philspins/opendocket/internal/summarizer"
 )
 
 // ── shared test helpers ───────────────────────────────────────────────────────

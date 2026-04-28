@@ -140,7 +140,7 @@ func IngestFederalContributions(ctx context.Context, client *http.Client) ([]Con
 	if err != nil {
 		return nil, err
 	}
-	req.Header.Set("User-Agent", "Open Democracy/1.0 (open-democracy.ca; contact@open-democracy.ca)")
+	req.Header.Set("User-Agent", "Open Democracy/1.0 (opendocket.ca; contact@opendocket.ca)")
 
 	resp, err := client.Do(req)
 	if err != nil {

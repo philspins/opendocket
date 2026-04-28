@@ -13,7 +13,7 @@ import (
 	"strings"
 	"time"
 
-	"github.com/philspins/open-democracy/internal/store"
+	"github.com/philspins/opendocket/internal/store"
 )
 
 const verifyRecaptchaRateLimitKeyPrefix = "auth:verify-recaptcha:ip:"

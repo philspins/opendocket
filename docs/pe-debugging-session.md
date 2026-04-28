@@ -193,52 +193,52 @@ The immediate next action is editing `crawlPEIBillsFromWorkflow` in `provincial_
 
 Then update `provincial_bills_test.go` mock handlers to use `/legislative-assembly/services/api/workflow` and WDF tree response format. Then run the crawler to verify bills are upserted.
 
-If you need specific details from before compaction (like exact code snippets, error messages, or content you generated), read the full transcript at: C:\Users\phill\.claude\projects\c--Users-phill-code-open-democracy\3259bf61-4df7-4309-a388-fb090606d1ae.jsonl
+If you need specific details from before compaction (like exact code snippets, error messages, or content you generated), read the full transcript at: C:\Users\phill\.claude\projects\c--Users-phill-code-opendocket\3259bf61-4df7-4309-a388-fb090606d1ae.jsonl
 Continue the conversation from where it left off without asking the user any further questions. Resume directly — do not acknowledge the summary, do not recap what was happening, do not preface with "I'll continue" or similar. Pick up the last task as if the break never happened.
-Read c:\Users\phill\code\open-democracy\internal\scraper\provincial_bills.go (lines 371-490)
-Read c:\Users\phill\code\open-democracy\internal\scraper\provincial_votes.go (lines 2-81)
-Grep "wdfNode|wdfTreeResponse|wdfCellData|wdfLinkData|wdfCollectRows|postPEIWorkflow|invokePEIFetch|peiWDFActivity|peiWDFEnvelope|peiWDFBillItem" (in c:\Users\phill\code\open-democracy\internal\scraper, glob: *.go)
+Read c:\Users\phill\code\opendocket\internal\scraper\provincial_bills.go (lines 371-490)
+Read c:\Users\phill\code\opendocket\internal\scraper\provincial_votes.go (lines 2-81)
+Grep "wdfNode|wdfTreeResponse|wdfCellData|wdfLinkData|wdfCollectRows|postPEIWorkflow|invokePEIFetch|peiWDFActivity|peiWDFEnvelope|peiWDFBillItem" (in c:\Users\phill\code\opendocket\internal\scraper, glob: *.go)
 35 lines of output
 Let me read the full PEI bills section to understand what needs to change.
 
-Read c:\Users\phill\code\open-democracy\internal\scraper\provincial_bills.go (lines 341-370)
-Read c:\Users\phill\code\open-democracy\internal\scraper\provincial_votes.go (lines 2261-2390)
-Grep "peiWDFEnvelope" (in c:\Users\phill\code\open-democracy\internal\scraper)
+Read c:\Users\phill\code\opendocket\internal\scraper\provincial_bills.go (lines 341-370)
+Read c:\Users\phill\code\opendocket\internal\scraper\provincial_votes.go (lines 2261-2390)
+Grep "peiWDFEnvelope" (in c:\Users\phill\code\opendocket\internal\scraper)
 1 line of output
-Grep "type peiWDFEnvelope" (in c:\Users\phill\code\open-democracy\internal\scraper)
+Grep "type peiWDFEnvelope" (in c:\Users\phill\code\opendocket\internal\scraper)
 1 line of output
 The peiWDFEnvelope type is undefined — provincial_bills.go won't compile. Let me read the test file and then do all the needed updates.
 
-Read c:\Users\phill\code\open-democracy\internal\scraper\provincial_bills_test.go (lines 2-51)
-Grep "TestCrawlPrinceEdwardIsland|legislative-assembly/api/workflow|peiWDF" (in c:\Users\phill\code\open-democracy\internal\scraper\provincial_bills_test.go)
+Read c:\Users\phill\code\opendocket\internal\scraper\provincial_bills_test.go (lines 2-51)
+Grep "TestCrawlPrinceEdwardIsland|legislative-assembly/api/workflow|peiWDF" (in c:\Users\phill\code\opendocket\internal\scraper\provincial_bills_test.go)
 12 lines of output
-Read c:\Users\phill\code\open-democracy\internal\scraper\provincial_bills_test.go (lines 274-393)
-Read c:\Users\phill\code\open-democracy\internal\scraper\provincial_votes.go (lines 2388-2457)
-Grep "peiParseMonthDayYear|ParseMonthDay" (in c:\Users\phill\code\open-democracy\internal\scraper)
+Read c:\Users\phill\code\opendocket\internal\scraper\provincial_bills_test.go (lines 274-393)
+Read c:\Users\phill\code\opendocket\internal\scraper\provincial_votes.go (lines 2388-2457)
+Grep "peiParseMonthDayYear|ParseMonthDay" (in c:\Users\phill\code\opendocket\internal\scraper)
 1 line of output
-Grep "FindDateInText" (in c:\Users\phill\code\open-democracy\internal)
+Grep "FindDateInText" (in c:\Users\phill\code\opendocket\internal)
 18 lines of output
 Good — utils.FindDateInText already handles "April 16, 2026" → "2026-04-16". I'll use it directly instead of adding peiParseMonthDayYear. Now let me make all the changes.
 
-Edit c:\Users\phill\code\open-democracy\internal\scraper\provincial_bills.go
+Edit c:\Users\phill\code\opendocket\internal\scraper\provincial_bills.go
 Added 7 lines
 Now update the test file — fix handler paths and response formats for all 4 PEI tests:
 
-Edit c:\Users\phill\code\open-democracy\internal\scraper\provincial_bills_test.go
+Edit c:\Users\phill\code\opendocket\internal\scraper\provincial_bills_test.go
 Modified
-Edit c:\Users\phill\code\open-democracy\internal\scraper\provincial_bills_test.go
+Edit c:\Users\phill\code\opendocket\internal\scraper\provincial_bills_test.go
 Modified
 Now update the journals (votes) test mocks:
 
-Edit c:\Users\phill\code\open-democracy\internal\scraper\provincial_bills_test.go
+Edit c:\Users\phill\code\opendocket\internal\scraper\provincial_bills_test.go
 Modified
-Edit c:\Users\phill\code\open-democracy\internal\scraper\provincial_bills_test.go
+Edit c:\Users\phill\code\opendocket\internal\scraper\provincial_bills_test.go
 Modified
 Now let's build to check for compile errors:
 
 Bash Build scraper package to check for compile errors
 IN
-cd c:/Users/phill/code/open-democracy && go build ./internal/scraper/... 2>&1
+cd c:/Users/phill/code/opendocket && go build ./internal/scraper/... 2>&1
 
 OUT
 (Bash completed with no output)
@@ -246,7 +246,7 @@ Clean build. Now run the PEI tests:
 
 Bash Run PEI scraper tests
 IN
-cd c:/Users/phill/code/open-democracy && go test ./internal/scraper/... -run "TestCrawlPrinceEdwardIsland" -v -timeout 30s 2>&1
+cd c:/Users/phill/code/opendocket && go test ./internal/scraper/... -run "TestCrawlPrinceEdwardIsland" -v -timeout 30s 2>&1
 
 OUT
 === RUN   TestCrawlPrinceEdwardIslandBills_UsesWorkflowAPI
@@ -269,15 +269,15 @@ OUT
 2026/04/19 10:45:07 [pe-votes] CAPTCHA detected — assembly.pe.ca is protected by Radware bot-manager; returning 0 divisions. See docs/implementation-plan-detailed.md § 5A.7 for escalation path.
 --- PASS: TestCrawlPrinceEdwardIslandVotes_HandlesCaptcha (0.00s)
 PASS
-ok  	github.com/philspins/open-democracy/internal/scraper	0.186s
+ok  	github.com/philspins/opendocket/internal/scraper	0.186s
 All 5 PEI tests pass. Now run the actual crawler:
 
 Bash Run PEI provincial crawler
 IN
-cd c:/Users/phill/code/open-democracy && make crawler -- --provincial --province pe 2>&1 | head -100
+cd c:/Users/phill/code/opendocket && make crawler -- --provincial --province pe 2>&1 | head -100
 
 OUT
-go run ./cmd/crawler --db open-democracy.db  --provincial --province pe
+go run ./cmd/crawler --db opendocket.db  --provincial --province pe
 2026/04/19 10:45:22 [summarizer] parallel workers: 5
 2026/04/19 10:45:22 [provincial] crawling Prince Edward Island
 2026/04/19 10:45:22 [provincial][pe] detected legislature/session: 67/3
@@ -296,18 +296,18 @@ go run ./cmd/crawler --db open-democracy.db  --provincial --province pe
 2026/04/19 10:47:01 [main] done
 The HTML fallback is yielding 0 results. Let me check why invokePEIFetchJS isn't being called — it should be since this is production:
 
-Grep "peiWDFAPIBase" (in c:\Users\phill\code\open-democracy\internal\scraper)
+Grep "peiWDFAPIBase" (in c:\Users\phill\code\opendocket\internal\scraper)
 7 lines of output
 The 302 message is coming from postPEIWorkflowHTTP, meaning invokePEIFetchJS is being bypassed. Let me check how the crawler calls it:
 
-Grep "CrawlPrinceEdwardIsland|crawlPEI|peiWDFAPIBase" (in c:\Users\phill\code\open-democracy\internal\scraper\provincial_bills.go)
+Grep "CrawlPrinceEdwardIsland|crawlPEI|peiWDFAPIBase" (in c:\Users\phill\code\opendocket\internal\scraper\provincial_bills.go)
 32 lines of output
-Grep "CrawlPrinceEdwardIsland" (in c:\Users\phill\code\open-democracy\internal\scraper\provincial_votes.go)
+Grep "CrawlPrinceEdwardIsland" (in c:\Users\phill\code\opendocket\internal\scraper\provincial_votes.go)
 15 lines of output
-Read c:\Users\phill\code\open-democracy\internal\scraper\provincial_votes.go (lines 2536-2575)
+Read c:\Users\phill\code\opendocket\internal\scraper\provincial_votes.go (lines 2536-2575)
 Let me check the exact current postPEIWorkflow code to confirm the production branch:
 
-Read c:\Users\phill\code\open-democracy\internal\scraper\provincial_votes.go (lines 2196-2210)
+Read c:\Users\phill\code\opendocket\internal\scraper\provincial_votes.go (lines 2196-2210)
 Bash Check if node is in PATH
 IN
 which node 2>&1 && node --version 2>&1
@@ -317,20 +317,20 @@ OUT
 v24.13.0
 Bash Check script exists and node args validation
 IN
-cd c:/Users/phill/code/open-democracy && ls scripts/pei_fetch.js && node scripts/pei_fetch.js 2>&1 | head -5
+cd c:/Users/phill/code/opendocket && ls scripts/pei_fetch.js && node scripts/pei_fetch.js 2>&1 | head -5
 
 OUT
 scripts/pei_fetch.js
 usage: node pei_fetch.js <workflowName> <activityName> <jsonQueryVars>
 Bash Quick test to see working dir during go run
 IN
-cd c:/Users/phill/code/open-democracy && go run -v ./cmd/crawler 2>&1 | head -3 || true
+cd c:/Users/phill/code/opendocket && go run -v ./cmd/crawler 2>&1 | head -3 || true
 
 OUT
-Command running in background with ID: bwimjm9ad. Output is being written to: C:\Users\phill\AppData\Local\Temp\claude\c--Users-phill-code-open-democracy\3259bf61-4df7-4309-a388-fb090606d1ae\tasks\bwimjm9ad.output
+Command running in background with ID: bwimjm9ad. Output is being written to: C:\Users\phill\AppData\Local\Temp\claude\c--Users-phill-code-opendocket\3259bf61-4df7-4309-a388-fb090606d1ae\tasks\bwimjm9ad.output
 Bash Test node LookPath and script stat from project dir
 IN
-cd c:/Users/phill/code/open-democracy && cat > /tmp/test_node.go << 'EOF'
+cd c:/Users/phill/code/opendocket && cat > /tmp/test_node.go << 'EOF'
 package main
 import (
     "fmt"
@@ -353,7 +353,7 @@ node: "C:\\Program Files\\nodejs\\node.exe" err=<nil>
 script: "scripts\\pei_fetch.js" err=<nil>
 Bash Find all postPEIWorkflow references
 IN
-cd c:/Users/phill/code/open-democracy && grep -rn "postPEIWorkflowHTTP\|postPEIWorkflow\b" internal/scraper/*.go | grep -v "_test.go"
+cd c:/Users/phill/code/opendocket && grep -rn "postPEIWorkflowHTTP\|postPEIWorkflow\b" internal/scraper/*.go | grep -v "_test.go"
 
 OUT
 internal/scraper/provincial_bills.go:367:// delay is the rate-limit pause threaded to postPEIWorkflow.
@@ -365,28 +365,28 @@ internal/scraper/provincial_votes.go:2283:	return postPEIWorkflowHTTP(wdfBase, w
 internal/scraper/provincial_votes.go:2315:// postPEIWorkflowHTTP posts the WDF body directly to wdfBase (used by tests).
 internal/scraper/provincial_votes.go:2316:func postPEIWorkflowHTTP(wdfBase, workflowName, activityName string, queryVars map[string]string, delay time.Duration) ([]byte, error) {
 internal/scraper/provincial_votes.go:2376:	body, err := postPEIWorkflow(wdfBase, peiWorkflowJournals, peiWDFActivityJournals, queryVars, client, delay)
-Grep "CrawlPrinceEdwardIsland|pe.*bills\|pe.*votes" (in c:\Users\phill\code\open-democracy\cmd\crawler\main.go)
+Grep "CrawlPrinceEdwardIsland|pe.*bills\|pe.*votes" (in c:\Users\phill\code\opendocket\cmd\crawler\main.go)
 1 line of output
-Grep "CrawlPrinceEdwardIsland" (in c:\Users\phill\code\open-democracy)
+Grep "CrawlPrinceEdwardIsland" (in c:\Users\phill\code\opendocket)
 25 lines of output
-Read c:\Users\phill\code\open-democracy\internal\scraper\crawler_tasks.go (lines 341-390)
-Grep "BillsURL.*pe\b|pe.*BillsURL|ProvincialSource.*pe" (in c:\Users\phill\code\open-democracy\internal\scraper)
+Read c:\Users\phill\code\opendocket\internal\scraper\crawler_tasks.go (lines 341-390)
+Grep "BillsURL.*pe\b|pe.*BillsURL|ProvincialSource.*pe" (in c:\Users\phill\code\opendocket\internal\scraper)
 2 lines of output
 Found the bug. src.BillsURL is non-empty, so wdfBase gets set to the assembly.pe.ca HTML URL instead of peiWDFAPIBase, bypassing the invokePEIFetchJS branch. Fix: detect test servers by their 127.0.0.1 prefix, not by exact peiWDFAPIBase match.
 
 Also noting the user's AWS EC2 Amazon Linux 2023 note — Chrome paths in pei_fetch.js need to cover that env. Let me fix both:
 
-Edit c:\Users\phill\code\open-democracy\internal\scraper\provincial_votes.go
+Edit c:\Users\phill\code\opendocket\internal\scraper\provincial_votes.go
 Added 3 lines
 Now update pei_fetch.js to add EC2/Amazon Linux Chromium paths:
 
-Edit c:\Users\phill\code\open-democracy\scripts\pei_fetch.js
+Edit c:\Users\phill\code\opendocket\scripts\pei_fetch.js
 Added 9 lines
 That hint is just a style suggestion, not an error. Let me build and verify, then run the crawler:
 
 Bash Build and run PEI tests
 IN
-cd c:/Users/phill/code/open-democracy && go build ./internal/scraper/... && go test ./internal/scraper/... -run "TestCrawlPrinceEdwardIsland" -v -timeout 30s 2>&1
+cd c:/Users/phill/code/opendocket && go build ./internal/scraper/... && go test ./internal/scraper/... -run "TestCrawlPrinceEdwardIsland" -v -timeout 30s 2>&1
 
 OUT
 === RUN   TestCrawlPrinceEdwardIslandBills_UsesWorkflowAPI
@@ -409,15 +409,15 @@ OUT
 2026/04/19 10:53:48 [pe-votes] CAPTCHA detected — assembly.pe.ca is protected by Radware bot-manager; returning 0 divisions. See docs/implementation-plan-detailed.md § 5A.7 for escalation path.
 --- PASS: TestCrawlPrinceEdwardIslandVotes_HandlesCaptcha (0.00s)
 PASS
-ok  	github.com/philspins/open-democracy/internal/scraper	0.179s
+ok  	github.com/philspins/opendocket/internal/scraper	0.179s
 All tests pass. Now run the crawler for real:
 
 Bash Run PEI provincial crawler with JS bridge
 IN
-cd c:/Users/phill/code/open-democracy && make crawler -- --provincial --province pe 2>&1 | head -60
+cd c:/Users/phill/code/opendocket && make crawler -- --provincial --province pe 2>&1 | head -60
 
 OUT
-go run ./cmd/crawler --db open-democracy.db  --provincial --province pe
+go run ./cmd/crawler --db opendocket.db  --provincial --province pe
 2026/04/19 10:54:07 [provincial] crawling Prince Edward Island
 2026/04/19 10:54:07 [summarizer] parallel workers: 5
 2026/04/19 10:54:07 [provincial][pe] detected legislature/session: 67/3
@@ -511,7 +511,7 @@ Parse division blocks using regex patterns similar to what we use for other prov
 <task-notification>
 <task-id>bwimjm9ad</task-id>
 <tool-use-id>toolu_01TBEhAtumCHqYcAC55N49xC</tool-use-id>
-<output-file>C:\Users\phill\AppData\Local\Temp\claude\c--Users-phill-code-open-democracy\3259bf61-4df7-4309-a388-fb090606d1ae\tasks\bwimjm9ad.output</output-file>
+<output-file>C:\Users\phill\AppData\Local\Temp\claude\c--Users-phill-code-opendocket\3259bf61-4df7-4309-a388-fb090606d1ae\tasks\bwimjm9ad.output</output-file>
 <status>completed</status>
 <summary>Background command "Quick test to see working dir during go run" completed (exit code 0)</summary>
 </task-notification>
@@ -523,17 +523,17 @@ c#1-1
 yes please implement parsing for the journal pdfs
 Let me look at how other provinces parse PDFs and examine a PEI journal PDF to understand its structure.
 
-Grep "pdfcpu|extractText|parsePDF|pdf.*division|ParsePDF" (in c:\Users\phill\code\open-democracy\internal\scraper, glob: *.go)
+Grep "pdfcpu|extractText|parsePDF|pdf.*division|ParsePDF" (in c:\Users\phill\code\opendocket\internal\scraper, glob: *.go)
 12 lines of output
 Bash Download a PEI journal PDF for inspection
 IN
-cd c:/Users/phill/code/open-democracy && curl -s -L "https://docs.assembly.pe.ca/download/dms?objectId=8273dd84-c1e7-4995-ac2a-10cda7a49959&fileName=Journal%20for%20Tuesday,%20April%2014,%202026.pdf" -o /tmp/pei_journal.pdf && echo "Downloaded $(wc -c < /tmp/pei_journal.pdf) bytes"
+cd c:/Users/phill/code/opendocket && curl -s -L "https://docs.assembly.pe.ca/download/dms?objectId=8273dd84-c1e7-4995-ac2a-10cda7a49959&fileName=Journal%20for%20Tuesday,%20April%2014,%202026.pdf" -o /tmp/pei_journal.pdf && echo "Downloaded $(wc -c < /tmp/pei_journal.pdf) bytes"
 
 OUT
 Downloaded 129493 bytes
 Bash Quick pdfcpu API test
 IN
-cd c:/Users/phill/code/open-democracy && go run - << 'EOF'
+cd c:/Users/phill/code/opendocket && go run - << 'EOF'
 package main
 
 import (
@@ -566,7 +566,7 @@ OUT
 go: no go files listed
 Bash Extract text from PEI journal PDF page 1
 IN
-cd c:/Users/phill/code/open-democracy && cat > /tmp/pdftest.go << 'EOF'
+cd c:/Users/phill/code/opendocket && cat > /tmp/pdftest.go << 'EOF'
 package main
 
 import (
@@ -605,15 +605,15 @@ go run /tmp/pdftest.go 2>&1 | head -100
 OUT
 # command-line-arguments
 ..\..\AppData\Local\Temp\pdftest.go:15:20: undefined: api.ExtractPageContentAsStrings
-Grep "func Extract.*Content\|func.*PDF.*Text\|pdfcpu.*text" (in c:\Users\phill\code\open-democracy\internal\scraper\provincial_votes.go)
+Grep "func Extract.*Content\|func.*PDF.*Text\|pdfcpu.*text" (in c:\Users\phill\code\opendocket\internal\scraper\provincial_votes.go)
 1 line of output
-Grep "api\." (in c:\Users\phill\code\open-democracy\internal\scraper\provincial_votes.go)
+Grep "api\." (in c:\Users\phill\code\opendocket\internal\scraper\provincial_votes.go)
 1 line of output
-Read c:\Users\phill\code\open-democracy\internal\scraper\provincial_votes.go (lines 751-800)
-Read c:\Users\phill\code\open-democracy\internal\scraper\provincial_votes.go (lines 1117-1216)
+Read c:\Users\phill\code\opendocket\internal\scraper\provincial_votes.go (lines 751-800)
+Read c:\Users\phill\code\opendocket\internal\scraper\provincial_votes.go (lines 1117-1216)
 Bash Extract and search PEI journal PDF text for division content
 IN
-cd c:/Users/phill/code/open-democracy && cat > /tmp/pdftest2.go << 'EOF'
+cd c:/Users/phill/code/opendocket && cat > /tmp/pdftest2.go << 'EOF'
 package main
 
 import (
@@ -701,7 +701,7 @@ OUT
 done 129493 bytes
 Bash Extract and search PEI journal PDF for division content
 IN
-cd c:/Users/phill/code/open-democracy && cat > C:/Users/phill/AppData/Local/Temp/pdftest.go << 'EOF'
+cd c:/Users/phill/code/opendocket && cat > C:/Users/phill/AppData/Local/Temp/pdftest.go << 'EOF'
 package main
 
 import (
@@ -788,7 +788,7 @@ total words: 741
 se the ESTIMATES OF REVENUE AND EXPENDITURE for the Province of Prince Edward Island for the fiscal year ending March 31, 202 7 . ORDERED , that the said Estimates do lie on the Table. JOURNAL OF THE LEGISLATIVE ASSEMBLY Hon. Premier moved, seconded by Hon. Jill Burridge (Finance and Affordability \, that the consideration of the Estimates in Committee of the Whole House be added to the Orders of the Day until such time as they are despatched. Hon. Mr. Speaker then put the Question, and it was CARRIED UNANIMOUSLY . Hon. Jill Burridge (Finance and Affordability \ moved, seconded by Hon. Premier
 Bash Download multiple PEI journal PDFs in parallel
 IN
-cd c:/Users/phill/code/open-democracy && cat > C:/Users/phill/AppData/Local/Temp/pdftest3.go << 'EOF'
+cd c:/Users/phill/code/opendocket && cat > C:/Users/phill/AppData/Local/Temp/pdftest3.go << 'EOF'
 package main
 
 import (
@@ -880,7 +880,7 @@ OUT
 downloads done
 Bash Check all PEI journals for division content
 IN
-cd c:/Users/phill/code/open-democracy && go run C:/Users/phill/AppData/Local/Temp/pdftest3.go 2>&1
+cd c:/Users/phill/code/opendocket && go run C:/Users/phill/AppData/Local/Temp/pdftest3.go 2>&1
 
 OUT
 Downloading April 15...
@@ -905,7 +905,7 @@ The format is clear. Let me get the full division sections from a few journals:
 
 Bash Show full division sections from multiple PEI journals
 IN
-cd c:/Users/phill/code/open-democracy && cat > C:/Users/phill/AppData/Local/Temp/pdfshow.go << 'EOF'
+cd c:/Users/phill/code/opendocket && cat > C:/Users/phill/AppData/Local/Temp/pdfshow.go << 'EOF'
 package main
 
 import (
@@ -980,44 +980,44 @@ Session.\224 Hon. Mr. Speaker put the Question. A Recorded Division being sought
 SSEMBLY 4:44 Hon. Mr. Speaker put the Question. A Recorded Division being sought, the names were recorded by the Clerk as follows: Nays ( 12 \ Hon. Darlene Compton (Land and Environment\ Hon. Jill Burridge (Finance and Affordability\ Hon. Bloyce Thompson (Agriculture, Justice and Public Safety and Attorney General\ Hon. Zack Bell (Workforce and Advanced Learning\ Hon. Ernie Hudson (Fisheries, Rural Development and Tourism\ Tyler DesRoches (Summerside - Wilmot\ Hon. Barb Ramsay (Social Development and Seniors\ Hon. Robin Croucher (Education and Early Years\ Hon. Jenn Redmond (Economic Development, Trade and Artificial Intelligence\ Hon. Kent Dollar (Housing and Communities\ Susie Dillon (Charlottetown - Belvedere\ Brendan Curran (Georgetown - Pownal\ Yeas ( 7 \ Leader of the Third Party Karla Bernard (Charlottetown - Victoria Park\ Gordon McNeilly (Charlottetown - West Royalty\ Hon. Leader of the Opposition Peter Bevan - Baker (New Haven - Rocky Point\ - Inverness\ Carolyn Simpson (Charlottetown - Hillsborough Park\ Motion resolved in the Negative. Gordon McNeilly (Charlottetown - West Royalty\ moved, seconded by Carolyn Simpson (Charlottetown - Hillsborough Park\, the following Motion (No. 3\: WHEREAS youth mental health is a growing concern in Prince Edward Island, with many students experiencing anxiety, depression, and other mental health challenges; AND WHEREAS school - based and community mental health supports remain insufficient to meet current demand, resulting in long wait times and limited access for youth and fami
 Now I have a complete picture of the format. Let me look at how other provinces download PDFs, then implement the parser:
 
-Grep "downloadPDF\|fetchPDF\|http.*pdf\|Get.*\.pdf" (in c:\Users\phill\code\open-democracy\internal\scraper\provincial_votes.go)
+Grep "downloadPDF\|fetchPDF\|http.*pdf\|Get.*\.pdf" (in c:\Users\phill\code\opendocket\internal\scraper\provincial_votes.go)
 1 line of output
-Grep "TempFile\|MkdirTemp\|\.pdf\b" (in c:\Users\phill\code\open-democracy\internal\scraper\provincial_votes.go)
+Grep "TempFile\|MkdirTemp\|\.pdf\b" (in c:\Users\phill\code\opendocket\internal\scraper\provincial_votes.go)
 1 line of output
-Grep "extractProvincialPDFText|MkdirTemp|ioutil.TempFile|os.CreateTemp" (in c:\Users\phill\code\open-democracy\internal\scraper)
+Grep "extractProvincialPDFText|MkdirTemp|ioutil.TempFile|os.CreateTemp" (in c:\Users\phill\code\opendocket\internal\scraper)
 31 lines of output
-Read c:\Users\phill\code\open-democracy\internal\scraper\provincial_votes.go (lines 706-745)
+Read c:\Users\phill\code\opendocket\internal\scraper\provincial_votes.go (lines 706-745)
 Good. Now I have all the data I need. Let me read the current crawlPEIVotesFromWorkflow to know the exact lines to update:
 
-Read c:\Users\phill\code\open-democracy\internal\scraper\provincial_votes.go (lines 2368-2447)
+Read c:\Users\phill\code\opendocket\internal\scraper\provincial_votes.go (lines 2368-2447)
 Now I have everything needed. Let me implement the PDF parser. First, let me check the existing test file structure:
 
-Read c:\Users\phill\code\open-democracy\internal\scraper\provincial_votes_test.go (lines 141-200)
-Read c:\Users\phill\code\open-democracy\internal\scraper\provincial_votes.go (lines 2211-2265)
+Read c:\Users\phill\code\opendocket\internal\scraper\provincial_votes_test.go (lines 141-200)
+Read c:\Users\phill\code\opendocket\internal\scraper\provincial_votes.go (lines 2211-2265)
 Now I'll add the new PDF parsing code. I'll insert it right before crawlPEIVotesFromWorkflow:
 
-Edit c:\Users\phill\code\open-democracy\internal\scraper\provincial_votes.go
+Edit c:\Users\phill\code\opendocket\internal\scraper\provincial_votes.go
 Added 217 lines
-Edit c:\Users\phill\code\open-democracy\internal\scraper\provincial_votes.go
+Edit c:\Users\phill\code\opendocket\internal\scraper\provincial_votes.go
 Modified
 Now update crawlPEIVotesFromWorkflow to call the parser instead of skipping PDFs, and reverse the rows for chronological ordering:
 
-Edit c:\Users\phill\code\open-democracy\internal\scraper\provincial_votes.go
+Edit c:\Users\phill\code\opendocket\internal\scraper\provincial_votes.go
 Added 13 lines
 Now add a test, then build:
 
-Read c:\Users\phill\code\open-democracy\internal\scraper\provincial_votes_test.go (lines 177-186)
-Edit c:\Users\phill\code\open-democracy\internal\scraper\provincial_votes_test.go
+Read c:\Users\phill\code\opendocket\internal\scraper\provincial_votes_test.go (lines 177-186)
+Edit c:\Users\phill\code\opendocket\internal\scraper\provincial_votes_test.go
 Added 75 lines
 Bash Build scraper package
 IN
-cd c:/Users/phill/code/open-democracy && go build ./internal/scraper/... 2>&1
+cd c:/Users/phill/code/opendocket && go build ./internal/scraper/... 2>&1
 
 OUT
 (Bash completed with no output)
 Bash Run new PEI journal parsing tests
 IN
-cd c:/Users/phill/code/open-democracy && go test ./internal/scraper/... -run "TestParsePEIJournal" -v -timeout 30s 2>&1
+cd c:/Users/phill/code/opendocket && go test ./internal/scraper/... -run "TestParsePEIJournal" -v -timeout 30s 2>&1
 
 OUT
 === RUN   TestParsePEIJournalDivisions_YeasAndNays
@@ -1025,20 +1025,20 @@ OUT
 === RUN   TestParsePEIJournalDivisions_NaysFirst
 --- PASS: TestParsePEIJournalDivisions_NaysFirst (0.00s)
 PASS
-ok  	github.com/philspins/open-democracy/internal/scraper	0.149s
+ok  	github.com/philspins/opendocket/internal/scraper	0.149s
 Both pass. Now run the full crawler:
 
 Bash Run PEI crawler and filter for key output
 IN
-cd c:/Users/phill/code/open-democracy && make crawler -- --provincial --province pe 2>&1 | grep -E "pe-votes|pe-bills|pe\]|division|bills="
+cd c:/Users/phill/code/opendocket && make crawler -- --provincial --province pe 2>&1 | grep -E "pe-votes|pe-bills|pe\]|division|bills="
 
 my computer froze and i needed to reboot. please proceed with the previous command.
 Bash Run PEI crawler with PDF division parsing
 IN
-cd c:/Users/phill/code/open-democracy && make crawler -- --provincial --province pe 2>&1 | head -80
+cd c:/Users/phill/code/opendocket && make crawler -- --provincial --province pe 2>&1 | head -80
 
 OUT
-go run ./cmd/crawler --db open-democracy.db  --provincial --province pe
+go run ./cmd/crawler --db opendocket.db  --provincial --province pe
 2026/04/19 11:38:56 [summarizer] parallel workers: 5
 2026/04/19 11:38:56 [provincial] crawling Prince Edward Island
 2026/04/19 11:38:56 [provincial][pe] detected legislature/session: 67/3
@@ -1122,7 +1122,7 @@ The issue is clear: the PDF URLs have unencoded spaces in the fileName query par
 
 Bash Confirm encoded URL works
 IN
-cd c:/Users/phill/code/open-democracy && curl -sI "https://docs.assembly.pe.ca/download/dms?objectId=962b7a44-4ee6-4edb-8997-a9e3d3b4b467&fileName=Journal%20for%20Friday,%20April%2010,%202026.pdf" | head -5
+cd c:/Users/phill/code/opendocket && curl -sI "https://docs.assembly.pe.ca/download/dms?objectId=962b7a44-4ee6-4edb-8997-a9e3d3b4b467&fileName=Journal%20for%20Friday,%20April%2010,%202026.pdf" | head -5
 
 OUT
 HTTP/1.1 200 
@@ -1132,17 +1132,17 @@ Content-Length: 114640
 Connection: keep-alive
 Confirmed. I'll add URL sanitization in crawlPEIVotesFromWorkflow before the download call:
 
-Edit c:\Users\phill\code\open-democracy\internal\scraper\provincial_votes.go
+Edit c:\Users\phill\code\opendocket\internal\scraper\provincial_votes.go
 Added 6 lines
 Bash Build check
 IN
-cd c:/Users/phill/code/open-democracy && go build ./internal/scraper/... 2>&1
+cd c:/Users/phill/code/opendocket && go build ./internal/scraper/... 2>&1
 
 OUT
 (Bash completed with no output)
 Bash Run crawler and show only PEI-relevant log lines
 IN
-cd c:/Users/phill/code/open-democracy && make crawler -- --provincial --province pe 2>&1 | grep -E "pe-votes|pe-bills|summary|division|404|skipping" | head -40
+cd c:/Users/phill/code/opendocket && make crawler -- --provincial --province pe 2>&1 | grep -E "pe-votes|pe-bills|summary|division|404|skipping" | head -40
 
 OUT
 2026/04/19 11:44:39 [pe-bills] wdf parsed 20 bills
@@ -1187,23 +1187,23 @@ cannot be found. <br> Log ID: 19da66cf95f-36618691<!--01234567890123456789012345
 2026/04/19 11:47:45 [pe-votes] wdf journal https://docs.assembly.pe.ca/download/dms?objectId=cf8f87ea-4097-43c7-8b99-505aa879dc4d&fileName=Journal for Wednesday, April 8, 2026.pdf: GET "https://docs.assembly.pe.ca/download/dms?objectId=cf8f87ea-4097-43c7-8b99-505aa879dc4d&fileName=Journal for Wednesday, April 8, 2026.pdf": status 404 - <div style="border: 3px solid #4991C5; font:1.5em; font-
 url.Parse().String() doesn't re-encode raw spaces. The correct fix is to re-encode via u.Query() + q.Encode():
 
-Edit c:\Users\phill\code\open-democracy\internal\scraper\provincial_votes.go
+Edit c:\Users\phill\code\opendocket\internal\scraper\provincial_votes.go
 Added 2 lines
 Bash Run crawler and show key PEI log lines
 IN
-cd c:/Users/phill/code/open-democracy && go build ./internal/scraper/... && make crawler -- --provincial --province pe 2>&1 | grep -E "pe-votes|pe-bills|summary|divisions from|upsert" | head -20
+cd c:/Users/phill/code/opendocket && go build ./internal/scraper/... && make crawler -- --provincial --province pe 2>&1 | grep -E "pe-votes|pe-bills|summary|divisions from|upsert" | head -20
 
 OUT
-Command running in background with ID: b4p37jkys. Output is being written to: C:\Users\phill\AppData\Local\Temp\claude\c--Users-phill-code-open-democracy\3259bf61-4df7-4309-a388-fb090606d1ae\tasks\b4p37jkys.output
+Command running in background with ID: b4p37jkys. Output is being written to: C:\Users\phill\AppData\Local\Temp\claude\c--Users-phill-code-opendocket\3259bf61-4df7-4309-a388-fb090606d1ae\tasks\b4p37jkys.output
 Bash Follow crawler output
 IN
-tail -f "C:/Users/phill/AppData/Local/Temp/claude/c--Users-phill-code-open-democracy/3259bf61-4df7-4309-a388-fb090606d1ae/tasks/b4p37jkys.output" 2>/dev/null | head -30
+tail -f "C:/Users/phill/AppData/Local/Temp/claude/c--Users-phill-code-opendocket/3259bf61-4df7-4309-a388-fb090606d1ae/tasks/b4p37jkys.output" 2>/dev/null | head -30
 
 OUT
-Command running in background with ID: b5cqg4z3p. Output is being written to: C:\Users\phill\AppData\Local\Temp\claude\c--Users-phill-code-open-democracy\3259bf61-4df7-4309-a388-fb090606d1ae\tasks\b5cqg4z3p.output
+Command running in background with ID: b5cqg4z3p. Output is being written to: C:\Users\phill\AppData\Local\Temp\claude\c--Users-phill-code-opendocket\3259bf61-4df7-4309-a388-fb090606d1ae\tasks\b5cqg4z3p.output
 Bash Read crawler output
 IN
-cat "C:/Users/phill/AppData/Local/Temp/claude/c--Users-phill-code-open-democracy/3259bf61-4df7-4309-a388-fb090606d1ae/tasks/b4p37jkys.output"
+cat "C:/Users/phill/AppData/Local/Temp/claude/c--Users-phill-code-opendocket/3259bf61-4df7-4309-a388-fb090606d1ae/tasks/b4p37jkys.output"
 
 OUT
 2026/04/19 11:49:57 [pe-bills] wdf parsed 20 bills
@@ -1218,7 +1218,7 @@ The URL encoding still isn't working. Let me verify directly:
 
 Bash Debug URL encoding
 IN
-cd c:/Users/phill/code/open-democracy && cat > /tmp/urltest.go << 'EOF'
+cd c:/Users/phill/code/opendocket && cat > /tmp/urltest.go << 'EOF'
 package main
 import (
     "fmt"
@@ -1252,7 +1252,7 @@ The 404s are gone — PDFs download now — but the parser finds 0 divisions. Le
 
 Bash Debug PEI journal PDF text extraction vs trigger regex
 IN
-cd c:/Users/phill/code/open-democracy && cat > /tmp/peidebug.go << 'EOF'
+cd c:/Users/phill/code/opendocket && cat > /tmp/peidebug.go << 'EOF'
 package main
 
 import (

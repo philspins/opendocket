@@ -12,7 +12,7 @@ import (
 	"time"
 
 	"github.com/a-h/templ"
-	"github.com/philspins/open-democracy/internal/store"
+	"github.com/philspins/opendocket/internal/store"
 )
 
 type PartyStyleRule struct {
@@ -269,7 +269,6 @@ func BillLevelBadgeClass(b store.BillRow) string {
 	}
 	return "text-xs px-2 py-0.5 bg-lime-300 font-medium"
 }
-
 
 // PartyClass returns a Tailwind text-color class for a party name.
 func PartyClass(party string) string {

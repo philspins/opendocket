@@ -16,7 +16,7 @@ import (
 
 	"github.com/PuerkitoBio/goquery"
 	"github.com/pdfcpu/pdfcpu/pkg/api"
-	"github.com/philspins/open-democracy/internal/utils"
+	"github.com/philspins/opendocket/internal/utils"
 )
 
 // ── types ─────────────────────────────────────────────────────────────────────
@@ -55,7 +55,7 @@ func downloadAndExtractPDFText(pdfURL, province string, client *http.Client) (st
 		snippet, _ := io.ReadAll(io.LimitReader(resp.Body, 512))
 		return "", fmt.Errorf("GET %q: status %d - %s", pdfURL, resp.StatusCode, strings.TrimSpace(string(snippet)))
 	}
-	tmp, err := os.CreateTemp("", "open-democracy-"+province+"-*.pdf")
+	tmp, err := os.CreateTemp("", "opendocket-"+province+"-*.pdf")
 	if err != nil {
 		return "", err
 	}
@@ -75,7 +75,7 @@ func downloadAndExtractPDFText(pdfURL, province string, client *http.Client) (st
 }
 
 func extractProvincialPDFText(pdfPath string) (string, error) {
-	dir, err := os.MkdirTemp("", "open-democracy-nb-content-")
+	dir, err := os.MkdirTemp("", "opendocket-nb-content-")
 	if err != nil {
 		return "", err
 	}

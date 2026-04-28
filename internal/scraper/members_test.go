@@ -6,7 +6,7 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/philspins/open-democracy/internal/scraper"
+	"github.com/philspins/opendocket/internal/scraper"
 )
 
 // newJSONTestServer starts a test server that always returns body as JSON.

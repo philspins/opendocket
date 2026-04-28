@@ -15,7 +15,7 @@
 //	--province CODES     Comma-separated province codes to crawl (e.g. pe,on,bc).
 //	                     Implies --provincial; ignored when --provincial is not set.
 //	--schedule           Run the background scheduler (blocks indefinitely)
-//	--db PATH            Path to SQLite database file (default: open-democracy.db)
+//	--db PATH            Path to SQLite database file (default: opendocket.db)
 //	--delay MS           Milliseconds between HTTP requests (default: 500)
 //	--parallelism N      Max domain crawlers to run concurrently (default: 5, env: CRAWLER_PARALLELISM)
 //	-v                   Verbose logging
@@ -33,11 +33,11 @@ import (
 	"strings"
 	"time"
 
-	"github.com/philspins/open-democracy/internal/db"
-	"github.com/philspins/open-democracy/internal/scheduler"
-	"github.com/philspins/open-democracy/internal/scraper"
-	"github.com/philspins/open-democracy/internal/summarizer"
-	"github.com/philspins/open-democracy/internal/utils"
+	"github.com/philspins/opendocket/internal/db"
+	"github.com/philspins/opendocket/internal/scheduler"
+	"github.com/philspins/opendocket/internal/scraper"
+	"github.com/philspins/opendocket/internal/summarizer"
+	"github.com/philspins/opendocket/internal/utils"
 )
 
 func main() {

@@ -2,7 +2,7 @@ package templates
 
 import (
 	"fmt"
-	"github.com/philspins/open-democracy/internal/store"
+	"github.com/philspins/opendocket/internal/store"
 )
 
 templ BillDetail(ps store.ParliamentStatus, bill store.BillRow, stages []store.BillStageRow, divs []store.DivisionRow, reactions store.BillReactionCounts, isAuthenticated bool) {
@@ -17,7 +17,7 @@ templ BillDetail(ps store.ParliamentStatus, bill store.BillRow, stages []store.B
 					<span class="font-mono font-bold text-2xl text-blue-700">{ bill.Number }</span>
 					@BillLevelBadge(bill)
 					if bill.Category != "" {
-						@CategoryBadge(bill.Category, "text-sm px-2 py-0.5")
+						@CategoryBadge(bill.Category, "text-xs px-2 py-0.5")
 					}
 				</div>
 				<h1 class="text-xl font-semibold text-gray-900 dark:text-gray-100 mt-2">{ bill.Title }</h1>
