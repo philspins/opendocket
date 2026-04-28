@@ -10,7 +10,7 @@ import (
 	"time"
 
 	"github.com/PuerkitoBio/goquery"
-	"github.com/philspins/open-democracy/internal/db"
+	"github.com/philspins/opendocket/internal/db"
 )
 
 func mustDocFromHTML(t *testing.T, html string) *goquery.Document {

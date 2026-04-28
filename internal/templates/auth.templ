@@ -5,7 +5,7 @@ import (
 	"regexp"
 	"strings"
 
-	"github.com/philspins/open-democracy/internal/store"
+	"github.com/philspins/opendocket/internal/store"
 )
 
 templ AuthPage(ps store.ParliamentStatus, mode string, googleClientID string, facebookAppID string, recaptchaSiteKey string) {
@@ -16,7 +16,7 @@ templ AuthPage(ps store.ParliamentStatus, mode string, googleClientID string, fa
 					<div class="space-y-2">
 						<p class="kicker">Account Access</p>
 						<h1 class="page-title">{ modeHeading(mode) }</h1>
-						<p class="section-lead">Use your Google or Facebook account to { modeVerb(mode) } Open Democracy.</p>
+						<p class="section-lead">Use your Google or Facebook account to { modeVerb(mode) } Open Docket.</p>
 					</div>
 
 					<div id="oauth-options" class="grid gap-4 md:grid-cols-2">
@@ -26,7 +26,7 @@ templ AuthPage(ps store.ParliamentStatus, mode string, googleClientID string, fa
 								<div id="google-signin-widget" class="min-h-[44px]" data-google-client-id={ googleClientID } data-google-text={ googleWidgetText(mode) }></div>
 								<p class="text-xs text-gray-500">If the widget does not load, use the fallback button below.</p>
 							} else {
-								<p class="text-sm text-amber-700 bg-amber-50 border border-amber-200 rounded px-3 py-2">Google login is not configured.</p>
+								<p class="text-sm text-amber-700 bg-amber-50 border border-amber-200 px-3 py-2">Google login is not configured.</p>
 							}
 							<a href="/auth/google/login" class="btn btn-secondary w-full justify-center">Continue with Google</a>
 						</div>
@@ -38,7 +38,7 @@ templ AuthPage(ps store.ParliamentStatus, mode string, googleClientID string, fa
 								<fb:login-button scope="public_profile,email" onlogin="odFacebookWidgetLogin();" size="large"></fb:login-button>
 								<p class="text-xs text-gray-500">If the widget does not load, use the fallback button below.</p>
 							} else {
-								<p class="text-sm text-amber-700 bg-amber-50 border border-amber-200 rounded px-3 py-2">Facebook login is not configured.</p>
+								<p class="text-sm text-amber-700 bg-amber-50 border border-amber-200 px-3 py-2">Facebook login is not configured.</p>
 							}
 							<a href="/auth/facebook/login" class="btn btn-secondary w-full justify-center">Continue with Facebook</a>
 						</div>

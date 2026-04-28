@@ -8,8 +8,8 @@ import (
 	"net/http"
 	"time"
 
-	"github.com/philspins/open-democracy/internal/scraper"
-	"github.com/philspins/open-democracy/internal/utils"
+	"github.com/philspins/opendocket/internal/scraper"
+	"github.com/philspins/opendocket/internal/utils"
 )
 
 var lopRequestDelay = 500 * time.Millisecond

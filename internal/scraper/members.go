@@ -13,8 +13,8 @@ import (
 	"strings"
 
 	"github.com/PuerkitoBio/goquery"
-	"github.com/philspins/open-democracy/internal/scraper/provincial"
-	"github.com/philspins/open-democracy/internal/utils"
+	"github.com/philspins/opendocket/internal/scraper/provincial"
+	"github.com/philspins/opendocket/internal/utils"
 )
 
 // ── constants ─────────────────────────────────────────────────────────────────

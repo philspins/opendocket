@@ -9,9 +9,9 @@ import (
 	"strings"
 	"testing"
 
-	odb "github.com/philspins/open-democracy/internal/db"
-	"github.com/philspins/open-democracy/internal/opennorth"
-	"github.com/philspins/open-democracy/internal/store"
+	odb "github.com/philspins/opendocket/internal/db"
+	"github.com/philspins/opendocket/internal/opennorth"
+	"github.com/philspins/opendocket/internal/store"
 )
 
 func newTestRidingService(t *testing.T, apiKey string) (*Service, *store.Store, *sql.DB) {

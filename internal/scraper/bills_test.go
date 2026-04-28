@@ -5,7 +5,7 @@ import (
 	"net/http/httptest"
 	"testing"
 
-	"github.com/philspins/open-democracy/internal/scraper"
+	"github.com/philspins/opendocket/internal/scraper"
 )
 
 // ── helpers ───────────────────────────────────────────────────────────────────

@@ -8,7 +8,7 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/philspins/open-democracy/internal/db"
+	"github.com/philspins/opendocket/internal/db"
 )
 
 func TestSplitCalendarDayToken(t *testing.T) {

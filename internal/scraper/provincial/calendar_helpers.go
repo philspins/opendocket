@@ -48,7 +48,7 @@ func FetchCalendarPDFBytes(client *http.Client, pdfURL string) ([]byte, error) {
 	if err != nil {
 		return nil, err
 	}
-	req.Header.Set("User-Agent", "Mozilla/5.0 (compatible; OpenDemocracyCrawler/1.0; +https://github.com/philspins/open-democracy)")
+	req.Header.Set("User-Agent", "Mozilla/5.0 (compatible; OpenDemocracyCrawler/1.0; +https://github.com/philspins/opendocket)")
 	req.Header.Set("Accept", "application/pdf,*/*;q=0.8")
 	resp, err := client.Do(req)
 	if err != nil {

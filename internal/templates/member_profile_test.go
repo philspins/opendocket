@@ -6,7 +6,7 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/philspins/open-democracy/internal/store"
+	"github.com/philspins/opendocket/internal/store"
 )
 
 func TestMemberProfile_ReordersEngageAndAddsVotePagination(t *testing.T) {

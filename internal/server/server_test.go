@@ -15,9 +15,9 @@ import (
 	"testing"
 	"time"
 
-	"github.com/philspins/open-democracy/internal/db"
-	"github.com/philspins/open-democracy/internal/opennorth"
-	"github.com/philspins/open-democracy/internal/store"
+	"github.com/philspins/opendocket/internal/db"
+	"github.com/philspins/opendocket/internal/opennorth"
+	"github.com/philspins/opendocket/internal/store"
 )
 
 const (
@@ -367,7 +367,7 @@ func TestDeleteDataCallback_ValidSignedRequest(t *testing.T) {
 	srv, _ := newTestServer(t)
 	t.Setenv("FACEBOOK_CLIENT_ID", "123456789")
 	t.Setenv("FACEBOOK_CLIENT_SECRET", "test-app-secret")
-	t.Setenv("OAUTH_BASE_URL", "https://open-democracy.ca")
+	t.Setenv("OAUTH_BASE_URL", "https://opendocket.ca")
 
 	signed := buildSignedRequest(t, "test-app-secret", map[string]any{
 		"algorithm": "HMAC-SHA256",
@@ -393,7 +393,7 @@ func TestDeleteDataCallback_ValidSignedRequest(t *testing.T) {
 	if resp["confirmation_code"] == "" {
 		t.Fatalf("expected confirmation_code in response")
 	}
-	if !strings.HasPrefix(resp["url"], "https://open-democracy.ca/delete-data?confirmation_code=") {
+	if !strings.HasPrefix(resp["url"], "https://opendocket.ca/delete-data?confirmation_code=") {
 		t.Fatalf("unexpected status url: %s", resp["url"])
 	}
 }
@@ -982,12 +982,12 @@ func TestHandleHealth_Returns200OK(t *testing.T) {
 
 func TestHTTPSRedirect_WhenTrustProxyAndHTTPSBaseURL(t *testing.T) {
 	_, st := newTestServer(t)
-	t.Setenv("OAUTH_BASE_URL", "https://open-democracy.ca")
+	t.Setenv("OAUTH_BASE_URL", "https://opendocket.ca")
 	t.Setenv("TRUST_PROXY", "true")
 	srv := New(st)
 
 	req := httptest.NewRequest(http.MethodGet, "/bills", nil)
-	req.Host = "open-democracy.ca"
+	req.Host = "opendocket.ca"
 	req.Header.Set("X-Forwarded-Proto", "http")
 	rr := httptest.NewRecorder()
 
@@ -997,8 +997,8 @@ func TestHTTPSRedirect_WhenTrustProxyAndHTTPSBaseURL(t *testing.T) {
 		t.Fatalf("status=%d want %d (redirect to HTTPS)", rr.Code, http.StatusMovedPermanently)
 	}
 	loc := rr.Header().Get("Location")
-	if !strings.HasPrefix(loc, "https://open-democracy.ca/") {
-		t.Fatalf("redirect location %q should start with https://open-democracy.ca/ (configured host, not spoofable)", loc)
+	if !strings.HasPrefix(loc, "https://opendocket.ca/") {
+		t.Fatalf("redirect location %q should start with https://opendocket.ca/ (configured host, not spoofable)", loc)
 	}
 }
 
@@ -1006,7 +1006,7 @@ func TestHTTPSRedirect_UsesConfiguredHostNotRequestHost(t *testing.T) {
 	// Ensure Host header injection is prevented: redirect must use the host
 	// from OAUTH_BASE_URL, not the potentially attacker-controlled r.Host.
 	_, st := newTestServer(t)
-	t.Setenv("OAUTH_BASE_URL", "https://open-democracy.ca")
+	t.Setenv("OAUTH_BASE_URL", "https://opendocket.ca")
 	t.Setenv("TRUST_PROXY", "true")
 	srv := New(st)
 
@@ -1024,19 +1024,19 @@ func TestHTTPSRedirect_UsesConfiguredHostNotRequestHost(t *testing.T) {
 	if strings.Contains(loc, "evil.com") {
 		t.Fatalf("redirect location %q must not contain attacker Host header value", loc)
 	}
-	if !strings.HasPrefix(loc, "https://open-democracy.ca/") {
-		t.Fatalf("redirect location %q should use configured host open-democracy.ca", loc)
+	if !strings.HasPrefix(loc, "https://opendocket.ca/") {
+		t.Fatalf("redirect location %q should use configured host opendocket.ca", loc)
 	}
 }
 
 func TestHTTPSRedirect_SkipsHealthEndpoint(t *testing.T) {
 	_, st := newTestServer(t)
-	t.Setenv("OAUTH_BASE_URL", "https://open-democracy.ca")
+	t.Setenv("OAUTH_BASE_URL", "https://opendocket.ca")
 	t.Setenv("TRUST_PROXY", "true")
 	srv := New(st)
 
 	req := httptest.NewRequest(http.MethodGet, "/health", nil)
-	req.Host = "open-democracy.ca"
+	req.Host = "opendocket.ca"
 	req.Header.Set("X-Forwarded-Proto", "http")
 	rr := httptest.NewRecorder()
 
@@ -1052,12 +1052,12 @@ func TestHTTPSRedirect_SkipsHealthEndpoint(t *testing.T) {
 
 func TestHTTPSRedirect_SkipsHealthEndpointWithTrailingSlash(t *testing.T) {
 	_, st := newTestServer(t)
-	t.Setenv("OAUTH_BASE_URL", "https://open-democracy.ca")
+	t.Setenv("OAUTH_BASE_URL", "https://opendocket.ca")
 	t.Setenv("TRUST_PROXY", "true")
 	srv := New(st)
 
 	req := httptest.NewRequest(http.MethodGet, "/health/", nil)
-	req.Host = "open-democracy.ca"
+	req.Host = "opendocket.ca"
 	req.Header.Set("X-Forwarded-Proto", "http")
 	rr := httptest.NewRecorder()
 
@@ -1070,7 +1070,7 @@ func TestHTTPSRedirect_SkipsHealthEndpointWithTrailingSlash(t *testing.T) {
 
 func TestHTTPSRedirect_NotAppliedWithoutTrustProxy(t *testing.T) {
 	_, st := newTestServer(t)
-	t.Setenv("OAUTH_BASE_URL", "https://open-democracy.ca")
+	t.Setenv("OAUTH_BASE_URL", "https://opendocket.ca")
 	t.Setenv("TRUST_PROXY", "false")
 	srv := New(st)
 
@@ -1087,7 +1087,7 @@ func TestHTTPSRedirect_NotAppliedWithoutTrustProxy(t *testing.T) {
 
 func TestHTTPSRedirect_NotAppliedWhenAlreadyHTTPS(t *testing.T) {
 	_, st := newTestServer(t)
-	t.Setenv("OAUTH_BASE_URL", "https://open-democracy.ca")
+	t.Setenv("OAUTH_BASE_URL", "https://opendocket.ca")
 	t.Setenv("TRUST_PROXY", "true")
 	srv := New(st)
 
@@ -1104,7 +1104,7 @@ func TestHTTPSRedirect_NotAppliedWhenAlreadyHTTPS(t *testing.T) {
 
 func TestHSTSHeader_SetWhenForwardedProtoHTTPS(t *testing.T) {
 	_, st := newTestServer(t)
-	t.Setenv("OAUTH_BASE_URL", "https://open-democracy.ca")
+	t.Setenv("OAUTH_BASE_URL", "https://opendocket.ca")
 	t.Setenv("TRUST_PROXY", "true")
 	srv := New(st)
 

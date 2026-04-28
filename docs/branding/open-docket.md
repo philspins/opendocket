@@ -34,7 +34,7 @@ The platform is built entirely on open government data. No proprietary sources. 
 
 It is the successor project to a civic tech effort previously developed under the working name *Open Democracy* (`open-democracy.ca`).
 
-**GitHub:** `github.com/philspins/open-democracy`  
+**GitHub:** `github.com/philspins/opendocket`  
 **Tech stack:** Go · Templ · Alpine.js · Tailwind · SQLite → Postgres · Claude API
 
 ---
@@ -209,9 +209,9 @@ Concretely this means:
 
 | Role | Typeface | Rationale |
 |------|----------|-----------|
-| **Display / Headlines** | *Playfair Display* or *Libre Baskerville* | Editorial serif. Feels like a newspaper of record or a court document. Carries institutional weight without feeling governmental or bureaucratic. |
-| **Body / UI** | *Source Sans 3* or *DM Sans* | Humanist sans. Highly readable at small sizes. Pairs cleanly with the serif display face without competing with it. |
-| **Data / tables / monospace** | *JetBrains Mono* or *IBM Plex Mono* | Monospace signals precision in the data layer. Used for vote tallies, bill IDs, division numbers, member IDs, donation amounts, and docket numbers. |
+| **Display / Headlines** | *Libre Baskerville* | Editorial serif. Feels like a newspaper of record or a court document. Carries institutional weight without feeling governmental or bureaucratic. |
+| **Body / UI** | *DM Sans* | Humanist sans. Highly readable at small sizes. Pairs cleanly with the serif display face without competing with it. |
+| **Data / tables / monospace** | *Inconsolata* | Monospace signals precision in the data layer. Used for vote tallies, bill IDs, division numbers, member IDs, donation amounts, and docket numbers. |
 
 ### Type principles
 

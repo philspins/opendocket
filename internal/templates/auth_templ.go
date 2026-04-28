@@ -13,7 +13,7 @@ import (
 	"regexp"
 	"strings"
 
-	"github.com/philspins/open-democracy/internal/store"
+	"github.com/philspins/opendocket/internal/store"
 )
 
 func AuthPage(ps store.ParliamentStatus, mode string, googleClientID string, facebookAppID string, recaptchaSiteKey string) templ.Component {
@@ -97,7 +97,7 @@ func AuthPage(ps store.ParliamentStatus, mode string, googleClientID string, fac
 			if templ_7745c5c3_Err != nil {
 				return templ_7745c5c3_Err
 			}
-			templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 5, " Open Democracy.</p></div><div id=\"oauth-options\" class=\"grid gap-4 md:grid-cols-2\"><div class=\"surface-card p-4 space-y-3\"><h2 class=\"text-lg font-semibold\">Google</h2>")
+			templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 5, " Open Docket.</p></div><div id=\"oauth-options\" class=\"grid gap-4 md:grid-cols-2\"><div class=\"surface-card p-4 space-y-3\"><h2 class=\"text-lg font-semibold\">Google</h2>")
 			if templ_7745c5c3_Err != nil {
 				return templ_7745c5c3_Err
 			}
@@ -133,7 +133,7 @@ func AuthPage(ps store.ParliamentStatus, mode string, googleClientID string, fac
 					return templ_7745c5c3_Err
 				}
 			} else {
-				templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 9, "<p class=\"text-sm text-amber-700 bg-amber-50 border border-amber-200 rounded px-3 py-2\">Google login is not configured.</p>")
+				templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 9, "<p class=\"text-sm text-amber-700 bg-amber-50 border border-amber-200 px-3 py-2\">Google login is not configured.</p>")
 				if templ_7745c5c3_Err != nil {
 					return templ_7745c5c3_Err
 				}
@@ -148,7 +148,7 @@ func AuthPage(ps store.ParliamentStatus, mode string, googleClientID string, fac
 					return templ_7745c5c3_Err
 				}
 			} else {
-				templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 12, "<p class=\"text-sm text-amber-700 bg-amber-50 border border-amber-200 rounded px-3 py-2\">Facebook login is not configured.</p>")
+				templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 12, "<p class=\"text-sm text-amber-700 bg-amber-50 border border-amber-200 px-3 py-2\">Facebook login is not configured.</p>")
 				if templ_7745c5c3_Err != nil {
 					return templ_7745c5c3_Err
 				}
