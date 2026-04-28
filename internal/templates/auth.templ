@@ -95,10 +95,6 @@ templ AuthPage(ps store.ParliamentStatus, mode string, googleClientID string, fa
 						window.odSignupRecaptchaFailed();
 						return;
 					}
-					if (!window.grecaptcha || !window.grecaptcha.ready) {
-						window.odSignupRecaptchaFailed();
-						return;
-					}
 					window.grecaptcha.ready(function() {
 						window.grecaptcha.execute(siteKey, { action: "signup" }).then(function(token) {
 							if (!token) {
@@ -125,14 +121,12 @@ templ AuthPage(ps store.ParliamentStatus, mode string, googleClientID string, fa
 						});
 					});
 				};
-				window.addEventListener("load", window.odSignupRecaptchaRun);
 			</script>
 		}
 
 		if googleClientID != "" {
-			<script src="https://accounts.google.com/gsi/client" async defer></script>
 			<script>
-				(() => {
+				window.odGoogleSignInInit = function() {
 					const el = document.getElementById("google-signin-widget");
 					if (!el || !window.google || !window.google.accounts || !window.google.accounts.id) {
 						return;
@@ -154,12 +148,12 @@ templ AuthPage(ps store.ParliamentStatus, mode string, googleClientID string, fa
 						text: el.dataset.googleText || "signin_with",
 						width: 280,
 					});
-				})();
+				};
 			</script>
+			<script src="https://accounts.google.com/gsi/client?onload=odGoogleSignInInit" async defer></script>
 		}
 
 		if facebookAppID != "" {
-			<script async defer crossorigin="anonymous" src="https://connect.facebook.net/en_US/sdk.js"></script>
 			<script id="facebook-widget-config" data-facebook-app-id={ facebookAppID }>
 				window.fbAsyncInit = function() {
 					const cfg = document.getElementById("facebook-widget-config");
@@ -185,6 +179,7 @@ templ AuthPage(ps store.ParliamentStatus, mode string, googleClientID string, fa
 					});
 				};
 			</script>
+			<script async defer crossorigin="anonymous" src="https://connect.facebook.net/en_US/sdk.js"></script>
 		}
 	}
 }
@@ -230,12 +225,13 @@ func signupRecaptchaEnabled(mode string, recaptchaSiteKey string) bool {
 
 func recaptchaScriptSrc(recaptchaSiteKey string) string {
 	key := strings.TrimSpace(recaptchaSiteKey)
-	if isSafeRecaptchaSiteKey(key) {
-		query := url.Values{}
-		query.Set("render", key)
-		return "https://www.google.com/recaptcha/api.js?" + query.Encode()
+	if !isSafeRecaptchaSiteKey(key) {
+		return "https://www.google.com/recaptcha/api.js"
 	}
-	return "https://www.google.com/recaptcha/api.js"
+	query := url.Values{}
+	query.Set("render", key)
+	query.Set("onload", "odSignupRecaptchaRun")
+	return "https://www.google.com/recaptcha/api.js?" + query.Encode()
 }
 
 // reCAPTCHA site keys contain only URL-safe letters, digits, '_' and '-'.
