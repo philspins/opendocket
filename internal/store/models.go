@@ -93,14 +93,17 @@ type ParliamentStatus struct {
 }
 
 type BillFilter struct {
-	Search   string
-	Stage    string
-	Category string
-	Chamber  string
-	Level    string // "" | "federal" | "provincial"
-	Province string
-	Page     int
-	PerPage  int
+	Search              string
+	Stage               string
+	Category            string
+	Chamber             string
+	Level               string // "" | "federal" | "provincial"
+	Province            string
+	Sort                string   // "" | "date_asc" | "stage" | "category" | "auto"
+	PreferredCategories []string // used when Sort="auto"
+	SubscribedBillIDs   []string // used when Sort="auto" to pin subscribed bills first
+	Page                int
+	PerPage             int
 }
 
 type BillStageRow struct {

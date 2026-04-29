@@ -80,6 +80,41 @@ func (s *Store) ListBills(f BillFilter) ([]BillRow, int, error) {
 	}
 	offset := (f.Page - 1) * f.PerPage
 
+	// Build ORDER BY clause based on Sort option.
+	var orderClause string
+	switch f.Sort {
+	case "date_asc":
+		orderClause = "b.last_activity_date ASC, b.id ASC"
+	case "stage":
+		orderClause = "b.current_stage ASC, b.last_activity_date DESC, b.id DESC"
+	case "category":
+		orderClause = "b.category ASC, b.last_activity_date DESC, b.id DESC"
+	case "auto":
+		// Personalized sort: subscribed bills first, then preferred categories, then by date.
+		// Use CASE WHEN expressions (not bare literals) to avoid SQLite column-index confusion.
+		var orderParts []string
+		if len(f.SubscribedBillIDs) > 0 {
+			placeholders := make([]string, len(f.SubscribedBillIDs))
+			for i := range f.SubscribedBillIDs {
+				placeholders[i] = "?"
+				args = append(args, f.SubscribedBillIDs[i])
+			}
+			orderParts = append(orderParts, "CASE WHEN b.id IN ("+strings.Join(placeholders, ",")+") THEN 0 ELSE 1 END")
+		}
+		if len(f.PreferredCategories) > 0 {
+			placeholders := make([]string, len(f.PreferredCategories))
+			for i := range f.PreferredCategories {
+				placeholders[i] = "?"
+				args = append(args, f.PreferredCategories[i])
+			}
+			orderParts = append(orderParts, "CASE WHEN b.category IN ("+strings.Join(placeholders, ",")+") THEN 0 ELSE 1 END")
+		}
+		orderParts = append(orderParts, "b.last_activity_date DESC", "b.id DESC")
+		orderClause = strings.Join(orderParts, ", ")
+	default:
+		orderClause = "b.last_activity_date DESC, b.id DESC"
+	}
+
 	query := `
 		SELECT b.id, b.parliament, b.session, b.number, b.title,
 		       COALESCE(b.short_title,''), COALESCE(b.bill_type,''), COALESCE(b.chamber,''),
@@ -91,7 +126,7 @@ func (s *Store) ListBills(f BillFilter) ([]BillRow, int, error) {
 		FROM bills b
 		LEFT JOIN members m ON m.id = b.sponsor_id
 		WHERE ` + whereClause + `
-		ORDER BY b.last_activity_date DESC, b.id DESC
+		ORDER BY ` + orderClause + `
 		LIMIT ? OFFSET ?`
 
 	args = append(args, f.PerPage, offset)
@@ -1444,4 +1479,90 @@ func (s *Store) LogPolicySubmission(email, memberID, subject, body, category str
 		VALUES (?, ?, ?, ?, ?)`,
 		u.ID, memberID, strings.TrimSpace(subject), strings.TrimSpace(body), strings.TrimSpace(category))
 	return err
+}
+
+// ── user category preferences ─────────────────────────────────────────────────
+
+// GetUserCategoryPreferences returns the list of categories the user has selected.
+func (s *Store) GetUserCategoryPreferences(userID string) ([]string, error) {
+	rows, err := s.db.Query(`SELECT category FROM user_category_preferences WHERE user_id = ? ORDER BY category`, userID)
+	if err != nil {
+		return nil, fmt.Errorf("GetUserCategoryPreferences: %w", err)
+	}
+	defer rows.Close()
+	var cats []string
+	for rows.Next() {
+		var c string
+		if err := rows.Scan(&c); err != nil {
+			return nil, fmt.Errorf("GetUserCategoryPreferences scan: %w", err)
+		}
+		cats = append(cats, c)
+	}
+	return cats, rows.Err()
+}
+
+// SaveUserCategoryPreferences replaces the user's category preferences atomically.
+func (s *Store) SaveUserCategoryPreferences(userID string, categories []string) error {
+	tx, err := s.db.Begin()
+	if err != nil {
+		return err
+	}
+	defer tx.Rollback()
+
+	if _, err := tx.Exec(`DELETE FROM user_category_preferences WHERE user_id = ?`, userID); err != nil {
+		return fmt.Errorf("SaveUserCategoryPreferences delete: %w", err)
+	}
+	for _, c := range categories {
+		c = strings.TrimSpace(c)
+		if c == "" {
+			continue
+		}
+		if _, err := tx.Exec(`INSERT OR IGNORE INTO user_category_preferences (user_id, category) VALUES (?, ?)`, userID, c); err != nil {
+			return fmt.Errorf("SaveUserCategoryPreferences insert: %w", err)
+		}
+	}
+	return tx.Commit()
+}
+
+// ── user bill subscriptions ───────────────────────────────────────────────────
+
+// ToggleBillSubscription subscribes the user to a bill if not already subscribed,
+// or unsubscribes them if they are. Returns true if the user is now subscribed.
+func (s *Store) ToggleBillSubscription(userID, billID string) (bool, error) {
+	var count int
+	err := s.db.QueryRow(`SELECT COUNT(1) FROM user_bill_subscriptions WHERE user_id = ? AND bill_id = ?`, userID, billID).Scan(&count)
+	if err != nil {
+		return false, fmt.Errorf("ToggleBillSubscription check: %w", err)
+	}
+	if count > 0 {
+		_, err = s.db.Exec(`DELETE FROM user_bill_subscriptions WHERE user_id = ? AND bill_id = ?`, userID, billID)
+		return false, err
+	}
+	_, err = s.db.Exec(`INSERT INTO user_bill_subscriptions (user_id, bill_id) VALUES (?, ?)`, userID, billID)
+	return err == nil, err
+}
+
+// GetUserBillSubscriptions returns the list of bill IDs the user is subscribed to.
+func (s *Store) GetUserBillSubscriptions(userID string) ([]string, error) {
+	rows, err := s.db.Query(`SELECT bill_id FROM user_bill_subscriptions WHERE user_id = ? ORDER BY created_at DESC`, userID)
+	if err != nil {
+		return nil, fmt.Errorf("GetUserBillSubscriptions: %w", err)
+	}
+	defer rows.Close()
+	var ids []string
+	for rows.Next() {
+		var id string
+		if err := rows.Scan(&id); err != nil {
+			return nil, fmt.Errorf("GetUserBillSubscriptions scan: %w", err)
+		}
+		ids = append(ids, id)
+	}
+	return ids, rows.Err()
+}
+
+// IsUserSubscribedToBill returns true if the user is subscribed to the bill.
+func (s *Store) IsUserSubscribedToBill(userID, billID string) (bool, error) {
+	var count int
+	err := s.db.QueryRow(`SELECT COUNT(1) FROM user_bill_subscriptions WHERE user_id = ? AND bill_id = ?`, userID, billID).Scan(&count)
+	return count > 0, err
 }

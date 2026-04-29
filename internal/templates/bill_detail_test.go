@@ -18,6 +18,7 @@ func TestBillDetail_RendersReactionFormsForAuthenticatedUsers(t *testing.T) {
 		nil,
 		store.BillReactionCounts{},
 		true,
+		false,
 	).Render(context.Background(), &buf)
 	if err != nil {
 		t.Fatalf("render bill detail: %v", err)
@@ -40,6 +41,7 @@ func TestBillDetail_RendersLoginPromptForGuests(t *testing.T) {
 		nil,
 		nil,
 		store.BillReactionCounts{},
+		false,
 		false,
 	).Render(context.Background(), &buf)
 	if err != nil {
@@ -64,5 +66,71 @@ func TestBillDetail_RendersLoginPromptForGuests(t *testing.T) {
 	}
 	if !strings.Contains(html, "opacity-40") {
 		t.Fatalf("expected greyed out reaction controls for guests")
+	}
+}
+
+func TestBillDetail_ShowsSubscribedState(t *testing.T) {
+	var buf bytes.Buffer
+	err := BillDetail(
+		store.ParliamentStatus{},
+		store.BillRow{ID: "45-1-c-47", Number: "C-47", Title: "An Act"},
+		nil,
+		nil,
+		store.BillReactionCounts{},
+		true,
+		true,
+	).Render(context.Background(), &buf)
+	if err != nil {
+		t.Fatalf("render bill detail: %v", err)
+	}
+	html := buf.String()
+	if !strings.Contains(html, "Subscribed") {
+		t.Fatalf("expected subscribed button text for subscribed bill")
+	}
+	if !strings.Contains(html, `action="/api/subscribe-bill"`) {
+		t.Fatalf("expected subscribe form for authenticated user")
+	}
+}
+
+func TestBillDetail_ShowsSubscribeButtonForUnsubscribed(t *testing.T) {
+	var buf bytes.Buffer
+	err := BillDetail(
+		store.ParliamentStatus{},
+		store.BillRow{ID: "45-1-c-47", Number: "C-47", Title: "An Act"},
+		nil,
+		nil,
+		store.BillReactionCounts{},
+		true,
+		false,
+	).Render(context.Background(), &buf)
+	if err != nil {
+		t.Fatalf("render bill detail: %v", err)
+	}
+	html := buf.String()
+	if !strings.Contains(html, `action="/api/subscribe-bill"`) {
+		t.Fatalf("expected subscribe form for authenticated user")
+	}
+}
+
+func TestBillDetail_GuestSeesDisabledSubscribeButton(t *testing.T) {
+	var buf bytes.Buffer
+	err := BillDetail(
+		store.ParliamentStatus{},
+		store.BillRow{ID: "45-1-c-47", Number: "C-47", Title: "An Act"},
+		nil,
+		nil,
+		store.BillReactionCounts{},
+		false,
+		false,
+	).Render(context.Background(), &buf)
+	if err != nil {
+		t.Fatalf("render bill detail: %v", err)
+	}
+	html := buf.String()
+	if strings.Contains(html, `action="/api/subscribe-bill"`) {
+		t.Fatalf("did not expect subscribe form for guest")
+	}
+	if !strings.Contains(html, "Login to subscribe") {
+		t.Fatalf("expected login prompt for subscribe button for guest")
 	}
 }

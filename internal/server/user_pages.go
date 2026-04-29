@@ -270,6 +270,7 @@ func (s *Server) renderProfile(w http.ResponseWriter, r *http.Request, user stor
 		result = fallbackLookupResult(user, s.store)
 	}
 
+	cats, _ := s.store.GetUserCategoryPreferences(user.ID)
 	federalRidings, _ := s.store.ListDistinctRidingsByLevel("federal")
 	provincialRidings, _ := s.store.ListDistinctRidingsByLevel("provincial")
 
@@ -283,6 +284,7 @@ func (s *Server) renderProfile(w http.ResponseWriter, r *http.Request, user stor
 		lookupErr,
 		updated,
 		s.riding.PlacesAPIKey(),
+		cats,
 		federalRidings,
 		provincialRidings,
 	).Render(r.Context(), w)

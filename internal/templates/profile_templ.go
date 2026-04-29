@@ -13,7 +13,7 @@ import (
 	"github.com/philspins/opendocket/internal/store"
 )
 
-func ProfilePage(ps store.ParliamentStatus, user store.UserRow, address string, reps []opennorth.Representative, federalRep opennorth.Representative, provincialRep opennorth.Representative, lookupErr string, updated bool, placesApiKey string, federalRidings []string, provincialRidings []string) templ.Component {
+func ProfilePage(ps store.ParliamentStatus, user store.UserRow, address string, reps []opennorth.Representative, federalRep opennorth.Representative, provincialRep opennorth.Representative, lookupErr string, updated bool, placesApiKey string, preferredCategories []string, federalRidings []string, provincialRidings []string) templ.Component {
 	return templruntime.GeneratedTemplate(func(templ_7745c5c3_Input templruntime.GeneratedComponentInput) (templ_7745c5c3_Err error) {
 		templ_7745c5c3_W, ctx := templ_7745c5c3_Input.Writer, templ_7745c5c3_Input.Context
 		if templ_7745c5c3_CtxErr := ctx.Err(); templ_7745c5c3_CtxErr != nil {
@@ -239,7 +239,53 @@ func ProfilePage(ps store.ParliamentStatus, user store.UserRow, address string, 
 					return templ_7745c5c3_Err
 				}
 			}
-			templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 27, "</div>")
+			templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 27, "<!-- Interests section --><section class=\"surface-card p-6 space-y-4\"><div class=\"title-row\"><div><h2 class=\"text-xl font-semibold\">Interests</h2><p class=\"text-sm text-gray-500 mt-1\">Select the policy areas you care about. These are used to personalise your bill feed when you choose \"Auto\" sorting.</p></div></div><form method=\"POST\" action=\"/profile/interests\"><div class=\"grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 gap-3\">")
+			if templ_7745c5c3_Err != nil {
+				return templ_7745c5c3_Err
+			}
+			for _, cat := range Categories {
+				templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 28, "<label class=\"flex items-center gap-2 cursor-pointer select-none\"><input type=\"checkbox\" name=\"categories\" value=\"")
+				if templ_7745c5c3_Err != nil {
+					return templ_7745c5c3_Err
+				}
+				var templ_7745c5c3_Var10 string
+				templ_7745c5c3_Var10, templ_7745c5c3_Err = templ.JoinStringErrs(cat)
+				if templ_7745c5c3_Err != nil {
+					return templ.Error{Err: templ_7745c5c3_Err, FileName: `internal/templates/profile.templ`, Line: 101, Col: 20}
+				}
+				_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var10))
+				if templ_7745c5c3_Err != nil {
+					return templ_7745c5c3_Err
+				}
+				templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 29, "\"")
+				if templ_7745c5c3_Err != nil {
+					return templ_7745c5c3_Err
+				}
+				if profileCategorySelected(cat, preferredCategories) {
+					templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 30, " checked")
+					if templ_7745c5c3_Err != nil {
+						return templ_7745c5c3_Err
+					}
+				}
+				templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 31, " class=\"h-4 w-4 rounded border-gray-300 text-blue-600 focus:ring-blue-500\"> <span class=\"text-sm text-gray-700 dark:text-gray-300\">")
+				if templ_7745c5c3_Err != nil {
+					return templ_7745c5c3_Err
+				}
+				var templ_7745c5c3_Var11 string
+				templ_7745c5c3_Var11, templ_7745c5c3_Err = templ.JoinStringErrs(cat)
+				if templ_7745c5c3_Err != nil {
+					return templ.Error{Err: templ_7745c5c3_Err, FileName: `internal/templates/profile.templ`, Line: 105, Col: 68}
+				}
+				_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var11))
+				if templ_7745c5c3_Err != nil {
+					return templ_7745c5c3_Err
+				}
+				templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 32, "</span></label>")
+				if templ_7745c5c3_Err != nil {
+					return templ_7745c5c3_Err
+				}
+			}
+			templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 33, "</div><div class=\"mt-4 flex items-center gap-3\"><button type=\"submit\" class=\"btn btn-primary\">Save Interests</button></div></form></section></div>")
 			if templ_7745c5c3_Err != nil {
 				return templ_7745c5c3_Err
 			}
@@ -251,6 +297,15 @@ func ProfilePage(ps store.ParliamentStatus, user store.UserRow, address string, 
 		}
 		return nil
 	})
+}
+
+func profileCategorySelected(cat string, preferred []string) bool {
+	for _, p := range preferred {
+		if p == cat {
+			return true
+		}
+	}
+	return false
 }
 
 func profileRepresentativeCards(reps []opennorth.Representative, federalRep opennorth.Representative, provincialRep opennorth.Representative) []opennorth.Representative {
