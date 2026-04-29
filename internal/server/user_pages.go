@@ -207,33 +207,48 @@ func (s *Server) handleProfile(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 		address := strings.TrimSpace(r.FormValue("address"))
-		if address == "" {
-			if _, err := s.store.UpdateUserLocation(user.ID, "", ""); err != nil {
-				http.Error(w, "failed to clear address", http.StatusInternalServerError)
+		federalRiding := strings.TrimSpace(r.FormValue("federal_riding"))
+		provincialRiding := strings.TrimSpace(r.FormValue("provincial_riding"))
+
+		if address != "" {
+			// Address-based lookup path (existing behaviour).
+			result, err := s.riding.Lookup(r.Context(), address)
+			if err != nil {
+				lookupErr := "Could not locate that address. Please try a more specific Canadian address."
+				if strings.Contains(err.Error(), "missing GOOGLE_MAPS_API_KEY") {
+					lookupErr = "Address lookup is not configured (missing GOOGLE_MAPS_API_KEY)."
+				} else if strings.HasPrefix(err.Error(), "representatives:") {
+					lookupErr = "Could not look up representatives. Please try again."
+				}
+				s.renderProfile(w, r, user, address, lookupErr, false)
 				return
 			}
-			s.setLocalRidingCookies(w, "", "")
+			if _, err := s.store.UpdateUserLocation(user.ID, result.FederalRidingID, result.ProvincialRidingID); err != nil {
+				http.Error(w, "failed to save profile", http.StatusInternalServerError)
+				return
+			}
+			s.setLocalRidingCookies(w, result.FederalRidingID, result.ProvincialRidingID)
 			http.Redirect(w, r, "/profile?updated=1", http.StatusSeeOther)
 			return
 		}
 
-		result, err := s.riding.Lookup(r.Context(), address)
-		if err != nil {
-			lookupErr := "Could not locate that address. Please try a more specific Canadian address."
-			if strings.Contains(err.Error(), "missing GOOGLE_MAPS_API_KEY") {
-				lookupErr = "Address lookup is not configured (missing GOOGLE_MAPS_API_KEY)."
-			} else if strings.HasPrefix(err.Error(), "representatives:") {
-				lookupErr = "Could not look up representatives. Please try again."
+		if federalRiding != "" || provincialRiding != "" {
+			// Manual riding selection path.
+			if _, err := s.store.UpdateUserLocation(user.ID, federalRiding, provincialRiding); err != nil {
+				http.Error(w, "failed to save profile", http.StatusInternalServerError)
+				return
 			}
-			s.renderProfile(w, r, user, address, lookupErr, false)
+			s.setLocalRidingCookies(w, federalRiding, provincialRiding)
+			http.Redirect(w, r, "/profile?updated=1", http.StatusSeeOther)
 			return
 		}
 
-		if _, err := s.store.UpdateUserLocation(user.ID, result.FederalRidingID, result.ProvincialRidingID); err != nil {
-			http.Error(w, "failed to save profile", http.StatusInternalServerError)
+		// Empty submission — clear saved location.
+		if _, err := s.store.UpdateUserLocation(user.ID, "", ""); err != nil {
+			http.Error(w, "failed to clear address", http.StatusInternalServerError)
 			return
 		}
-		s.setLocalRidingCookies(w, result.FederalRidingID, result.ProvincialRidingID)
+		s.setLocalRidingCookies(w, "", "")
 		http.Redirect(w, r, "/profile?updated=1", http.StatusSeeOther)
 	default:
 		w.WriteHeader(http.StatusMethodNotAllowed)
@@ -256,6 +271,8 @@ func (s *Server) renderProfile(w http.ResponseWriter, r *http.Request, user stor
 	}
 
 	cats, _ := s.store.GetUserCategoryPreferences(user.ID)
+	federalRidings, _ := s.store.ListDistinctRidingsByLevel("federal")
+	provincialRidings, _ := s.store.ListDistinctRidingsByLevel("provincial")
 
 	_ = templates.ProfilePage(
 		s.parliamentStatus(),
@@ -268,5 +285,7 @@ func (s *Server) renderProfile(w http.ResponseWriter, r *http.Request, user stor
 		updated,
 		s.riding.PlacesAPIKey(),
 		cats,
+		federalRidings,
+		provincialRidings,
 	).Render(r.Context(), w)
 }
