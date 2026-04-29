@@ -397,7 +397,7 @@ func MemberProfile(ps store.ParliamentStatus, member store.MemberRow, votes []st
 			if templ_7745c5c3_Err != nil {
 				return templ_7745c5c3_Err
 			}
-			templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 36, "\" class=\"text-sm text-blue-600 hover:underline\">Compare with another MP →</a></div><!-- Vote history --><section id=\"member-votes-section\"><h2 class=\"text-lg font-semibold text-gray-800 mb-3\">Recent Votes</h2><div class=\"table-shell\"><table class=\"vote-table min-w-full text-sm\"><thead><tr><th class=\"px-4 py-2.5\">Date</th><th class=\"px-4 py-2.5\">Vote</th><th class=\"px-4 py-2.5\">Bill</th><th class=\"px-4 py-2.5\">Description</th><th class=\"px-4 py-2.5\">Result</th><th class=\"px-4 py-2.5\">Alignment</th></tr></thead> <tbody>")
+			templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 36, "\" class=\"text-sm text-blue-600 hover:underline\">Compare with another MP →</a></div><!-- Vote history --><section id=\"member-votes-section\"><h2 class=\"text-lg font-semibold text-gray-800 mb-3\">Recent Votes</h2><div class=\"table-shell\"><table class=\"vote-table min-w-full text-sm\"><thead><tr><th class=\"px-4 py-2.5 col-date\">Date</th><th class=\"px-4 py-2.5\">Vote</th><th class=\"px-4 py-2.5\">Bill</th><th class=\"px-4 py-2.5\">Description</th><th class=\"px-4 py-2.5\">Result</th><th class=\"px-4 py-2.5 col-alignment\">Alignment</th></tr></thead> <tbody>")
 			if templ_7745c5c3_Err != nil {
 				return templ_7745c5c3_Err
 			}
@@ -530,7 +530,7 @@ func MemberProfile(ps store.ParliamentStatus, member store.MemberRow, votes []st
 				if templ_7745c5c3_Err != nil {
 					return templ_7745c5c3_Err
 				}
-				templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 48, "</td><td class=\"px-4 py-2.5 col-meta\">")
+				templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 48, "</td><td class=\"px-4 py-2.5 col-alignment\">")
 				if templ_7745c5c3_Err != nil {
 					return templ_7745c5c3_Err
 				}

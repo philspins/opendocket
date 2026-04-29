@@ -60,6 +60,41 @@ func TestMemberProfile_ReordersEngageAndAddsVotePagination(t *testing.T) {
 	}
 }
 
+func TestMemberProfile_VotesTableHasMobileResponsiveClasses(t *testing.T) {
+	member := store.MemberRow{
+		ID:              "member-1",
+		Name:            "Jane Doe",
+		Party:           "Example Party",
+		GovernmentLevel: "federal",
+	}
+	votes := []store.VoteRow{{
+		DivisionID:     "div",
+		Date:           "2026-01-01",
+		Description:    "Vote",
+		Vote:           "Yea",
+		Result:         "Passed",
+		VotedWithParty: true,
+	}}
+
+	var buf bytes.Buffer
+	if err := MemberProfile(store.ParliamentStatus{}, member, votes, store.MemberStats{}, nil).Render(context.Background(), &buf); err != nil {
+		t.Fatalf("render member profile: %v", err)
+	}
+	html := buf.String()
+
+	// Date header and cells need col-date for mobile hiding via CSS
+	if !strings.Contains(html, "col-date\">Date") {
+		t.Fatalf("expected Date header to have col-date class for mobile CSS targeting")
+	}
+	// Alignment header and cells need col-alignment for mobile hiding via CSS
+	if !strings.Contains(html, "col-alignment\">Alignment") {
+		t.Fatalf("expected Alignment header to have col-alignment class for mobile CSS targeting")
+	}
+	if !strings.Contains(html, "col-alignment\">") {
+		t.Fatalf("expected Alignment data cell to have col-alignment class for mobile CSS targeting")
+	}
+}
+
 func TestMemberProfile_UsesConsistentRedStylingForNaysAndRebel(t *testing.T) {
 	member := store.MemberRow{
 		ID:              "member-1",

@@ -97,12 +97,12 @@ templ MemberProfile(ps store.ParliamentStatus, member store.MemberRow, votes []s
 					<table class="vote-table min-w-full text-sm">
 						<thead>
 							<tr>
-								<th class="px-4 py-2.5">Date</th>
+								<th class="px-4 py-2.5 col-date">Date</th>
 								<th class="px-4 py-2.5">Vote</th>
 								<th class="px-4 py-2.5">Bill</th>
 								<th class="px-4 py-2.5">Description</th>
 								<th class="px-4 py-2.5">Result</th>
-								<th class="px-4 py-2.5">Alignment</th>
+								<th class="px-4 py-2.5 col-alignment">Alignment</th>
 							</tr>
 						</thead>
 						<tbody>
@@ -120,7 +120,7 @@ templ MemberProfile(ps store.ParliamentStatus, member store.MemberRow, votes []s
 									</td>
 									<td class="px-4 py-2.5 col-description">{ v.Description }</td>
 									<td class="px-4 py-2.5 col-meta">{ v.Result }</td>
-									<td class="px-4 py-2.5 col-meta">
+									<td class="px-4 py-2.5 col-alignment">
 										if v.VotedWithParty {
 											<span class="vote-yea text-xs">✓ party</span>
 										} else if v.PartyMajority != "" {

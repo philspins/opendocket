@@ -788,6 +788,38 @@ templ Layout(title string, ps store.ParliamentStatus) {
 						gap: 0.7rem;
 					}
 				}
+
+				/* Responsive vote table: hide less-critical columns and tighten padding on small screens */
+				@media (max-width: 640px) {
+					/* Prevent the page itself from overflowing the viewport */
+					body {
+						overflow-x: hidden;
+					}
+
+					/* Hide Date and Alignment columns so the table fits the mobile viewport */
+					.vote-table .col-date,
+					.vote-table .col-alignment {
+						display: none;
+					}
+
+					/* Reduce column minimum widths on mobile */
+					.vote-table td.col-vote {
+						width: 3rem;
+					}
+					.vote-table td.col-bill {
+						width: 4rem;
+					}
+					.vote-table td.col-meta {
+						width: 5.5rem;
+					}
+
+					/* Tighten cell padding to reclaim horizontal space */
+					.vote-table th,
+					.vote-table td {
+						padding-left: 0.5rem;
+						padding-right: 0.5rem;
+					}
+				}
 			</style>
 		</head>
 		<body class="min-h-screen">
