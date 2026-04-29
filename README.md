@@ -1,4 +1,4 @@
-# Division Bell
+# OpenDocket
 
 A Canadian civic transparency platform built almost entirely on existing open government data.
 
@@ -28,8 +28,8 @@ Built with the **GOAT Stack**: Go · Templ · Alpine.js · Tailwind CSS.
 | `ANTHROPIC_API_KEY` | Only for AI summaries | summarizer | Enables Claude API fallback summaries (`summary_ai`) |
 | `ANTHROPIC_MODEL` | No | summarizer | Claude model ID/alias override (default first try: `claude-sonnet-4-6`) |
 | `PARTY_THEME_FILE` | No | frontend templates | Override path for party/province style config (default `config/party-theme.json`) |
-| `OAUTH_BASE_URL` | Recommended for auth/OAuth | server | Public app base URL used to build verification and OAuth callback URLs (e.g. `https://divisionbell.ca`) |
-| `SES_FROM_EMAIL` | Yes for verification email delivery | server | Verified SES sender address used for outgoing verification emails (e.g. `contact@divisionbell.ca`) |
+| `OAUTH_BASE_URL` | Recommended for auth/OAuth | server | Public app base URL used to build verification and OAuth callback URLs (e.g. `https://opendocket.ca`) |
+| `SES_FROM_EMAIL` | Yes for verification email delivery | server | Verified SES sender address used for outgoing verification emails (e.g. `admin@opendocket.ca`) |
 | `TRUST_PROXY` | Yes when behind ALB/reverse proxy | server | Set `true` when running behind a trusted reverse proxy (e.g. AWS ALB). Enables: real client IP from `X-Forwarded-For`/`X-Real-IP` for rate-limiting; HTTP→HTTPS redirect (when `OAUTH_BASE_URL` is `https://`); `Strict-Transport-Security` header on HTTPS responses |
 | `GOOGLE_CLIENT_ID` | Only for Google login | server | Google OAuth client ID |
 | `GOOGLE_CLIENT_SECRET` | Only for Google login | server | Google OAuth client secret |
@@ -55,13 +55,13 @@ Auth/OAuth examples:
 
 ```bash
 # Base URL used in OAuth callbacks and verification links
-OAUTH_BASE_URL=https://divisionbell.ca
+OAUTH_BASE_URL=https://opendocket.ca
 
 # Enable proxy-header trust (required when running behind AWS ALB)
 TRUST_PROXY=true
 
 # SES sender (must be verified in SES)
-SES_FROM_EMAIL=contact@divisionbell.ca
+SES_FROM_EMAIL=contact@opendocket.ca
 
 # Optional explicit AWS credentials (if not using role/profile)
 AWS_REGION=ca-central-1
