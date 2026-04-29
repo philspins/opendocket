@@ -117,14 +117,14 @@ func BillDetail(ps store.ParliamentStatus, bill store.BillRow, stages []store.Bi
 					return templ_7745c5c3_Err
 				}
 			}
-			templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 8, "</div><!-- Meta grid + Progress bar on the same row --><div class=\"grid grid-cols-1 sm:grid-cols-2 gap-4 items-stretch\"><div class=\"panel flex flex-row gap-4\"><div class=\"flex-1 min-w-0\"><p class=\"text-xs text-gray-500 dark:text-gray-400\">Chamber</p><p class=\"font-medium capitalize dark:text-gray-200\">")
+			templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 8, "</div><!-- Meta grid + Progress bar on the same row --><div class=\"grid grid-cols-1 sm:grid-cols-2 gap-4 items-stretch\"><div class=\"panel flex flex-row gap-4\"><div class=\"flex-1 min-w-0\"><p class=\"text-xs text-gray-500 dark:text-gray-400\">Chamber</p><p class=\"font-medium dark:text-gray-200\">")
 			if templ_7745c5c3_Err != nil {
 				return templ_7745c5c3_Err
 			}
 			var templ_7745c5c3_Var6 string
-			templ_7745c5c3_Var6, templ_7745c5c3_Err = templ.JoinStringErrs(bill.Chamber)
+			templ_7745c5c3_Var6, templ_7745c5c3_Err = templ.JoinStringErrs(ChamberLabel(bill.Chamber))
 			if templ_7745c5c3_Err != nil {
-				return templ.Error{Err: templ_7745c5c3_Err, FileName: `internal/templates/bill_detail.templ`, Line: 37, Col: 73}
+				return templ.Error{Err: templ_7745c5c3_Err, FileName: `internal/templates/bill_detail.templ`, Line: 37, Col: 76}
 			}
 			_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var6))
 			if templ_7745c5c3_Err != nil {

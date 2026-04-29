@@ -34,7 +34,7 @@ templ BillDetail(ps store.ParliamentStatus, bill store.BillRow, stages []store.B
 				<div class="panel flex flex-row gap-4">
 					<div class="flex-1 min-w-0">
 						<p class="text-xs text-gray-500 dark:text-gray-400">Chamber</p>
-						<p class="font-medium capitalize dark:text-gray-200">{ bill.Chamber }</p>
+						<p class="font-medium dark:text-gray-200">{ ChamberLabel(bill.Chamber) }</p>
 					</div>
 					<div class="flex-1 min-w-0">
 						<p class="text-xs text-gray-500 dark:text-gray-400">Stage</p>
