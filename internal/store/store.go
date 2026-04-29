@@ -422,6 +422,28 @@ func (s *Store) ListDistinctRidings() ([]string, error) {
 	return s.listDistinctMemberStrings("riding")
 }
 
+// ListDistinctRidingsByLevel returns all distinct non-empty riding values for
+// members at a given government level ("federal" or "provincial").
+func (s *Store) ListDistinctRidingsByLevel(level string) ([]string, error) {
+	rows, err := s.db.Query(`
+		SELECT DISTINCT riding FROM members
+		WHERE government_level = ? AND riding IS NOT NULL AND riding <> ''
+		ORDER BY riding`, level)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var out []string
+	for rows.Next() {
+		var v string
+		if err := rows.Scan(&v); err != nil {
+			return nil, err
+		}
+		out = append(out, v)
+	}
+	return out, rows.Err()
+}
+
 // GetMembersByRiding searches members by riding name (partial match).
 func (s *Store) GetMembersByRiding(riding string) ([]MemberRow, error) {
 	rows, err := s.db.Query(`
