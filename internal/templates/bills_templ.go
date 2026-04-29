@@ -204,7 +204,7 @@ func BillsFeed(ps store.ParliamentStatus, bills []store.BillRow, total int, f st
 					return templ_7745c5c3_Err
 				}
 			}
-			templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 23, ">Provincial only</option></select> <button type=\"submit\" class=\"btn btn-primary\">Filter</button> <a href=\"/bills\" class=\"text-sm text-gray-500 hover:underline\">Clear</a></div><!-- Right: sort (~1/4) --><div class=\"flex items-center gap-2 sm:w-56 shrink-0 sm:border-l sm:border-gray-300 sm:pl-3\"><select name=\"sort\" class=\"input-field flex-1\"><option value=\"\"")
+			templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 23, ">Provincial only</option></select> <button type=\"submit\" class=\"btn btn-primary\">Filter</button> <a href=\"/bills\" class=\"text-sm text-gray-500 hover:underline\">Clear</a></div><!-- Right: sort --><div class=\"flex items-center gap-2 shrink-0 sm:border-l sm:border-gray-300 sm:pl-3\"><select name=\"sort\" class=\"input-field min-w-[11rem]\"><option value=\"\"")
 			if templ_7745c5c3_Err != nil {
 				return templ_7745c5c3_Err
 			}
