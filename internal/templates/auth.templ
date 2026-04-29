@@ -126,9 +126,9 @@ templ AuthPage(ps store.ParliamentStatus, mode string, googleClientID string, fa
 
 		if googleClientID != "" {
 			<script>
-				window.odGoogleSignInInit = function() {
+				window.onGoogleLibraryLoad = function() {
 					const el = document.getElementById("google-signin-widget");
-					if (!el || !window.google || !window.google.accounts || !window.google.accounts.id) {
+					if (!el) {
 						return;
 					}
 					const clientID = el.dataset.googleClientId || "";
@@ -150,7 +150,7 @@ templ AuthPage(ps store.ParliamentStatus, mode string, googleClientID string, fa
 					});
 				};
 			</script>
-			<script src="https://accounts.google.com/gsi/client?onload=odGoogleSignInInit" async defer></script>
+			<script src="https://accounts.google.com/gsi/client" async defer></script>
 		}
 
 		if facebookAppID != "" {

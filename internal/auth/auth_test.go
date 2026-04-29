@@ -40,11 +40,11 @@ func TestHandleSignupPage_RendersOAuthWidgetsAndFallbacks(t *testing.T) {
 	if !strings.Contains(body, "google-signin-widget") {
 		t.Fatalf("expected google widget container")
 	}
-	if !strings.Contains(body, "window.odGoogleSignInInit") {
-		t.Fatalf("expected odGoogleSignInInit callback function")
+	if !strings.Contains(body, "window.onGoogleLibraryLoad") {
+		t.Fatalf("expected onGoogleLibraryLoad callback function")
 	}
-	if !strings.Contains(body, "gsi/client?onload=odGoogleSignInInit") {
-		t.Fatalf("expected gsi/client loaded with onload callback")
+	if !strings.Contains(body, `src="https://accounts.google.com/gsi/client"`) {
+		t.Fatalf("expected gsi/client loaded without custom onload param")
 	}
 	if !strings.Contains(body, "fb:login-button") {
 		t.Fatalf("expected facebook widget tag")
