@@ -37,3 +37,4 @@ sshlogin.sh
 upload_db.sh
 *.pem
 .env
+/.playwright-mcp
