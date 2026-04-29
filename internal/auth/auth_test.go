@@ -40,8 +40,17 @@ func TestHandleSignupPage_RendersOAuthWidgetsAndFallbacks(t *testing.T) {
 	if !strings.Contains(body, "google-signin-widget") {
 		t.Fatalf("expected google widget container")
 	}
+	if !strings.Contains(body, "window.onGoogleLibraryLoad") {
+		t.Fatalf("expected onGoogleLibraryLoad callback function")
+	}
+	if !strings.Contains(body, `src="https://accounts.google.com/gsi/client"`) {
+		t.Fatalf("expected gsi/client loaded without custom onload param")
+	}
 	if !strings.Contains(body, "fb:login-button") {
 		t.Fatalf("expected facebook widget tag")
+	}
+	if !strings.Contains(body, "window.fbAsyncInit") {
+		t.Fatalf("expected fbAsyncInit callback function")
 	}
 	if !strings.Contains(body, "/auth/google/login") || !strings.Contains(body, "/auth/facebook/login") {
 		t.Fatalf("expected oauth fallback links")
@@ -66,8 +75,8 @@ func TestHandleSignupPage_RendersReCAPTCHAWidgetWhenConfigured(t *testing.T) {
 		t.Fatalf("status=%d want %d", rr.Code, http.StatusOK)
 	}
 	body := rr.Body.String()
-	if !strings.Contains(body, `https://www.google.com/recaptcha/api.js?render=site-key`) {
-		t.Fatalf("expected recaptcha v3 script")
+	if !strings.Contains(body, `recaptcha/api.js?onload=odSignupRecaptchaRun`) || !strings.Contains(body, `render=site-key`) {
+		t.Fatalf("expected recaptcha onload callback and render key in same script URL")
 	}
 	if !strings.Contains(body, `id="signup-recaptcha-config" data-site-key="site-key"`) {
 		t.Fatalf("expected recaptcha site key config on signup page")
