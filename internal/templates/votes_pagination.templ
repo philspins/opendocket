@@ -5,12 +5,17 @@ import "fmt"
 templ VotesPagination(prefix, rowSelector string, pageSize int) {
 	<div
 		id={ prefix + "-pagination" }
-		class="flex items-center justify-between gap-3 mt-4 text-sm"
+		class="flex flex-col sm:flex-row-reverse sm:items-center sm:justify-between gap-2 mt-4 text-sm"
 		data-prefix={ prefix }
 		data-row-selector={ rowSelector }
 		data-page-size={ fmt.Sprint(pageSize) }
 	>
-		<div class="flex items-center gap-2">
+		<div class="flex items-center justify-between gap-2">
+			<button id={ prefix + "-prev" } type="button" class="btn btn-secondary" disabled>Prev</button>
+			<div id={ prefix + "-pages" } class="flex items-center gap-1"></div>
+			<button id={ prefix + "-next" } type="button" class="btn btn-secondary" disabled>Next</button>
+		</div>
+		<div class="flex items-center justify-between sm:justify-start gap-2">
 			<label for={ prefix + "-page-size" } class="text-gray-600">Rows per page</label>
 			<select id={ prefix + "-page-size" } class="input-field py-2 pr-8">
 				<option value="5" selected?={ pageSize == 5 }>5</option>
@@ -18,11 +23,6 @@ templ VotesPagination(prefix, rowSelector string, pageSize int) {
 				<option value="20" selected?={ pageSize == 20 }>20</option>
 				<option value="50" selected?={ pageSize == 50 }>50</option>
 			</select>
-		</div>
-		<div class="flex items-center gap-2">
-			<button id={ prefix + "-prev" } type="button" class="btn btn-secondary" disabled>Prev</button>
-			<div id={ prefix + "-pages" } class="flex items-center gap-1"></div>
-			<button id={ prefix + "-next" } type="button" class="btn btn-secondary" disabled>Next</button>
 		</div>
 	</div>
 

@@ -101,17 +101,17 @@ func ProfilePage(ps store.ParliamentStatus, user store.UserRow, address string, 
 			if templ_7745c5c3_Err != nil {
 				return templ_7745c5c3_Err
 			}
-			templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 7, "\" placeholder=\"Enter your full Canadian address\" class=\"input-field w-full max-w-2xl\" autocomplete=\"off\"> <button type=\"submit\" class=\"btn btn-primary\">Update Riding</button> <a href=\"/profile\" class=\"text-sm text-gray-500 hover:underline\">Reset</a></form>")
+			templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 7, "\" placeholder=\"Enter your full Canadian address\" class=\"input-field w-full\" autocomplete=\"off\"><div class=\"flex w-full justify-end items-center gap-3\"><a href=\"/profile\" class=\"text-sm text-gray-500 hover:underline\">Reset</a> <button type=\"submit\" class=\"btn btn-primary\">Update Riding</button></div></form>")
 			if templ_7745c5c3_Err != nil {
 				return templ_7745c5c3_Err
 			}
 			if len(federalRidings) > 0 || len(provincialRidings) > 0 {
-				templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 8, "<div class=\"border-t border-gray-100 pt-4 space-y-3\"><p class=\"text-sm text-gray-500\">Can&#39;t find your riding by address? Select manually:</p><form method=\"POST\" action=\"/profile\" class=\"flex flex-wrap gap-3 items-end\">")
+				templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 8, "<div class=\"border-t border-gray-100 pt-4 space-y-3\"><p class=\"text-sm text-gray-500\">Can&#39;t find your riding by address? Select manually:</p><form method=\"POST\" action=\"/profile\" class=\"flex flex-col gap-3 w-full\">")
 				if templ_7745c5c3_Err != nil {
 					return templ_7745c5c3_Err
 				}
 				if len(federalRidings) > 0 {
-					templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 9, "<div class=\"flex flex-col gap-1\"><label class=\"text-xs text-gray-500\" for=\"federal_riding\">Federal riding</label> <select id=\"federal_riding\" name=\"federal_riding\" class=\"input-field px-3 py-2 text-sm\"><option value=\"\">— select —</option> ")
+					templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 9, "<div class=\"flex flex-col gap-1\"><label class=\"text-xs text-gray-500\" for=\"federal_riding\">Federal riding</label> <select id=\"federal_riding\" name=\"federal_riding\" class=\"input-field w-full px-3 py-2 text-sm\"><option value=\"\">— select —</option> ")
 					if templ_7745c5c3_Err != nil {
 						return templ_7745c5c3_Err
 					}
@@ -123,7 +123,7 @@ func ProfilePage(ps store.ParliamentStatus, user store.UserRow, address string, 
 						var templ_7745c5c3_Var6 string
 						templ_7745c5c3_Var6, templ_7745c5c3_Err = templ.JoinStringErrs(r)
 						if templ_7745c5c3_Err != nil {
-							return templ.Error{Err: templ_7745c5c3_Err, FileName: `internal/templates/profile.templ`, Line: 51, Col: 28}
+							return templ.Error{Err: templ_7745c5c3_Err, FileName: `internal/templates/profile.templ`, Line: 53, Col: 28}
 						}
 						_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var6))
 						if templ_7745c5c3_Err != nil {
@@ -146,7 +146,7 @@ func ProfilePage(ps store.ParliamentStatus, user store.UserRow, address string, 
 						var templ_7745c5c3_Var7 string
 						templ_7745c5c3_Var7, templ_7745c5c3_Err = templ.JoinStringErrs(r)
 						if templ_7745c5c3_Err != nil {
-							return templ.Error{Err: templ_7745c5c3_Err, FileName: `internal/templates/profile.templ`, Line: 51, Col: 74}
+							return templ.Error{Err: templ_7745c5c3_Err, FileName: `internal/templates/profile.templ`, Line: 53, Col: 74}
 						}
 						_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var7))
 						if templ_7745c5c3_Err != nil {
@@ -163,7 +163,7 @@ func ProfilePage(ps store.ParliamentStatus, user store.UserRow, address string, 
 					}
 				}
 				if len(provincialRidings) > 0 {
-					templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 16, "<div class=\"flex flex-col gap-1\"><label class=\"text-xs text-gray-500\" for=\"provincial_riding\">Provincial riding</label> <select id=\"provincial_riding\" name=\"provincial_riding\" class=\"input-field px-3 py-2 text-sm\"><option value=\"\">— select —</option> ")
+					templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 16, "<div class=\"flex flex-col gap-1\"><label class=\"text-xs text-gray-500\" for=\"provincial_riding\">Provincial riding</label> <select id=\"provincial_riding\" name=\"provincial_riding\" class=\"input-field w-full px-3 py-2 text-sm\"><option value=\"\">— select —</option> ")
 					if templ_7745c5c3_Err != nil {
 						return templ_7745c5c3_Err
 					}
@@ -175,7 +175,7 @@ func ProfilePage(ps store.ParliamentStatus, user store.UserRow, address string, 
 						var templ_7745c5c3_Var8 string
 						templ_7745c5c3_Var8, templ_7745c5c3_Err = templ.JoinStringErrs(r)
 						if templ_7745c5c3_Err != nil {
-							return templ.Error{Err: templ_7745c5c3_Err, FileName: `internal/templates/profile.templ`, Line: 62, Col: 28}
+							return templ.Error{Err: templ_7745c5c3_Err, FileName: `internal/templates/profile.templ`, Line: 64, Col: 28}
 						}
 						_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var8))
 						if templ_7745c5c3_Err != nil {
@@ -198,7 +198,7 @@ func ProfilePage(ps store.ParliamentStatus, user store.UserRow, address string, 
 						var templ_7745c5c3_Var9 string
 						templ_7745c5c3_Var9, templ_7745c5c3_Err = templ.JoinStringErrs(r)
 						if templ_7745c5c3_Err != nil {
-							return templ.Error{Err: templ_7745c5c3_Err, FileName: `internal/templates/profile.templ`, Line: 62, Col: 77}
+							return templ.Error{Err: templ_7745c5c3_Err, FileName: `internal/templates/profile.templ`, Line: 64, Col: 77}
 						}
 						_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var9))
 						if templ_7745c5c3_Err != nil {
@@ -214,7 +214,7 @@ func ProfilePage(ps store.ParliamentStatus, user store.UserRow, address string, 
 						return templ_7745c5c3_Err
 					}
 				}
-				templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 23, "<button type=\"submit\" class=\"btn btn-primary\">Save</button></form></div>")
+				templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 23, "<div class=\"flex justify-end\"><button type=\"submit\" class=\"btn btn-primary\">Save</button></div></form></div>")
 				if templ_7745c5c3_Err != nil {
 					return templ_7745c5c3_Err
 				}
@@ -251,7 +251,7 @@ func ProfilePage(ps store.ParliamentStatus, user store.UserRow, address string, 
 				var templ_7745c5c3_Var10 string
 				templ_7745c5c3_Var10, templ_7745c5c3_Err = templ.JoinStringErrs(cat)
 				if templ_7745c5c3_Err != nil {
-					return templ.Error{Err: templ_7745c5c3_Err, FileName: `internal/templates/profile.templ`, Line: 101, Col: 20}
+					return templ.Error{Err: templ_7745c5c3_Err, FileName: `internal/templates/profile.templ`, Line: 105, Col: 20}
 				}
 				_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var10))
 				if templ_7745c5c3_Err != nil {
@@ -274,7 +274,7 @@ func ProfilePage(ps store.ParliamentStatus, user store.UserRow, address string, 
 				var templ_7745c5c3_Var11 string
 				templ_7745c5c3_Var11, templ_7745c5c3_Err = templ.JoinStringErrs(cat)
 				if templ_7745c5c3_Err != nil {
-					return templ.Error{Err: templ_7745c5c3_Err, FileName: `internal/templates/profile.templ`, Line: 105, Col: 68}
+					return templ.Error{Err: templ_7745c5c3_Err, FileName: `internal/templates/profile.templ`, Line: 109, Col: 68}
 				}
 				_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var11))
 				if templ_7745c5c3_Err != nil {
@@ -285,7 +285,7 @@ func ProfilePage(ps store.ParliamentStatus, user store.UserRow, address string, 
 					return templ_7745c5c3_Err
 				}
 			}
-			templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 33, "</div><div class=\"mt-4 flex items-center gap-3\"><button type=\"submit\" class=\"btn btn-primary\">Save Interests</button></div></form></section></div>")
+			templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 33, "</div><div class=\"mt-4 flex justify-end items-center gap-3\"><button type=\"submit\" class=\"btn btn-primary\">Save Interests</button></div></form></section></div>")
 			if templ_7745c5c3_Err != nil {
 				return templ_7745c5c3_Err
 			}

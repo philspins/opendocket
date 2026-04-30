@@ -44,7 +44,7 @@ func VotesPagination(prefix, rowSelector string, pageSize int) templ.Component {
 		if templ_7745c5c3_Err != nil {
 			return templ_7745c5c3_Err
 		}
-		templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 2, "\" class=\"flex items-center justify-between gap-3 mt-4 text-sm\" data-prefix=\"")
+		templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 2, "\" class=\"flex flex-col sm:flex-row-reverse sm:items-center sm:justify-between gap-2 mt-4 text-sm\" data-prefix=\"")
 		if templ_7745c5c3_Err != nil {
 			return templ_7745c5c3_Err
 		}
@@ -83,112 +83,112 @@ func VotesPagination(prefix, rowSelector string, pageSize int) templ.Component {
 		if templ_7745c5c3_Err != nil {
 			return templ_7745c5c3_Err
 		}
-		templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 5, "\"><div class=\"flex items-center gap-2\"><label for=\"")
+		templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 5, "\"><div class=\"flex items-center justify-between gap-2\"><button id=\"")
 		if templ_7745c5c3_Err != nil {
 			return templ_7745c5c3_Err
 		}
 		var templ_7745c5c3_Var6 string
-		templ_7745c5c3_Var6, templ_7745c5c3_Err = templ.JoinStringErrs(prefix + "-page-size")
+		templ_7745c5c3_Var6, templ_7745c5c3_Err = templ.JoinStringErrs(prefix + "-prev")
 		if templ_7745c5c3_Err != nil {
-			return templ.Error{Err: templ_7745c5c3_Err, FileName: `internal/templates/votes_pagination.templ`, Line: 14, Col: 37}
+			return templ.Error{Err: templ_7745c5c3_Err, FileName: `internal/templates/votes_pagination.templ`, Line: 14, Col: 32}
 		}
 		_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var6))
 		if templ_7745c5c3_Err != nil {
 			return templ_7745c5c3_Err
 		}
-		templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 6, "\" class=\"text-gray-600\">Rows per page</label> <select id=\"")
+		templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 6, "\" type=\"button\" class=\"btn btn-secondary\" disabled>Prev</button><div id=\"")
 		if templ_7745c5c3_Err != nil {
 			return templ_7745c5c3_Err
 		}
 		var templ_7745c5c3_Var7 string
-		templ_7745c5c3_Var7, templ_7745c5c3_Err = templ.JoinStringErrs(prefix + "-page-size")
+		templ_7745c5c3_Var7, templ_7745c5c3_Err = templ.JoinStringErrs(prefix + "-pages")
 		if templ_7745c5c3_Err != nil {
-			return templ.Error{Err: templ_7745c5c3_Err, FileName: `internal/templates/votes_pagination.templ`, Line: 15, Col: 37}
+			return templ.Error{Err: templ_7745c5c3_Err, FileName: `internal/templates/votes_pagination.templ`, Line: 15, Col: 30}
 		}
 		_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var7))
 		if templ_7745c5c3_Err != nil {
 			return templ_7745c5c3_Err
 		}
-		templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 7, "\" class=\"input-field py-2 pr-8\"><option value=\"5\"")
-		if templ_7745c5c3_Err != nil {
-			return templ_7745c5c3_Err
-		}
-		if pageSize == 5 {
-			templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 8, " selected")
-			if templ_7745c5c3_Err != nil {
-				return templ_7745c5c3_Err
-			}
-		}
-		templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 9, ">5</option> <option value=\"10\"")
-		if templ_7745c5c3_Err != nil {
-			return templ_7745c5c3_Err
-		}
-		if pageSize == 10 {
-			templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 10, " selected")
-			if templ_7745c5c3_Err != nil {
-				return templ_7745c5c3_Err
-			}
-		}
-		templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 11, ">10</option> <option value=\"20\"")
-		if templ_7745c5c3_Err != nil {
-			return templ_7745c5c3_Err
-		}
-		if pageSize == 20 {
-			templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 12, " selected")
-			if templ_7745c5c3_Err != nil {
-				return templ_7745c5c3_Err
-			}
-		}
-		templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 13, ">20</option> <option value=\"50\"")
-		if templ_7745c5c3_Err != nil {
-			return templ_7745c5c3_Err
-		}
-		if pageSize == 50 {
-			templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 14, " selected")
-			if templ_7745c5c3_Err != nil {
-				return templ_7745c5c3_Err
-			}
-		}
-		templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 15, ">50</option></select></div><div class=\"flex items-center gap-2\"><button id=\"")
+		templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 7, "\" class=\"flex items-center gap-1\"></div><button id=\"")
 		if templ_7745c5c3_Err != nil {
 			return templ_7745c5c3_Err
 		}
 		var templ_7745c5c3_Var8 string
-		templ_7745c5c3_Var8, templ_7745c5c3_Err = templ.JoinStringErrs(prefix + "-prev")
+		templ_7745c5c3_Var8, templ_7745c5c3_Err = templ.JoinStringErrs(prefix + "-next")
 		if templ_7745c5c3_Err != nil {
-			return templ.Error{Err: templ_7745c5c3_Err, FileName: `internal/templates/votes_pagination.templ`, Line: 23, Col: 32}
+			return templ.Error{Err: templ_7745c5c3_Err, FileName: `internal/templates/votes_pagination.templ`, Line: 16, Col: 32}
 		}
 		_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var8))
 		if templ_7745c5c3_Err != nil {
 			return templ_7745c5c3_Err
 		}
-		templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 16, "\" type=\"button\" class=\"btn btn-secondary\" disabled>Prev</button><div id=\"")
+		templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 8, "\" type=\"button\" class=\"btn btn-secondary\" disabled>Next</button></div><div class=\"flex items-center justify-between sm:justify-start gap-2\"><label for=\"")
 		if templ_7745c5c3_Err != nil {
 			return templ_7745c5c3_Err
 		}
 		var templ_7745c5c3_Var9 string
-		templ_7745c5c3_Var9, templ_7745c5c3_Err = templ.JoinStringErrs(prefix + "-pages")
+		templ_7745c5c3_Var9, templ_7745c5c3_Err = templ.JoinStringErrs(prefix + "-page-size")
 		if templ_7745c5c3_Err != nil {
-			return templ.Error{Err: templ_7745c5c3_Err, FileName: `internal/templates/votes_pagination.templ`, Line: 24, Col: 30}
+			return templ.Error{Err: templ_7745c5c3_Err, FileName: `internal/templates/votes_pagination.templ`, Line: 19, Col: 37}
 		}
 		_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var9))
 		if templ_7745c5c3_Err != nil {
 			return templ_7745c5c3_Err
 		}
-		templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 17, "\" class=\"flex items-center gap-1\"></div><button id=\"")
+		templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 9, "\" class=\"text-gray-600\">Rows per page</label> <select id=\"")
 		if templ_7745c5c3_Err != nil {
 			return templ_7745c5c3_Err
 		}
 		var templ_7745c5c3_Var10 string
-		templ_7745c5c3_Var10, templ_7745c5c3_Err = templ.JoinStringErrs(prefix + "-next")
+		templ_7745c5c3_Var10, templ_7745c5c3_Err = templ.JoinStringErrs(prefix + "-page-size")
 		if templ_7745c5c3_Err != nil {
-			return templ.Error{Err: templ_7745c5c3_Err, FileName: `internal/templates/votes_pagination.templ`, Line: 25, Col: 32}
+			return templ.Error{Err: templ_7745c5c3_Err, FileName: `internal/templates/votes_pagination.templ`, Line: 20, Col: 37}
 		}
 		_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var10))
 		if templ_7745c5c3_Err != nil {
 			return templ_7745c5c3_Err
 		}
-		templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 18, "\" type=\"button\" class=\"btn btn-secondary\" disabled>Next</button></div></div><script>\n\t\t(() => {\n\t\t\tconst scriptEl = document.currentScript;\n\t\t\tconst pagination = scriptEl ? scriptEl.previousElementSibling : null;\n\t\t\tif (!(pagination instanceof HTMLDivElement)) return;\n\n\t\t\tconst prefix = pagination.dataset.prefix || \"\";\n\t\t\tconst rowSelector = pagination.dataset.rowSelector || \"\";\n\t\t\tif (!prefix || !rowSelector) return;\n\n\t\t\tconst section = document.getElementById(prefix + \"-section\");\n\t\t\tif (!section) return;\n\t\t\tconst rows = Array.from(section.querySelectorAll(rowSelector));\n\t\t\tconst prevBtn = document.getElementById(prefix + \"-prev\");\n\t\t\tconst nextBtn = document.getElementById(prefix + \"-next\");\n\t\t\tconst pagesEl = document.getElementById(prefix + \"-pages\");\n\t\t\tconst pageSizeSelect = document.getElementById(prefix + \"-page-size\");\n\t\t\tlet pageSize = Number(pagination.dataset.pageSize) || 10;\n\t\t\tlet currentPage = 1;\n\n\t\t\tif (!prevBtn || !nextBtn || !pagesEl || !pageSizeSelect) return;\n\t\t\tif (rows.length === 0) {\n\t\t\t\tpagination.classList.add(\"hidden\");\n\t\t\t\treturn;\n\t\t\t}\n\t\t\tconst allowedPageSizes = new Set(Array.from(pageSizeSelect.options, (option) => Number(option.value)));\n\t\t\tpageSizeSelect.value = String(pageSize);\n\t\t\tconst totalPages = () => Math.max(1, Math.ceil(rows.length / pageSize));\n\n\t\t\tconst visiblePages = (total, current) => {\n\t\t\t\tif (total <= 5) {\n\t\t\t\t\treturn Array.from({ length: total }, (_, i) => i + 1);\n\t\t\t\t}\n\t\t\t\tconst pages = [1];\n\t\t\t\tlet start = current - 1;\n\t\t\t\tlet end = current + 1;\n\t\t\t\tif (start < 2) {\n\t\t\t\t\tstart = 2;\n\t\t\t\t\tend = 4;\n\t\t\t\t}\n\t\t\t\tif (end > total - 1) {\n\t\t\t\t\tend = total - 1;\n\t\t\t\t\tstart = total - 3;\n\t\t\t\t}\n\t\t\t\tif (start > 2) pages.push(-1);\n\t\t\t\tfor (let p = start; p <= end; p++) {\n\t\t\t\t\tpages.push(p);\n\t\t\t\t}\n\t\t\t\tif (end < total - 1) pages.push(-1);\n\t\t\t\tpages.push(total);\n\t\t\t\treturn pages;\n\t\t\t};\n\t\t\tconst clampPage = (page, maxPages) => Math.min(Math.max(page, 1), maxPages);\n\n\t\t\tconst updatePager = () => {\n\t\t\t\tconst pages = totalPages();\n\t\t\t\tprevBtn.disabled = currentPage == 1;\n\t\t\t\tnextBtn.disabled = currentPage == pages;\n\t\t\t\tpagesEl.innerHTML = \"\";\n\t\t\t\tfor (const item of visiblePages(pages, currentPage)) {\n\t\t\t\t\tif (item === -1) {\n\t\t\t\t\t\tconst ellipsis = document.createElement(\"span\");\n\t\t\t\t\t\tellipsis.className = \"px-1 text-gray-500\";\n\t\t\t\t\t\tellipsis.textContent = \"...\";\n\t\t\t\t\t\tpagesEl.appendChild(ellipsis);\n\t\t\t\t\t\tcontinue;\n\t\t\t\t\t}\n\t\t\t\t\tconst pageBtn = document.createElement(\"button\");\n\t\t\t\t\tpageBtn.type = \"button\";\n\t\t\t\t\tpageBtn.className = \"px-2 py-1 text-gray-700 hover:underline\";\n\t\t\t\t\tpageBtn.dataset.page = String(item);\n\t\t\t\t\tpageBtn.textContent = String(item);\n\t\t\t\t\tif (item === currentPage) {\n\t\t\t\t\t\tpageBtn.classList.add(\"underline\", \"font-semibold\");\n\t\t\t\t\t}\n\t\t\t\t\tpagesEl.appendChild(pageBtn);\n\t\t\t\t}\n\t\t\t};\n\n\t\t\tconst renderPage = () => {\n\t\t\t\tconst pages = totalPages();\n\t\t\t\tcurrentPage = clampPage(currentPage, pages);\n\t\t\t\trows.forEach((row, idx) => {\n\t\t\t\t\tconst rowPage = Math.floor(idx / pageSize) + 1;\n\t\t\t\t\trow.classList.toggle(\"hidden\", rowPage !== currentPage);\n\t\t\t\t});\n\t\t\t\tupdatePager();\n\t\t\t};\n\n\t\t\tprevBtn.addEventListener(\"click\", () => {\n\t\t\t\tif (currentPage <= 1) return;\n\t\t\t\tcurrentPage--;\n\t\t\t\trenderPage();\n\t\t\t});\n\t\t\tnextBtn.addEventListener(\"click\", () => {\n\t\t\t\tif (currentPage >= totalPages()) return;\n\t\t\t\tcurrentPage++;\n\t\t\t\trenderPage();\n\t\t\t});\n\t\t\tpagesEl.addEventListener(\"click\", (event) => {\n\t\t\t\tconst target = event.target;\n\t\t\t\tif (!(target instanceof HTMLButtonElement)) return;\n\t\t\t\tconst selected = Number(target.dataset.page);\n\t\t\t\tconst pages = totalPages();\n\t\t\t\tif (!Number.isInteger(selected) || selected < 1 || selected > pages) return;\n\t\t\t\tcurrentPage = selected;\n\t\t\t\trenderPage();\n\t\t\t});\n\t\t\tpageSizeSelect.addEventListener(\"change\", () => {\n\t\t\t\tconst selectedSize = Number(pageSizeSelect.value);\n\t\t\t\tif (!allowedPageSizes.has(selectedSize)) return;\n\t\t\t\tpageSize = selectedSize;\n\t\t\t\tcurrentPage = 1;\n\t\t\t\trenderPage();\n\t\t\t});\n\n\t\t\trenderPage();\n\t\t})();\n\t</script>")
+		templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 10, "\" class=\"input-field py-2 pr-8\"><option value=\"5\"")
+		if templ_7745c5c3_Err != nil {
+			return templ_7745c5c3_Err
+		}
+		if pageSize == 5 {
+			templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 11, " selected")
+			if templ_7745c5c3_Err != nil {
+				return templ_7745c5c3_Err
+			}
+		}
+		templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 12, ">5</option> <option value=\"10\"")
+		if templ_7745c5c3_Err != nil {
+			return templ_7745c5c3_Err
+		}
+		if pageSize == 10 {
+			templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 13, " selected")
+			if templ_7745c5c3_Err != nil {
+				return templ_7745c5c3_Err
+			}
+		}
+		templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 14, ">10</option> <option value=\"20\"")
+		if templ_7745c5c3_Err != nil {
+			return templ_7745c5c3_Err
+		}
+		if pageSize == 20 {
+			templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 15, " selected")
+			if templ_7745c5c3_Err != nil {
+				return templ_7745c5c3_Err
+			}
+		}
+		templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 16, ">20</option> <option value=\"50\"")
+		if templ_7745c5c3_Err != nil {
+			return templ_7745c5c3_Err
+		}
+		if pageSize == 50 {
+			templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 17, " selected")
+			if templ_7745c5c3_Err != nil {
+				return templ_7745c5c3_Err
+			}
+		}
+		templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 18, ">50</option></select></div></div><script>\n\t\t(() => {\n\t\t\tconst scriptEl = document.currentScript;\n\t\t\tconst pagination = scriptEl ? scriptEl.previousElementSibling : null;\n\t\t\tif (!(pagination instanceof HTMLDivElement)) return;\n\n\t\t\tconst prefix = pagination.dataset.prefix || \"\";\n\t\t\tconst rowSelector = pagination.dataset.rowSelector || \"\";\n\t\t\tif (!prefix || !rowSelector) return;\n\n\t\t\tconst section = document.getElementById(prefix + \"-section\");\n\t\t\tif (!section) return;\n\t\t\tconst rows = Array.from(section.querySelectorAll(rowSelector));\n\t\t\tconst prevBtn = document.getElementById(prefix + \"-prev\");\n\t\t\tconst nextBtn = document.getElementById(prefix + \"-next\");\n\t\t\tconst pagesEl = document.getElementById(prefix + \"-pages\");\n\t\t\tconst pageSizeSelect = document.getElementById(prefix + \"-page-size\");\n\t\t\tlet pageSize = Number(pagination.dataset.pageSize) || 10;\n\t\t\tlet currentPage = 1;\n\n\t\t\tif (!prevBtn || !nextBtn || !pagesEl || !pageSizeSelect) return;\n\t\t\tif (rows.length === 0) {\n\t\t\t\tpagination.classList.add(\"hidden\");\n\t\t\t\treturn;\n\t\t\t}\n\t\t\tconst allowedPageSizes = new Set(Array.from(pageSizeSelect.options, (option) => Number(option.value)));\n\t\t\tpageSizeSelect.value = String(pageSize);\n\t\t\tconst totalPages = () => Math.max(1, Math.ceil(rows.length / pageSize));\n\n\t\t\tconst visiblePages = (total, current) => {\n\t\t\t\tif (total <= 5) {\n\t\t\t\t\treturn Array.from({ length: total }, (_, i) => i + 1);\n\t\t\t\t}\n\t\t\t\tconst pages = [1];\n\t\t\t\tlet start = current - 1;\n\t\t\t\tlet end = current + 1;\n\t\t\t\tif (start < 2) {\n\t\t\t\t\tstart = 2;\n\t\t\t\t\tend = 4;\n\t\t\t\t}\n\t\t\t\tif (end > total - 1) {\n\t\t\t\t\tend = total - 1;\n\t\t\t\t\tstart = total - 3;\n\t\t\t\t}\n\t\t\t\tif (start > 2) pages.push(-1);\n\t\t\t\tfor (let p = start; p <= end; p++) {\n\t\t\t\t\tpages.push(p);\n\t\t\t\t}\n\t\t\t\tif (end < total - 1) pages.push(-1);\n\t\t\t\tpages.push(total);\n\t\t\t\treturn pages;\n\t\t\t};\n\t\t\tconst clampPage = (page, maxPages) => Math.min(Math.max(page, 1), maxPages);\n\n\t\t\tconst updatePager = () => {\n\t\t\t\tconst pages = totalPages();\n\t\t\t\tprevBtn.disabled = currentPage == 1;\n\t\t\t\tnextBtn.disabled = currentPage == pages;\n\t\t\t\tpagesEl.innerHTML = \"\";\n\t\t\t\tfor (const item of visiblePages(pages, currentPage)) {\n\t\t\t\t\tif (item === -1) {\n\t\t\t\t\t\tconst ellipsis = document.createElement(\"span\");\n\t\t\t\t\t\tellipsis.className = \"px-1 text-gray-500\";\n\t\t\t\t\t\tellipsis.textContent = \"...\";\n\t\t\t\t\t\tpagesEl.appendChild(ellipsis);\n\t\t\t\t\t\tcontinue;\n\t\t\t\t\t}\n\t\t\t\t\tconst pageBtn = document.createElement(\"button\");\n\t\t\t\t\tpageBtn.type = \"button\";\n\t\t\t\t\tpageBtn.className = \"px-2 py-1 text-gray-700 hover:underline\";\n\t\t\t\t\tpageBtn.dataset.page = String(item);\n\t\t\t\t\tpageBtn.textContent = String(item);\n\t\t\t\t\tif (item === currentPage) {\n\t\t\t\t\t\tpageBtn.classList.add(\"underline\", \"font-semibold\");\n\t\t\t\t\t}\n\t\t\t\t\tpagesEl.appendChild(pageBtn);\n\t\t\t\t}\n\t\t\t};\n\n\t\t\tconst renderPage = () => {\n\t\t\t\tconst pages = totalPages();\n\t\t\t\tcurrentPage = clampPage(currentPage, pages);\n\t\t\t\trows.forEach((row, idx) => {\n\t\t\t\t\tconst rowPage = Math.floor(idx / pageSize) + 1;\n\t\t\t\t\trow.classList.toggle(\"hidden\", rowPage !== currentPage);\n\t\t\t\t});\n\t\t\t\tupdatePager();\n\t\t\t};\n\n\t\t\tprevBtn.addEventListener(\"click\", () => {\n\t\t\t\tif (currentPage <= 1) return;\n\t\t\t\tcurrentPage--;\n\t\t\t\trenderPage();\n\t\t\t});\n\t\t\tnextBtn.addEventListener(\"click\", () => {\n\t\t\t\tif (currentPage >= totalPages()) return;\n\t\t\t\tcurrentPage++;\n\t\t\t\trenderPage();\n\t\t\t});\n\t\t\tpagesEl.addEventListener(\"click\", (event) => {\n\t\t\t\tconst target = event.target;\n\t\t\t\tif (!(target instanceof HTMLButtonElement)) return;\n\t\t\t\tconst selected = Number(target.dataset.page);\n\t\t\t\tconst pages = totalPages();\n\t\t\t\tif (!Number.isInteger(selected) || selected < 1 || selected > pages) return;\n\t\t\t\tcurrentPage = selected;\n\t\t\t\trenderPage();\n\t\t\t});\n\t\t\tpageSizeSelect.addEventListener(\"change\", () => {\n\t\t\t\tconst selectedSize = Number(pageSizeSelect.value);\n\t\t\t\tif (!allowedPageSizes.has(selectedSize)) return;\n\t\t\t\tpageSize = selectedSize;\n\t\t\t\tcurrentPage = 1;\n\t\t\t\trenderPage();\n\t\t\t});\n\n\t\t\trenderPage();\n\t\t})();\n\t</script>")
 		if templ_7745c5c3_Err != nil {
 			return templ_7745c5c3_Err
 		}

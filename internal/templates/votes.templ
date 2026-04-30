@@ -13,7 +13,7 @@ templ VotesFeed(ps store.ParliamentStatus, divs []store.DivisionRow, total int, 
 				<span class="text-sm text-gray-500">{ fmt.Sprint(total) } total</span>
 			</div>
 
-			<div class="table-shell">
+			<div class="table-shell vote-table-shell">
 				<table class="vote-table min-w-full text-sm">
 					<thead>
 						<tr>
@@ -44,8 +44,8 @@ templ VotesFeed(ps store.ParliamentStatus, divs []store.DivisionRow, total int, 
 								</td>
 								<td class="px-4 py-2.5 col-yea text-right">{ fmt.Sprint(d.Yeas) }</td>
 								<td class="px-4 py-2.5 col-nay text-right">{ fmt.Sprint(d.Nays) }</td>
-								<td class="px-4 py-2.5 col-meta">{ d.Result }</td>
-								<td class="px-4 py-2.5 col-meta capitalize">{ d.Chamber }</td>
+								<td class="px-4 py-2.5 col-result col-meta">{ d.Result }</td>
+								<td class="px-4 py-2.5 col-chamber col-meta capitalize">{ d.Chamber }</td>
 							</tr>
 						}
 						if len(divs) == 0 {
