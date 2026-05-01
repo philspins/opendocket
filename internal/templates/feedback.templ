@@ -1,8 +1,12 @@
 package templates
 
-import "github.com/philspins/opendocket/internal/store"
+import (
+	"strconv"
 
-templ FeedbackPage(ps store.ParliamentStatus, user *store.UserRow, successMsg string, errMsg string) {
+	"github.com/philspins/opendocket/internal/store"
+)
+
+templ FeedbackPage(ps store.ParliamentStatus, user *store.UserRow, successMsg string, errMsg string, maxDescLen int) {
 	@Layout("Feedback", ps) {
 		<section class="surface-card p-6 space-y-6" style="max-width: 640px; margin: 0 auto;">
 			<div>
@@ -66,7 +70,7 @@ templ FeedbackPage(ps store.ParliamentStatus, user *store.UserRow, successMsg st
 							name="description"
 							rows="6"
 							required
-							maxlength="5000"
+							maxlength={ strconv.Itoa(maxDescLen) }
 							placeholder="Describe your feedback in detail…"
 							class="input-field w-full px-3 py-2 text-sm resize-y"
 						></textarea>

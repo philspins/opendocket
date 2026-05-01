@@ -16,9 +16,10 @@ import (
 )
 
 const (
-	feedbackRepo    = "philspins/opendocket"
-	githubIssuesAPI = "https://api.github.com/repos/" + feedbackRepo + "/issues"
-	githubAPIVersion = "2022-11-28"
+	feedbackRepo             = "philspins/opendocket"
+	githubIssuesAPI          = "https://api.github.com/repos/" + feedbackRepo + "/issues"
+	githubAPIVersion         = "2022-11-28"
+	feedbackMaxDescriptionLen = 5000
 )
 
 func (s *Server) handleFeedback(w http.ResponseWriter, r *http.Request) {
@@ -34,7 +35,7 @@ func (s *Server) handleFeedback(w http.ResponseWriter, r *http.Request) {
 		if r.URL.Query().Get("submitted") == "1" {
 			successMsg = "Thank you! Your feedback has been submitted as a GitHub issue."
 		}
-		_ = templates.FeedbackPage(ps, userPtr, successMsg, "").Render(r.Context(), w)
+		_ = templates.FeedbackPage(ps, userPtr, successMsg, "", feedbackMaxDescriptionLen).Render(r.Context(), w)
 
 	case http.MethodPost:
 		u, ok := s.auth.RequireVerifiedSessionUser(w, r)
@@ -51,7 +52,11 @@ func (s *Server) handleFeedback(w http.ResponseWriter, r *http.Request) {
 		description := strings.TrimSpace(r.FormValue("description"))
 
 		if category == "" || priority == "" || description == "" {
-			_ = templates.FeedbackPage(ps, &u, "", "Please fill in all fields.").Render(r.Context(), w)
+			_ = templates.FeedbackPage(ps, &u, "", "Please fill in all fields.", feedbackMaxDescriptionLen).Render(r.Context(), w)
+			return
+		}
+		if len(description) > feedbackMaxDescriptionLen {
+			_ = templates.FeedbackPage(ps, &u, "", fmt.Sprintf("Description must be %d characters or fewer.", feedbackMaxDescriptionLen), feedbackMaxDescriptionLen).Render(r.Context(), w)
 			return
 		}
 
@@ -69,7 +74,7 @@ func (s *Server) handleFeedback(w http.ResponseWriter, r *http.Request) {
 
 		if err := createGitHubIssue(r.Context(), token, title, body, labels); err != nil {
 			log.Printf("feedback: GitHub issue creation failed for user %s: %v", u.Email, err)
-			_ = templates.FeedbackPage(ps, &u, "", "Failed to submit feedback. Please try again later.").Render(r.Context(), w)
+			_ = templates.FeedbackPage(ps, &u, "", "Failed to submit feedback. Please try again later.", feedbackMaxDescriptionLen).Render(r.Context(), w)
 			return
 		}
 
