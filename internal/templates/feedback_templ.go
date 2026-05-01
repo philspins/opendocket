@@ -14,7 +14,7 @@ import (
 	"github.com/philspins/opendocket/internal/store"
 )
 
-func FeedbackPage(ps store.ParliamentStatus, user *store.UserRow, successMsg string, errMsg string, maxSubjectLen int, maxDescLen int) templ.Component {
+func FeedbackPage(ps store.ParliamentStatus, user *store.UserRow, successMsg string, issueURL string, errMsg string, maxSubjectLen int, maxDescLen int) templ.Component {
 	return templruntime.GeneratedTemplate(func(templ_7745c5c3_Input templruntime.GeneratedComponentInput) (templ_7745c5c3_Err error) {
 		templ_7745c5c3_W, ctx := templ_7745c5c3_Input.Writer, templ_7745c5c3_Input.Context
 		if templ_7745c5c3_CtxErr := ctx.Err(); templ_7745c5c3_CtxErr != nil {
@@ -52,86 +52,109 @@ func FeedbackPage(ps store.ParliamentStatus, user *store.UserRow, successMsg str
 				return templ_7745c5c3_Err
 			}
 			if successMsg != "" {
-				templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 2, "<div class=\"border border-green-200 bg-green-50 px-4 py-3 text-sm text-green-800\">")
+				templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 2, "<div class=\"border border-green-200 bg-green-50 px-4 py-3 text-sm text-green-800 space-y-1\"><p>")
 				if templ_7745c5c3_Err != nil {
 					return templ_7745c5c3_Err
 				}
 				var templ_7745c5c3_Var3 string
 				templ_7745c5c3_Var3, templ_7745c5c3_Err = templ.JoinStringErrs(successMsg)
 				if templ_7745c5c3_Err != nil {
-					return templ.Error{Err: templ_7745c5c3_Err, FileName: `internal/templates/feedback.templ`, Line: 21, Col: 17}
+					return templ.Error{Err: templ_7745c5c3_Err, FileName: `internal/templates/feedback.templ`, Line: 21, Col: 20}
 				}
 				_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var3))
 				if templ_7745c5c3_Err != nil {
 					return templ_7745c5c3_Err
 				}
-				templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 3, "</div>")
+				templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 3, "</p>")
+				if templ_7745c5c3_Err != nil {
+					return templ_7745c5c3_Err
+				}
+				if issueURL != "" {
+					templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 4, "<p><a href=\"")
+					if templ_7745c5c3_Err != nil {
+						return templ_7745c5c3_Err
+					}
+					var templ_7745c5c3_Var4 templ.SafeURL
+					templ_7745c5c3_Var4, templ_7745c5c3_Err = templ.JoinURLErrs(templ.SafeURL(issueURL))
+					if templ_7745c5c3_Err != nil {
+						return templ.Error{Err: templ_7745c5c3_Err, FileName: `internal/templates/feedback.templ`, Line: 23, Col: 42}
+					}
+					_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var4))
+					if templ_7745c5c3_Err != nil {
+						return templ_7745c5c3_Err
+					}
+					templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 5, "\" target=\"_blank\" rel=\"noopener noreferrer\" class=\"underline font-medium\">View it here</a></p>")
+					if templ_7745c5c3_Err != nil {
+						return templ_7745c5c3_Err
+					}
+				}
+				templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 6, "</div>")
 				if templ_7745c5c3_Err != nil {
 					return templ_7745c5c3_Err
 				}
 			}
 			if errMsg != "" {
-				templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 4, "<div class=\"border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-800\">")
-				if templ_7745c5c3_Err != nil {
-					return templ_7745c5c3_Err
-				}
-				var templ_7745c5c3_Var4 string
-				templ_7745c5c3_Var4, templ_7745c5c3_Err = templ.JoinStringErrs(errMsg)
-				if templ_7745c5c3_Err != nil {
-					return templ.Error{Err: templ_7745c5c3_Err, FileName: `internal/templates/feedback.templ`, Line: 26, Col: 13}
-				}
-				_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var4))
-				if templ_7745c5c3_Err != nil {
-					return templ_7745c5c3_Err
-				}
-				templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 5, "</div>")
-				if templ_7745c5c3_Err != nil {
-					return templ_7745c5c3_Err
-				}
-			}
-			if user == nil {
-				templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 6, "<div class=\"border border-yellow-200 bg-yellow-50 px-4 py-3 text-sm text-yellow-800 space-y-2\"><p>You must be signed in and have a verified email address to submit feedback.</p><div class=\"flex gap-3\"><a href=\"/auth/login\" class=\"btn btn-primary text-xs\">Sign In</a> <a href=\"/auth/signup\" class=\"btn btn-secondary text-xs\">Sign Up</a></div></div>")
-				if templ_7745c5c3_Err != nil {
-					return templ_7745c5c3_Err
-				}
-			} else if !user.EmailVerified {
-				templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 7, "<div class=\"border border-yellow-200 bg-yellow-50 px-4 py-3 text-sm text-yellow-800 space-y-2\"><p>Please verify your email address before submitting feedback.</p><a href=\"/auth/verify\" class=\"btn btn-primary text-xs\">Verify Email</a></div>")
-				if templ_7745c5c3_Err != nil {
-					return templ_7745c5c3_Err
-				}
-			} else if successMsg == "" {
-				templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 8, "<form method=\"POST\" action=\"/feedback\" class=\"space-y-4\"><div class=\"flex flex-col gap-1\"><label for=\"feedback-category\" class=\"text-sm font-medium text-gray-700 dark:text-gray-300\">Category</label> <select id=\"feedback-category\" name=\"category\" required class=\"input-field w-full px-3 py-2 text-sm\"><option value=\"\">— select a category —</option> <option value=\"bug\">Bug</option> <option value=\"data\">Data</option> <option value=\"ui\">UI / Design</option> <option value=\"new_feature\">New Feature</option> <option value=\"performance\">Performance</option> <option value=\"other\">Other</option></select></div><div class=\"flex flex-col gap-1\"><label for=\"feedback-priority\" class=\"text-sm font-medium text-gray-700 dark:text-gray-300\">Priority</label> <select id=\"feedback-priority\" name=\"priority\" required class=\"input-field w-full px-3 py-2 text-sm\"><option value=\"\">— select a priority —</option> <option value=\"low\">Low</option> <option value=\"medium\">Medium</option> <option value=\"high\">High</option> <option value=\"critical\">Critical</option></select></div><div class=\"flex flex-col gap-1\"><label for=\"feedback-subject\" class=\"text-sm font-medium text-gray-700 dark:text-gray-300\">Subject</label> <input id=\"feedback-subject\" type=\"text\" name=\"subject\" required maxlength=\"")
+				templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 7, "<div class=\"border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-800\">")
 				if templ_7745c5c3_Err != nil {
 					return templ_7745c5c3_Err
 				}
 				var templ_7745c5c3_Var5 string
-				templ_7745c5c3_Var5, templ_7745c5c3_Err = templ.JoinStringErrs(strconv.Itoa(maxSubjectLen))
+				templ_7745c5c3_Var5, templ_7745c5c3_Err = templ.JoinStringErrs(errMsg)
 				if templ_7745c5c3_Err != nil {
-					return templ.Error{Err: templ_7745c5c3_Err, FileName: `internal/templates/feedback.templ`, Line: 73, Col: 46}
+					return templ.Error{Err: templ_7745c5c3_Err, FileName: `internal/templates/feedback.templ`, Line: 29, Col: 13}
 				}
 				_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var5))
 				if templ_7745c5c3_Err != nil {
 					return templ_7745c5c3_Err
 				}
-				templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 9, "\" placeholder=\"Brief summary of your feedback\" class=\"input-field w-full px-3 py-2 text-sm\"></div><div class=\"flex flex-col gap-1\"><label for=\"feedback-description\" class=\"text-sm font-medium text-gray-700 dark:text-gray-300\">Description</label> <textarea id=\"feedback-description\" name=\"description\" rows=\"6\" required maxlength=\"")
+				templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 8, "</div>")
+				if templ_7745c5c3_Err != nil {
+					return templ_7745c5c3_Err
+				}
+			}
+			if user == nil {
+				templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 9, "<div class=\"border border-yellow-200 bg-yellow-50 px-4 py-3 text-sm text-yellow-800 space-y-2\"><p>You must be signed in and have a verified email address to submit feedback.</p><div class=\"flex gap-3\"><a href=\"/auth/login\" class=\"btn btn-primary text-xs\">Sign In</a> <a href=\"/auth/signup\" class=\"btn btn-secondary text-xs\">Sign Up</a></div></div>")
+				if templ_7745c5c3_Err != nil {
+					return templ_7745c5c3_Err
+				}
+			} else if !user.EmailVerified {
+				templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 10, "<div class=\"border border-yellow-200 bg-yellow-50 px-4 py-3 text-sm text-yellow-800 space-y-2\"><p>Please verify your email address before submitting feedback.</p><a href=\"/auth/verify\" class=\"btn btn-primary text-xs\">Verify Email</a></div>")
+				if templ_7745c5c3_Err != nil {
+					return templ_7745c5c3_Err
+				}
+			} else if successMsg == "" {
+				templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 11, "<form method=\"POST\" action=\"/feedback\" class=\"space-y-4\"><div class=\"flex flex-col gap-1\"><label for=\"feedback-category\" class=\"text-sm font-medium text-gray-700 dark:text-gray-300\">Category</label> <select id=\"feedback-category\" name=\"category\" required class=\"input-field w-full px-3 py-2 text-sm\"><option value=\"\">— select a category —</option> <option value=\"bug\">Bug</option> <option value=\"data\">Data</option> <option value=\"ui\">UI / Design</option> <option value=\"new_feature\">New Feature</option> <option value=\"performance\">Performance</option> <option value=\"other\">Other</option></select></div><div class=\"flex flex-col gap-1\"><label for=\"feedback-priority\" class=\"text-sm font-medium text-gray-700 dark:text-gray-300\">Priority</label> <select id=\"feedback-priority\" name=\"priority\" required class=\"input-field w-full px-3 py-2 text-sm\"><option value=\"\">— select a priority —</option> <option value=\"low\">Low</option> <option value=\"medium\">Medium</option> <option value=\"high\">High</option> <option value=\"critical\">Critical</option></select></div><div class=\"flex flex-col gap-1\"><label for=\"feedback-subject\" class=\"text-sm font-medium text-gray-700 dark:text-gray-300\">Subject</label> <input id=\"feedback-subject\" type=\"text\" name=\"subject\" required maxlength=\"")
 				if templ_7745c5c3_Err != nil {
 					return templ_7745c5c3_Err
 				}
 				var templ_7745c5c3_Var6 string
-				templ_7745c5c3_Var6, templ_7745c5c3_Err = templ.JoinStringErrs(strconv.Itoa(maxDescLen))
+				templ_7745c5c3_Var6, templ_7745c5c3_Err = templ.JoinStringErrs(strconv.Itoa(maxSubjectLen))
 				if templ_7745c5c3_Err != nil {
-					return templ.Error{Err: templ_7745c5c3_Err, FileName: `internal/templates/feedback.templ`, Line: 85, Col: 43}
+					return templ.Error{Err: templ_7745c5c3_Err, FileName: `internal/templates/feedback.templ`, Line: 76, Col: 46}
 				}
 				_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var6))
 				if templ_7745c5c3_Err != nil {
 					return templ_7745c5c3_Err
 				}
-				templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 10, "\" placeholder=\"Describe your feedback in detail…\" class=\"input-field w-full px-3 py-2 text-sm resize-y\"></textarea></div><div class=\"flex justify-end\"><button type=\"submit\" class=\"btn btn-primary\">Submit Feedback</button></div></form>")
+				templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 12, "\" placeholder=\"Brief summary of your feedback\" class=\"input-field w-full px-3 py-2 text-sm\"></div><div class=\"flex flex-col gap-1\"><label for=\"feedback-description\" class=\"text-sm font-medium text-gray-700 dark:text-gray-300\">Description</label> <textarea id=\"feedback-description\" name=\"description\" rows=\"6\" required maxlength=\"")
+				if templ_7745c5c3_Err != nil {
+					return templ_7745c5c3_Err
+				}
+				var templ_7745c5c3_Var7 string
+				templ_7745c5c3_Var7, templ_7745c5c3_Err = templ.JoinStringErrs(strconv.Itoa(maxDescLen))
+				if templ_7745c5c3_Err != nil {
+					return templ.Error{Err: templ_7745c5c3_Err, FileName: `internal/templates/feedback.templ`, Line: 88, Col: 43}
+				}
+				_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var7))
+				if templ_7745c5c3_Err != nil {
+					return templ_7745c5c3_Err
+				}
+				templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 13, "\" placeholder=\"Describe your feedback in detail…\" class=\"input-field w-full px-3 py-2 text-sm resize-y\"></textarea></div><div class=\"flex justify-end\"><button type=\"submit\" class=\"btn btn-primary\">Submit Feedback</button></div></form>")
 				if templ_7745c5c3_Err != nil {
 					return templ_7745c5c3_Err
 				}
 			}
-			templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 11, "</section>")
+			templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 14, "</section>")
 			if templ_7745c5c3_Err != nil {
 				return templ_7745c5c3_Err
 			}

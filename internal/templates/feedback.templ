@@ -6,7 +6,7 @@ import (
 	"github.com/philspins/opendocket/internal/store"
 )
 
-templ FeedbackPage(ps store.ParliamentStatus, user *store.UserRow, successMsg string, errMsg string, maxSubjectLen int, maxDescLen int) {
+templ FeedbackPage(ps store.ParliamentStatus, user *store.UserRow, successMsg string, issueURL string, errMsg string, maxSubjectLen int, maxDescLen int) {
 	@Layout("Feedback", ps) {
 		<section class="surface-card p-6 space-y-6" style="max-width: 640px; margin: 0 auto;">
 			<div>
@@ -17,8 +17,11 @@ templ FeedbackPage(ps store.ParliamentStatus, user *store.UserRow, successMsg st
 				</p>
 			</div>
 			if successMsg != "" {
-				<div class="border border-green-200 bg-green-50 px-4 py-3 text-sm text-green-800">
-					{ successMsg }
+				<div class="border border-green-200 bg-green-50 px-4 py-3 text-sm text-green-800 space-y-1">
+					<p>{ successMsg }</p>
+					if issueURL != "" {
+						<p><a href={ templ.SafeURL(issueURL) } target="_blank" rel="noopener noreferrer" class="underline font-medium">View it here</a></p>
+					}
 				</div>
 			}
 			if errMsg != "" {

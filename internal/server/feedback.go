@@ -8,6 +8,7 @@ import (
 	"io"
 	"log"
 	"net/http"
+	"net/url"
 	"os"
 	"strings"
 
@@ -33,10 +34,12 @@ func (s *Server) handleFeedback(w http.ResponseWriter, r *http.Request) {
 			userPtr = &u
 		}
 		successMsg := ""
+		issueURL := ""
 		if r.URL.Query().Get("submitted") == "1" {
 			successMsg = "Thank you! Your feedback has been submitted as a GitHub issue."
+			issueURL = r.URL.Query().Get("issue_url")
 		}
-		_ = templates.FeedbackPage(ps, userPtr, successMsg, "", feedbackMaxSubjectLen, feedbackMaxDescriptionLen).Render(r.Context(), w)
+		_ = templates.FeedbackPage(ps, userPtr, successMsg, issueURL, "", feedbackMaxSubjectLen, feedbackMaxDescriptionLen).Render(r.Context(), w)
 
 	case http.MethodPost:
 		u, ok := s.auth.RequireVerifiedSessionUser(w, r)
@@ -54,15 +57,15 @@ func (s *Server) handleFeedback(w http.ResponseWriter, r *http.Request) {
 		description := strings.TrimSpace(r.FormValue("description"))
 
 		if category == "" || priority == "" || subject == "" || description == "" {
-			_ = templates.FeedbackPage(ps, &u, "", "Please fill in all fields.", feedbackMaxSubjectLen, feedbackMaxDescriptionLen).Render(r.Context(), w)
+			_ = templates.FeedbackPage(ps, &u, "", "", "Please fill in all fields.", feedbackMaxSubjectLen, feedbackMaxDescriptionLen).Render(r.Context(), w)
 			return
 		}
 		if len(subject) > feedbackMaxSubjectLen {
-			_ = templates.FeedbackPage(ps, &u, "", fmt.Sprintf("Subject must be %d characters or fewer.", feedbackMaxSubjectLen), feedbackMaxSubjectLen, feedbackMaxDescriptionLen).Render(r.Context(), w)
+			_ = templates.FeedbackPage(ps, &u, "", "", fmt.Sprintf("Subject must be %d characters or fewer.", feedbackMaxSubjectLen), feedbackMaxSubjectLen, feedbackMaxDescriptionLen).Render(r.Context(), w)
 			return
 		}
 		if len(description) > feedbackMaxDescriptionLen {
-			_ = templates.FeedbackPage(ps, &u, "", fmt.Sprintf("Description must be %d characters or fewer.", feedbackMaxDescriptionLen), feedbackMaxSubjectLen, feedbackMaxDescriptionLen).Render(r.Context(), w)
+			_ = templates.FeedbackPage(ps, &u, "", "", fmt.Sprintf("Description must be %d characters or fewer.", feedbackMaxDescriptionLen), feedbackMaxSubjectLen, feedbackMaxDescriptionLen).Render(r.Context(), w)
 			return
 		}
 
@@ -77,13 +80,18 @@ func (s *Server) handleFeedback(w http.ResponseWriter, r *http.Request) {
 		body := buildIssueBody(u.Email, categoryLabel(category), priority, description)
 		labels := []string{"feedback", categoryGitHubLabel(category)}
 
-		if err := createGitHubIssue(r.Context(), token, subject, body, labels); err != nil {
+		issueURL, err := createGitHubIssue(r.Context(), token, subject, body, labels)
+		if err != nil {
 			log.Printf("feedback: GitHub issue creation failed for user %s: %v", u.Email, err)
-			_ = templates.FeedbackPage(ps, &u, "", "Failed to submit feedback. Please try again later.", feedbackMaxSubjectLen, feedbackMaxDescriptionLen).Render(r.Context(), w)
+			_ = templates.FeedbackPage(ps, &u, "", "", "Failed to submit feedback. Please try again later.", feedbackMaxSubjectLen, feedbackMaxDescriptionLen).Render(r.Context(), w)
 			return
 		}
 
-		http.Redirect(w, r, "/feedback?submitted=1", http.StatusSeeOther)
+		redirectURL := "/feedback?submitted=1"
+		if issueURL != "" {
+			redirectURL += "&issue_url=" + url.QueryEscape(issueURL)
+		}
+		http.Redirect(w, r, redirectURL, http.StatusSeeOther)
 
 	default:
 		http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
@@ -91,7 +99,8 @@ func (s *Server) handleFeedback(w http.ResponseWriter, r *http.Request) {
 }
 
 // createGitHubIssue opens a new issue in feedbackRepo via the GitHub REST API.
-func createGitHubIssue(ctx context.Context, token, title, body string, labels []string) error {
+// It returns the HTML URL of the created issue.
+func createGitHubIssue(ctx context.Context, token, title, body string, labels []string) (string, error) {
 	payload := struct {
 		Title  string   `json:"title"`
 		Body   string   `json:"body"`
@@ -103,12 +112,12 @@ func createGitHubIssue(ctx context.Context, token, title, body string, labels []
 	}
 	data, err := json.Marshal(payload)
 	if err != nil {
-		return fmt.Errorf("marshal issue payload: %w", err)
+		return "", fmt.Errorf("marshal issue payload: %w", err)
 	}
 
 	req, err := http.NewRequestWithContext(ctx, http.MethodPost, githubIssuesAPI, bytes.NewReader(data))
 	if err != nil {
-		return fmt.Errorf("build request: %w", err)
+		return "", fmt.Errorf("build request: %w", err)
 	}
 	req.Header.Set("Authorization", "Bearer "+token)
 	req.Header.Set("Accept", "application/vnd.github+json")
@@ -117,15 +126,22 @@ func createGitHubIssue(ctx context.Context, token, title, body string, labels []
 
 	resp, err := http.DefaultClient.Do(req)
 	if err != nil {
-		return fmt.Errorf("post issue: %w", err)
+		return "", fmt.Errorf("post issue: %w", err)
 	}
 	defer resp.Body.Close()
 
+	respBody, _ := io.ReadAll(io.LimitReader(resp.Body, 4096))
 	if resp.StatusCode != http.StatusCreated {
-		snippet, _ := io.ReadAll(io.LimitReader(resp.Body, 512))
-		return fmt.Errorf("GitHub API %d: %s", resp.StatusCode, strings.TrimSpace(string(snippet)))
+		return "", fmt.Errorf("GitHub API %d: %s", resp.StatusCode, strings.TrimSpace(string(respBody)))
 	}
-	return nil
+
+	var result struct {
+		HTMLURL string `json:"html_url"`
+	}
+	if err := json.Unmarshal(respBody, &result); err != nil {
+		return "", fmt.Errorf("unmarshal response: %w", err)
+	}
+	return result.HTMLURL, nil
 }
 
 // buildIssueBody formats the feedback form fields as a GitHub Markdown issue body.
