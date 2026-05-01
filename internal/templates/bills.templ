@@ -166,7 +166,7 @@ templ billCard(b store.BillRow, subscribed bool) {
 		</div>
 		<!-- Row 2: chamber (left) + stage + date (right) -->
 		<div class="flex items-center justify-between gap-2 mb-2">
-			<span class="text-xs text-gray-500 capitalize">{ b.Chamber }</span>
+			<span class="text-xs text-gray-500">{ ChamberLabel(b.Chamber) }</span>
 			<div class="text-right">
 				<span class="text-sm font-medium text-gray-700">{ StageLabel(b.CurrentStage) }</span>
 				<span class="text-xs text-gray-500 ml-2">{ FormatDate(b.LastActivityDate) }</span>

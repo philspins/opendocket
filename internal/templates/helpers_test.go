@@ -111,6 +111,42 @@ func TestSafeExternalURL(t *testing.T) {
 	}
 }
 
+func TestChamberLabel(t *testing.T) {
+	tests := []struct {
+		input string
+		want  string
+	}{
+		// Known mappings
+		{"commons", "House of Commons"},
+		{"senate", "Senate"},
+		{"alberta", "Alberta"},
+		{"british_columbia", "British Columbia"},
+		{"manitoba", "Manitoba"},
+		{"new_brunswick", "New Brunswick"},
+		{"newfoundland_labrador", "Newfoundland and Labrador"},
+		{"nova_scotia", "Nova Scotia"},
+		{"ontario", "Ontario"},
+		{"pei", "Prince Edward Island"},
+		{"quebec", "Quebec"},
+		{"saskatchewan", "Saskatchewan"},
+		// snake_case fallback
+		{"prince_edward_island", "Prince Edward Island"},
+		{"new_south_wales", "New South Wales"},
+		// single word fallback
+		{"nunavut", "Nunavut"},
+		// empty string
+		{"", ""},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.input, func(t *testing.T) {
+			if got := ChamberLabel(tt.input); got != tt.want {
+				t.Errorf("ChamberLabel(%q) = %q, want %q", tt.input, got, tt.want)
+			}
+		})
+	}
+}
+
 func TestBillLevelLabel(t *testing.T) {
 	tests := []struct {
 		name string
