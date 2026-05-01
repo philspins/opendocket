@@ -10,7 +10,7 @@ import (
 	"time"
 
 	"github.com/PuerkitoBio/goquery"
-	"github.com/philspins/opendocket/internal/db"
+	"github.com/philspins/opendocket/internal/store"
 	"golang.org/x/sync/errgroup"
 )
 
@@ -180,7 +180,7 @@ func crawlProvinceSession(conn *sql.DB, client *http.Client, delay time.Duration
 	} else {
 		stats.BillsSeen += len(bills)
 		for _, b := range bills {
-			if err := db.UpsertBill(conn, db.Bill{
+			if err := store.UpsertBill(conn, store.BillRecord{
 				ID:               b.ID,
 				Parliament:       b.Parliament,
 				Session:          b.Session,
@@ -256,7 +256,7 @@ func crawlProvinceSession(conn *sql.DB, client *http.Client, delay time.Duration
 
 	for _, res := range divs {
 		billID := provincialBillIDFromDescription(conn, src.Code, legislature, session, res.Division.Description)
-		if err := db.UpsertDivision(conn, db.Division{
+		if err := store.UpsertDivision(conn, store.DivisionRecord{
 			ID:          res.Division.ID,
 			Parliament:  res.Division.Parliament,
 			Session:     res.Division.Session,
@@ -285,7 +285,7 @@ func crawlProvinceSession(conn *sql.DB, client *http.Client, delay time.Duration
 				stats.MemberVotesUnmatched++
 				continue
 			}
-			if err := db.UpsertMemberVote(conn, res.Division.ID, memberID, mv.Vote); err != nil {
+			if err := store.UpsertMemberVote(conn, res.Division.ID, memberID, mv.Vote); err != nil {
 				stats.Errors++
 				log.Printf("[provincial] %s member vote upsert: %v", src.Code, err)
 			} else {

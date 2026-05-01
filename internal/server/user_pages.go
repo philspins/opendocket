@@ -11,45 +11,16 @@ import (
 	"github.com/philspins/opendocket/internal/riding"
 	"github.com/philspins/opendocket/internal/store"
 	"github.com/philspins/opendocket/internal/templates"
+	"github.com/philspins/opendocket/internal/visitor"
 )
-
-const (
-	guestFederalRidingCookie    = "od_guest_federal_riding_id"
-	guestProvincialRidingCookie = "od_guest_provincial_riding_id"
-	guestRidingCookieTTL        = 24 * time.Hour
-)
-
-func localRidingUserFromCookies(r *http.Request) store.UserRow {
-	var user store.UserRow
-	if c, err := r.Cookie(guestFederalRidingCookie); err == nil {
-		user.FederalRidingID = decodeRidingCookieValue(c.Value)
-	}
-	if c, err := r.Cookie(guestProvincialRidingCookie); err == nil {
-		user.ProvincialRidingID = decodeRidingCookieValue(c.Value)
-	}
-	return user
-}
-
-func decodeRidingCookieValue(raw string) string {
-	raw = strings.TrimSpace(raw)
-	if raw == "" {
-		return ""
-	}
-	if decoded, err := url.QueryUnescape(raw); err == nil {
-		// Cookie values with spaces may be represented as quoted strings by clients.
-		cleaned := strings.TrimSpace(decoded)
-		return strings.Trim(cleaned, "\"")
-	}
-	return strings.Trim(raw, "\"")
-}
 
 func (s *Server) setLocalRidingCookies(w http.ResponseWriter, federalRidingID, provincialRidingID string) {
 	cookies := []struct {
 		name  string
 		value string
 	}{
-		{name: guestFederalRidingCookie, value: strings.TrimSpace(federalRidingID)},
-		{name: guestProvincialRidingCookie, value: strings.TrimSpace(provincialRidingID)},
+		{name: visitor.FederalRidingCookie, value: strings.TrimSpace(federalRidingID)},
+		{name: visitor.ProvincialRidingCookie, value: strings.TrimSpace(provincialRidingID)},
 	}
 	for _, c := range cookies {
 		cookieValue := url.QueryEscape(c.value)
@@ -64,7 +35,7 @@ func (s *Server) setLocalRidingCookies(w http.ResponseWriter, federalRidingID, p
 		if c.value == "" {
 			cookie.MaxAge = -1
 		} else {
-			cookie.Expires = time.Now().Add(guestRidingCookieTTL)
+			cookie.Expires = time.Now().Add(visitor.RidingCookieTTL)
 		}
 		http.SetCookie(w, cookie)
 	}
@@ -74,10 +45,10 @@ func hasLocalRidingContext(result riding.LookupResult) bool {
 	return strings.TrimSpace(result.FederalRidingID) != "" || strings.TrimSpace(result.ProvincialRidingID) != ""
 }
 
-func fallbackLookupResult(user store.UserRow, st *store.Store) riding.LookupResult {
+func fallbackLookupResult(federalRidingID, provincialRidingID string, st *store.Store) riding.LookupResult {
 	result := riding.LookupResult{
-		FederalRidingID:    strings.TrimSpace(user.FederalRidingID),
-		ProvincialRidingID: strings.TrimSpace(user.ProvincialRidingID),
+		FederalRidingID:    strings.TrimSpace(federalRidingID),
+		ProvincialRidingID: strings.TrimSpace(provincialRidingID),
 	}
 	if result.FederalRidingID != "" {
 		result.FederalRepresentative = opennorth.Representative{
@@ -264,10 +235,10 @@ func (s *Server) renderProfile(w http.ResponseWriter, r *http.Request, user stor
 			result = lookup
 		} else if lookupErr == "" {
 			log.Printf("renderProfile lookup failed for %q: %v", address, err)
-			result = fallbackLookupResult(user, s.store)
+			result = fallbackLookupResult(user.FederalRidingID, user.ProvincialRidingID, s.store)
 		}
 	} else {
-		result = fallbackLookupResult(user, s.store)
+		result = fallbackLookupResult(user.FederalRidingID, user.ProvincialRidingID, s.store)
 	}
 
 	cats, _ := s.store.GetUserCategoryPreferences(user.ID)

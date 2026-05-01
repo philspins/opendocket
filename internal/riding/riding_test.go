@@ -45,7 +45,7 @@ func TestHandleLookup_MissingAPIKeyShowsConfiguredMessage(t *testing.T) {
 func TestHandleLookup_MatchesLocalMemberID(t *testing.T) {
 	svc, _, conn := newTestRidingService(t, "fake-key")
 
-	err := odb.UpsertMember(conn, odb.Member{
+	err := store.UpsertMember(conn, store.MemberRecord{
 		ID:          "mp-1",
 		Name:        "Jane Doe",
 		Riding:      "Test District",

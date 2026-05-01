@@ -13,8 +13,8 @@ import (
 	"sync"
 	"time"
 
-	"github.com/philspins/opendocket/internal/db"
 	"github.com/philspins/opendocket/internal/scraper/provincial"
+	"github.com/philspins/opendocket/internal/store"
 	"github.com/philspins/opendocket/internal/utils"
 	"golang.org/x/sync/errgroup"
 )
@@ -47,7 +47,7 @@ func CrawlBills(conn *sql.DB, client *http.Client, delay time.Duration, rssURL s
 			time.Sleep(delay)
 		}
 
-		bill := db.Bill{
+		bill := store.BillRecord{
 			ID:               stub.ID,
 			Parliament:       parl,
 			Session:          sess,
@@ -69,11 +69,11 @@ func CrawlBills(conn *sql.DB, client *http.Client, delay time.Duration, rssURL s
 			bill.Parliament = 0
 			bill.Session = 0
 		}
-		if err := db.UpsertBill(conn, bill); err != nil {
+		if err := store.UpsertBill(conn, bill); err != nil {
 			log.Printf("[bills] upsert %s: %v", stub.ID, err)
 		}
 		for _, stage := range detail.Stages {
-			db.UpsertBillStage(conn, db.BillStage{
+			store.UpsertBillStage(conn, store.BillStageRecord{
 				BillID:  stub.ID,
 				Stage:   stage.Stage,
 				Chamber: stage.Chamber,
@@ -94,7 +94,7 @@ func CrawlMembers(conn *sql.DB, client *http.Client, delay time.Duration, apiURL
 	if err != nil {
 		return err
 	}
-	db.UpsertProfiles(conn, toDBMembers(profiles), delay)
+	store.UpsertProfiles(conn, toDBMembers(profiles), delay)
 
 	setSlugsSorted := make([]string, 0, len(ProvincialLegislatureAPIs))
 	for slug := range ProvincialLegislatureAPIs {
@@ -118,15 +118,15 @@ func CrawlMembers(conn *sql.DB, client *http.Client, delay time.Duration, apiURL
 				provProfiles = nbProfiles
 			}
 		}
-		db.UpsertProfiles(conn, toDBMembers(provProfiles), delay)
+		store.UpsertProfiles(conn, toDBMembers(provProfiles), delay)
 	}
 	return nil
 }
 
-func toDBMembers(profiles []MemberProfile) []db.Member {
-	out := make([]db.Member, 0, len(profiles))
+func toDBMembers(profiles []MemberProfile) []store.MemberRecord {
+	out := make([]store.MemberRecord, 0, len(profiles))
 	for _, profile := range profiles {
-		out = append(out, db.Member{
+		out = append(out, store.MemberRecord{
 			ID:              profile.ID,
 			Name:            profile.Name,
 			Party:           profile.Party,
@@ -152,7 +152,7 @@ func CrawlCalendar(conn *sql.DB, client *http.Client, _ time.Duration, sourceURL
 		return err
 	}
 	for _, d := range dates {
-		if err := db.UpsertSittingDate(conn, CurrentParliament, CurrentSession, d); err != nil {
+		if err := store.UpsertSittingDate(conn, CurrentParliament, CurrentSession, d); err != nil {
 			log.Printf("[calendar] upsert %s: %v", d, err)
 		}
 	}
@@ -169,12 +169,12 @@ func CrawlVotes(conn *sql.DB, client *http.Client, delay time.Duration, indexURL
 		return err
 	}
 	for _, div := range divs {
-		existed, err := db.DivisionExists(conn, div.ID)
+		existed, err := store.DivisionExists(conn, div.ID)
 		if err != nil {
 			log.Printf("[votes] exists check %s: %v", div.ID, err)
 		}
 
-		if err := db.UpsertDivision(conn, db.Division{
+		if err := store.UpsertDivision(conn, store.DivisionRecord{
 			ID:          div.ID,
 			Parliament:  div.Parliament,
 			Session:     div.Session,
@@ -194,7 +194,7 @@ func CrawlVotes(conn *sql.DB, client *http.Client, delay time.Duration, indexURL
 
 		needsDetail := !existed
 		if existed && div.DetailURL != "" {
-			hasVotes, err := db.DivisionHasVotes(conn, div.ID)
+			hasVotes, err := store.DivisionHasVotes(conn, div.ID)
 			if err != nil {
 				log.Printf("[votes] has-votes check %s: %v", div.ID, err)
 			}
@@ -206,7 +206,7 @@ func CrawlVotes(conn *sql.DB, client *http.Client, delay time.Duration, indexURL
 				log.Printf("[votes] detail error %s: %v", div.ID, err)
 			}
 			for _, v := range votes {
-				db.UpsertMemberVote(conn, v.DivisionID, v.MemberID, v.Vote)
+				store.UpsertMemberVote(conn, v.DivisionID, v.MemberID, v.Vote)
 			}
 			time.Sleep(delay)
 		}
@@ -221,12 +221,12 @@ func CrawlSenate(conn *sql.DB, client *http.Client, delay time.Duration, indexUR
 		return err
 	}
 	for _, div := range divs {
-		existed, err := db.DivisionExists(conn, div.ID)
+		existed, err := store.DivisionExists(conn, div.ID)
 		if err != nil {
 			log.Printf("[senate] exists check %s: %v", div.ID, err)
 		}
 
-		if err := db.UpsertDivision(conn, db.Division{
+		if err := store.UpsertDivision(conn, store.DivisionRecord{
 			ID:          div.ID,
 			Parliament:  div.Parliament,
 			Session:     div.Session,
@@ -246,7 +246,7 @@ func CrawlSenate(conn *sql.DB, client *http.Client, delay time.Duration, indexUR
 
 		needsDetail := !existed
 		if existed && div.DetailURL != "" {
-			hasVotes, err := db.DivisionHasVotes(conn, div.ID)
+			hasVotes, err := store.DivisionHasVotes(conn, div.ID)
 			if err != nil {
 				log.Printf("[senate] has-votes check %s: %v", div.ID, err)
 			}
@@ -258,7 +258,7 @@ func CrawlSenate(conn *sql.DB, client *http.Client, delay time.Duration, indexUR
 				log.Printf("[senate] detail error %s: %v", div.ID, err)
 			}
 			for _, v := range votes {
-				db.UpsertMemberVote(conn, v.DivisionID, v.MemberID, v.Vote)
+				store.UpsertMemberVote(conn, v.DivisionID, v.MemberID, v.Vote)
 			}
 			time.Sleep(delay)
 		}
@@ -334,7 +334,7 @@ func ensureProvincialMembersForSource(conn *sql.DB, client *http.Client, delay t
 	if len(profiles) == 0 {
 		return nil
 	}
-	db.UpsertProfiles(conn, toDBMembers(profiles), delay)
+	store.UpsertProfiles(conn, toDBMembers(profiles), delay)
 	return nil
 }
 

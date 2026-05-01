@@ -8,7 +8,7 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/philspins/opendocket/internal/db"
+	"github.com/philspins/opendocket/internal/store"
 )
 
 func TestSplitCalendarDayToken(t *testing.T) {
@@ -255,7 +255,7 @@ func TestCrawlProvinceSource_PEICrawlsAllSessionsInCurrentLegislature(t *testing
 
 	conn := newProvinceDB(t)
 	for i := 0; i < 10; i++ {
-		if err := db.UpsertMember(conn, db.Member{
+		if err := store.UpsertMember(conn, store.MemberRecord{
 			ID:              fmt.Sprintf("pe-member-%d", i),
 			Name:            fmt.Sprintf("Member %d", i),
 			Province:        "Prince Edward Island",

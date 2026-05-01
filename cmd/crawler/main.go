@@ -36,6 +36,7 @@ import (
 	"github.com/philspins/opendocket/internal/db"
 	"github.com/philspins/opendocket/internal/scheduler"
 	"github.com/philspins/opendocket/internal/scraper"
+	"github.com/philspins/opendocket/internal/store"
 	"github.com/philspins/opendocket/internal/summarizer"
 	"github.com/philspins/opendocket/internal/utils"
 )
@@ -285,7 +286,7 @@ func runAll(conn *sql.DB, client *http.Client, delay time.Duration, parallelism 
 }
 
 func runFrequentVoteCheck(conn *sql.DB, client *http.Client, delay time.Duration, votesURL string) error {
-	dates, err := db.SittingDates(conn, scraper.CurrentParliament, scraper.CurrentSession)
+	dates, err := store.SittingDates(conn, scraper.CurrentParliament, scraper.CurrentSession)
 	if err != nil {
 		return err
 	}
