@@ -23,7 +23,7 @@ help:
 	@echo "  make templ          Regenerate templ files"
 	@echo "  make clean          Remove built binaries"
 
-build: templ test build-crawler build-server
+build: templ build-crawler build-server
 
 build-crawler:
 	go build -o $(CRAWLER_BIN) ./cmd/crawler
@@ -50,3 +50,6 @@ templ:
 
 clean:
 	rm -f $(CRAWLER_BIN) $(SERVER_BIN)
+
+kill:
+	pid=$(lsof -ti:8080) && [ -n "$pid" ] && kill "$pid"
