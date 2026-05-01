@@ -18,6 +18,7 @@ import (
 	"github.com/philspins/opendocket/internal/scraper"
 	"github.com/philspins/opendocket/internal/store"
 	"github.com/philspins/opendocket/internal/templates"
+	"github.com/philspins/opendocket/internal/visitor"
 )
 
 // localRidingContextToken indicates local riding context exists without exposing
@@ -156,22 +157,13 @@ func (s *Server) handleHome(w http.ResponseWriter, r *http.Request) {
 		federalStatus   = parliamentStatusText(ps.Status)
 		provStatus      = parliamentStatusText("status_unavailable")
 	)
-	if user, ok := s.auth.SessionUser(r); ok {
-		result := fallbackLookupResult(user, s.store)
-		if hasLocalRidingContext(result) {
-			savedAddress = localRidingContextToken
-		}
-		federalRep = result.FederalRepresentative
-		provincialRep = result.ProvincialRepresentative
-	} else {
-		result := fallbackLookupResult(localRidingUserFromCookies(r), s.store)
-		if hasLocalRidingContext(result) {
-			savedAddress = localRidingContextToken
-		}
-		federalRep = result.FederalRepresentative
-		provincialRep = result.ProvincialRepresentative
-
+	v := visitor.FromRequest(r, s.auth)
+	result := fallbackLookupResult(v.FederalRidingID, v.ProvincialRidingID, s.store)
+	if hasLocalRidingContext(result) {
+		savedAddress = localRidingContextToken
 	}
+	federalRep = result.FederalRepresentative
+	provincialRep = result.ProvincialRepresentative
 	if memberID := s.resolveRepresentativeMemberID(federalRep, true); memberID != "" {
 		votes, err := s.store.GetMemberVotes(memberID, 100)
 		if err != nil {
@@ -342,15 +334,20 @@ func (s *Server) handleBills(w http.ResponseWriter, r *http.Request) {
 	q := r.URL.Query()
 	page, _ := strconv.Atoi(q.Get("page"))
 	sortParam := q.Get("sort")
+	perPage, _ := strconv.Atoi(q.Get("per_page"))
+	if perPage != 5 && perPage != 10 && perPage != 25 && perPage != 50 {
+		perPage = 10
+	}
 	f := store.BillFilter{
-		Search:  q.Get("q"),
-		Stage:   q.Get("stage"),
+		Search:   q.Get("q"),
+		Stage:    q.Get("stage"),
 		Category: q.Get("category"),
 		Chamber:  q.Get("chamber"),
 		Level:    q.Get("level"),
+		Province: q.Get("province"),
 		Sort:     sortParam,
 		Page:     page,
-		PerPage:  20,
+		PerPage:  perPage,
 	}
 
 	// For personalized "auto" sort, load the user's preferences and subscriptions.
@@ -371,7 +368,8 @@ func (s *Server) handleBills(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, "internal error", http.StatusInternalServerError)
 		return
 	}
-	_ = templates.BillsFeed(ps, bills, total, f, subscribedIDs).Render(r.Context(), w)
+	provinces, _ := s.store.ListDistinctBillProvinces()
+	_ = templates.BillsFeed(ps, bills, total, f, subscribedIDs, provinces).Render(r.Context(), w)
 }
 
 func (s *Server) handleBillDetail(w http.ResponseWriter, r *http.Request) {
@@ -394,14 +392,19 @@ func (s *Server) handleBillDetail(w http.ResponseWriter, r *http.Request) {
 }
 
 func (s *Server) handleVotes(w http.ResponseWriter, r *http.Request) {
-	page, _ := strconv.Atoi(r.URL.Query().Get("page"))
+	q := r.URL.Query()
+	page, _ := strconv.Atoi(q.Get("page"))
+	perPage, _ := strconv.Atoi(q.Get("per_page"))
+	if perPage != 5 && perPage != 10 && perPage != 25 && perPage != 50 {
+		perPage = 10
+	}
 	ps := s.parliamentStatus()
-	divs, total, err := s.store.ListDivisions(page, 50)
+	divs, total, err := s.store.ListDivisions(page, perPage)
 	if err != nil {
 		http.Error(w, "internal error", http.StatusInternalServerError)
 		return
 	}
-	_ = templates.VotesFeed(ps, divs, total, page).Render(r.Context(), w)
+	_ = templates.VotesFeed(ps, divs, total, page, perPage).Render(r.Context(), w)
 }
 
 func (s *Server) handleMembers(w http.ResponseWriter, r *http.Request) {
@@ -443,13 +446,13 @@ func (s *Server) handleCompare(w http.ResponseWriter, r *http.Request) {
 		level = "federal"
 	}
 
-	provincialMembers, err := s.store.ListMembers("", "", "", "", "provincial")
+	allMembers, err := s.store.ListMembers("", "", "", "", level)
 	if err != nil {
-		log.Printf("handleCompare: list provincial members: %v", err)
+		log.Printf("handleCompare: list members for provinces: %v", err)
 	}
-	provinces := uniqueSortedMemberFields(provincialMembers, func(m store.MemberRow) string { return m.Province })
+	provinces := uniqueSortedMemberFields(allMembers, func(m store.MemberRow) string { return m.Province })
 	province := q.Get("province")
-	if level != "provincial" || !isValidSelection(provinces, province) {
+	if !isValidSelection(provinces, province) {
 		province = ""
 	}
 

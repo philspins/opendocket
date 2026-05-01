@@ -13,7 +13,7 @@ import (
 	"github.com/philspins/opendocket/internal/store"
 )
 
-func VotesFeed(ps store.ParliamentStatus, divs []store.DivisionRow, total int, page int) templ.Component {
+func VotesFeed(ps store.ParliamentStatus, divs []store.DivisionRow, total int, page int, perPage int) templ.Component {
 	return templruntime.GeneratedTemplate(func(templ_7745c5c3_Input templruntime.GeneratedComponentInput) (templ_7745c5c3_Err error) {
 		templ_7745c5c3_W, ctx := templ_7745c5c3_Input.Writer, templ_7745c5c3_Input.Context
 		if templ_7745c5c3_CtxErr := ctx.Err(); templ_7745c5c3_CtxErr != nil {
@@ -59,7 +59,7 @@ func VotesFeed(ps store.ParliamentStatus, divs []store.DivisionRow, total int, p
 			if templ_7745c5c3_Err != nil {
 				return templ_7745c5c3_Err
 			}
-			templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 2, " total</span></div><div class=\"table-shell\"><table class=\"vote-table min-w-full text-sm\"><thead><tr><th class=\"px-4 py-3\">Date</th><th class=\"px-4 py-3\">Bill</th><th class=\"px-4 py-3\">Description</th><th class=\"px-4 py-3 text-right\">Yeas</th><th class=\"px-4 py-3 text-right\">Nays</th><th class=\"px-4 py-3\">Result</th><th class=\"px-4 py-3\">Chamber</th></tr></thead> <tbody>")
+			templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 2, " total</span></div><div class=\"table-shell vote-table-shell\"><table class=\"vote-table min-w-full text-sm\"><thead><tr><th class=\"px-4 py-3\">Date</th><th class=\"px-4 py-3\">Bill</th><th class=\"px-4 py-3\">Description</th><th class=\"px-4 py-3 text-right\">Yeas</th><th class=\"px-4 py-3 text-right\">Nays</th><th class=\"px-4 py-3\">Result</th><th class=\"px-4 py-3\">Chamber</th></tr></thead> <tbody>")
 			if templ_7745c5c3_Err != nil {
 				return templ_7745c5c3_Err
 			}
@@ -185,27 +185,27 @@ func VotesFeed(ps store.ParliamentStatus, divs []store.DivisionRow, total int, p
 				if templ_7745c5c3_Err != nil {
 					return templ_7745c5c3_Err
 				}
-				templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 14, "</td><td class=\"px-4 py-2.5 col-meta\">")
+				templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 14, "</td><td class=\"px-4 py-2.5 col-result col-meta\">")
 				if templ_7745c5c3_Err != nil {
 					return templ_7745c5c3_Err
 				}
 				var templ_7745c5c3_Var12 string
 				templ_7745c5c3_Var12, templ_7745c5c3_Err = templ.JoinStringErrs(d.Result)
 				if templ_7745c5c3_Err != nil {
-					return templ.Error{Err: templ_7745c5c3_Err, FileName: `internal/templates/votes.templ`, Line: 47, Col: 51}
+					return templ.Error{Err: templ_7745c5c3_Err, FileName: `internal/templates/votes.templ`, Line: 47, Col: 62}
 				}
 				_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var12))
 				if templ_7745c5c3_Err != nil {
 					return templ_7745c5c3_Err
 				}
-				templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 15, "</td><td class=\"px-4 py-2.5 col-meta capitalize\">")
+				templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 15, "</td><td class=\"px-4 py-2.5 col-chamber col-meta capitalize\">")
 				if templ_7745c5c3_Err != nil {
 					return templ_7745c5c3_Err
 				}
 				var templ_7745c5c3_Var13 string
 				templ_7745c5c3_Var13, templ_7745c5c3_Err = templ.JoinStringErrs(d.Chamber)
 				if templ_7745c5c3_Err != nil {
-					return templ.Error{Err: templ_7745c5c3_Err, FileName: `internal/templates/votes.templ`, Line: 48, Col: 63}
+					return templ.Error{Err: templ_7745c5c3_Err, FileName: `internal/templates/votes.templ`, Line: 48, Col: 75}
 				}
 				_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var13))
 				if templ_7745c5c3_Err != nil {
@@ -226,7 +226,7 @@ func VotesFeed(ps store.ParliamentStatus, divs []store.DivisionRow, total int, p
 			if templ_7745c5c3_Err != nil {
 				return templ_7745c5c3_Err
 			}
-			templ_7745c5c3_Err = paginationBar(NewPageInfo(page, total, 50), "/votes", "").Render(ctx, templ_7745c5c3_Buffer)
+			templ_7745c5c3_Err = serverPagination(NewPageInfo(page, total, perPage), "/votes", "").Render(ctx, templ_7745c5c3_Buffer)
 			if templ_7745c5c3_Err != nil {
 				return templ_7745c5c3_Err
 			}

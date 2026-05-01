@@ -93,16 +93,16 @@ templ MemberProfile(ps store.ParliamentStatus, member store.MemberRow, votes []s
 			<!-- Vote history -->
 			<section id="member-votes-section">
 				<h2 class="text-lg font-semibold text-gray-800 mb-3">Recent Votes</h2>
-				<div class="table-shell">
-					<table class="vote-table min-w-full text-sm">
+				<div class="table-shell vote-table-shell">
+					<table class="vote-table member-vote-table min-w-full text-sm">
 						<thead>
 							<tr>
-								<th class="px-4 py-2.5">Date</th>
-								<th class="px-4 py-2.5">Vote</th>
+								<th class="px-4 py-2.5 col-date">Date</th>
 								<th class="px-4 py-2.5">Bill</th>
 								<th class="px-4 py-2.5">Description</th>
+								<th class="px-4 py-2.5">Vote</th>
+								<th class="px-4 py-2.5 col-alignment">Alignment</th>
 								<th class="px-4 py-2.5">Result</th>
-								<th class="px-4 py-2.5">Alignment</th>
 							</tr>
 						</thead>
 						<tbody>
@@ -112,21 +112,21 @@ templ MemberProfile(ps store.ParliamentStatus, member store.MemberRow, votes []s
 									data-vote-row=""
 								>
 									<td class="px-4 py-2.5 col-date">{ FormatDate(v.Date) }</td>
-									<td class={ "px-4 py-2.5 col-vote", VoteBadgeClass(v.Vote) }>{ v.Vote }</td>
 									<td class="px-4 py-2.5 col-bill">
 										if v.BillNumber != "" {
 											<a href={ templ.SafeURL("/bills/" + v.BillID) } class="hover:underline">{ v.BillNumber }</a>
 										}
 									</td>
 									<td class="px-4 py-2.5 col-description">{ v.Description }</td>
-									<td class="px-4 py-2.5 col-meta">{ v.Result }</td>
-									<td class="px-4 py-2.5 col-meta">
+									<td class={ "px-4 py-2.5 col-vote", VoteBadgeClass(v.Vote) }>{ v.Vote }</td>
+									<td class="px-4 py-2.5 col-alignment">
 										if v.VotedWithParty {
 											<span class="vote-yea text-xs">✓ party</span>
 										} else if v.PartyMajority != "" {
 											<span class="vote-nay text-xs">✗ rebel</span>
 										}
 									</td>
+									<td class="px-4 py-2.5 col-meta">{ v.Result }</td>
 								</tr>
 							}
 							if len(votes) == 0 {

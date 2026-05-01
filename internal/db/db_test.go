@@ -6,6 +6,7 @@ import (
 	"testing"
 
 	"github.com/philspins/opendocket/internal/db"
+	"github.com/philspins/opendocket/internal/store"
 )
 
 func tempDB(t *testing.T) *sql.DB {
@@ -66,7 +67,7 @@ func TestMigrate_CreatesIndices(t *testing.T) {
 func TestUpsertMember(t *testing.T) {
 	d := tempDB(t)
 
-	m := db.Member{
+	m := store.MemberRecord{
 		ID:              "123006",
 		Name:            "Jane Doe",
 		Party:           "Liberal",
@@ -78,7 +79,7 @@ func TestUpsertMember(t *testing.T) {
 		LastScraped:     "2024-04-03T00:00:00",
 		GovernmentLevel: "federal",
 	}
-	if err := db.UpsertMember(d, m); err != nil {
+	if err := store.UpsertMember(d, m); err != nil {
 		t.Fatalf("UpsertMember: %v", err)
 	}
 
@@ -101,12 +102,12 @@ func TestUpsertMember(t *testing.T) {
 func TestUpsertMember_Updates(t *testing.T) {
 	d := tempDB(t)
 
-	base := db.Member{ID: "123006", Name: "Jane Doe", Party: "Liberal", Active: true, LastScraped: "2024-04-03"}
-	db.UpsertMember(d, base)
+	base := store.MemberRecord{ID: "123006", Name: "Jane Doe", Party: "Liberal", Active: true, LastScraped: "2024-04-03"}
+	store.UpsertMember(d, base)
 
 	updated := base
 	updated.Party = "NDP"
-	db.UpsertMember(d, updated)
+	store.UpsertMember(d, updated)
 
 	var party string
 	d.QueryRow(`SELECT party FROM members WHERE id='123006'`).Scan(&party)
@@ -118,7 +119,7 @@ func TestUpsertMember_Updates(t *testing.T) {
 func TestUpsertBill(t *testing.T) {
 	d := tempDB(t)
 
-	b := db.Bill{
+	b := store.BillRecord{
 		ID:           "45-1-c-47",
 		Parliament:   45,
 		Session:      1,
@@ -127,7 +128,7 @@ func TestUpsertBill(t *testing.T) {
 		CurrentStage: "2nd_reading",
 		LastScraped:  "2024-04-03T00:00:00",
 	}
-	if err := db.UpsertBill(d, b); err != nil {
+	if err := store.UpsertBill(d, b); err != nil {
 		t.Fatalf("UpsertBill: %v", err)
 	}
 
@@ -148,12 +149,12 @@ func TestUpsertBill_PreservesSummaries(t *testing.T) {
 	d := tempDB(t)
 
 	// Insert with LoP summary
-	b := db.Bill{ID: "45-1-c-47", Title: "Budget", SummaryLoP: "A bill.", LastScraped: "2024-04-03"}
-	db.UpsertBill(d, b)
+	b := store.BillRecord{ID: "45-1-c-47", Title: "Budget", SummaryLoP: "A bill.", LastScraped: "2024-04-03"}
+	store.UpsertBill(d, b)
 
 	// Update without summary — existing summary should be preserved
-	b2 := db.Bill{ID: "45-1-c-47", Title: "Budget (amended)", SummaryLoP: "", LastScraped: "2024-04-04"}
-	db.UpsertBill(d, b2)
+	b2 := store.BillRecord{ID: "45-1-c-47", Title: "Budget (amended)", SummaryLoP: "", LastScraped: "2024-04-04"}
+	store.UpsertBill(d, b2)
 
 	var summary string
 	d.QueryRow(`SELECT summary_lop FROM bills WHERE id='45-1-c-47'`).Scan(&summary)
@@ -166,12 +167,12 @@ func TestUpsertBill_PreservesChamberAndCategory(t *testing.T) {
 	d := tempDB(t)
 
 	// Insert with chamber and category set
-	b := db.Bill{ID: "45-1-c-47", Title: "Housing Bill", Chamber: "commons", Category: "Housing", LastScraped: "2024-04-03"}
-	db.UpsertBill(d, b)
+	b := store.BillRecord{ID: "45-1-c-47", Title: "Housing Bill", Chamber: "commons", Category: "Housing", LastScraped: "2024-04-03"}
+	store.UpsertBill(d, b)
 
 	// Re-crawl without chamber/category — they should be preserved
-	b2 := db.Bill{ID: "45-1-c-47", Title: "Housing Bill (amended)", Chamber: "", Category: "", LastScraped: "2024-04-04"}
-	db.UpsertBill(d, b2)
+	b2 := store.BillRecord{ID: "45-1-c-47", Title: "Housing Bill (amended)", Chamber: "", Category: "", LastScraped: "2024-04-04"}
+	store.UpsertBill(d, b2)
 
 	var chamber, category string
 	d.QueryRow(`SELECT chamber, category FROM bills WHERE id='45-1-c-47'`).Scan(&chamber, &category)
@@ -186,7 +187,7 @@ func TestUpsertBill_PreservesChamberAndCategory(t *testing.T) {
 func TestUpsertDivision(t *testing.T) {
 	d := tempDB(t)
 
-	div := db.Division{
+	div := store.DivisionRecord{
 		ID:          "45-1-892",
 		Parliament:  45,
 		Session:     1,
@@ -198,7 +199,7 @@ func TestUpsertDivision(t *testing.T) {
 		Chamber:     "commons",
 		LastScraped: "2024-04-03T00:00:00",
 	}
-	if err := db.UpsertDivision(d, div); err != nil {
+	if err := store.UpsertDivision(d, div); err != nil {
 		t.Fatalf("UpsertDivision: %v", err)
 	}
 
@@ -216,10 +217,10 @@ func TestUpsertMemberVote(t *testing.T) {
 	d := tempDB(t)
 
 	// Insert prerequisites
-	db.UpsertMember(d, db.Member{ID: "123006", Name: "Jane", Active: true, LastScraped: "2024"})
-	db.UpsertDivision(d, db.Division{ID: "45-1-892", Parliament: 45, Session: 1, Number: 892, LastScraped: "2024"})
+	store.UpsertMember(d, store.MemberRecord{ID: "123006", Name: "Jane", Active: true, LastScraped: "2024"})
+	store.UpsertDivision(d, store.DivisionRecord{ID: "45-1-892", Parliament: 45, Session: 1, Number: 892, LastScraped: "2024"})
 
-	if err := db.UpsertMemberVote(d, "45-1-892", "123006", "Yea"); err != nil {
+	if err := store.UpsertMemberVote(d, "45-1-892", "123006", "Yea"); err != nil {
 		t.Fatalf("UpsertMemberVote: %v", err)
 	}
 
@@ -233,11 +234,11 @@ func TestUpsertMemberVote(t *testing.T) {
 func TestUpsertMemberVote_Updates(t *testing.T) {
 	d := tempDB(t)
 
-	db.UpsertMember(d, db.Member{ID: "123006", Name: "Jane", Active: true, LastScraped: "2024"})
-	db.UpsertDivision(d, db.Division{ID: "45-1-892", Parliament: 45, Session: 1, Number: 892, LastScraped: "2024"})
+	store.UpsertMember(d, store.MemberRecord{ID: "123006", Name: "Jane", Active: true, LastScraped: "2024"})
+	store.UpsertDivision(d, store.DivisionRecord{ID: "45-1-892", Parliament: 45, Session: 1, Number: 892, LastScraped: "2024"})
 
-	db.UpsertMemberVote(d, "45-1-892", "123006", "Nay")
-	db.UpsertMemberVote(d, "45-1-892", "123006", "Yea")
+	store.UpsertMemberVote(d, "45-1-892", "123006", "Nay")
+	store.UpsertMemberVote(d, "45-1-892", "123006", "Yea")
 
 	var vote string
 	d.QueryRow(`SELECT vote FROM member_votes WHERE division_id='45-1-892' AND member_id='123006'`).Scan(&vote)
@@ -249,8 +250,8 @@ func TestUpsertMemberVote_Updates(t *testing.T) {
 func TestUpsertSittingDate_Idempotent(t *testing.T) {
 	d := tempDB(t)
 
-	db.UpsertSittingDate(d, 45, 1, "2024-04-03")
-	db.UpsertSittingDate(d, 45, 1, "2024-04-03") // duplicate — should be ignored
+	store.UpsertSittingDate(d, 45, 1, "2024-04-03")
+	store.UpsertSittingDate(d, 45, 1, "2024-04-03") // duplicate — should be ignored
 
 	var count int
 	d.QueryRow(`SELECT COUNT(1) FROM sitting_calendar WHERE date='2024-04-03'`).Scan(&count)
@@ -262,14 +263,14 @@ func TestUpsertSittingDate_Idempotent(t *testing.T) {
 func TestDivisionExists(t *testing.T) {
 	d := tempDB(t)
 
-	exists, err := db.DivisionExists(d, "45-1-999")
+	exists, err := store.DivisionExists(d, "45-1-999")
 	if err != nil || exists {
 		t.Errorf("expected false for missing division, got %v err=%v", exists, err)
 	}
 
-	db.UpsertDivision(d, db.Division{ID: "45-1-999", Parliament: 45, Session: 1, Number: 999, LastScraped: "2024"})
+	store.UpsertDivision(d, store.DivisionRecord{ID: "45-1-999", Parliament: 45, Session: 1, Number: 999, LastScraped: "2024"})
 
-	exists, err = db.DivisionExists(d, "45-1-999")
+	exists, err = store.DivisionExists(d, "45-1-999")
 	if err != nil || !exists {
 		t.Errorf("expected true after insert, got %v err=%v", exists, err)
 	}
@@ -279,10 +280,10 @@ func TestSittingDates(t *testing.T) {
 	d := tempDB(t)
 
 	for _, date := range []string{"2024-04-03", "2024-04-04", "2024-04-10"} {
-		db.UpsertSittingDate(d, 45, 1, date)
+		store.UpsertSittingDate(d, 45, 1, date)
 	}
 
-	dates, err := db.SittingDates(d, 45, 1)
+	dates, err := store.SittingDates(d, 45, 1)
 	if err != nil {
 		t.Fatalf("SittingDates: %v", err)
 	}

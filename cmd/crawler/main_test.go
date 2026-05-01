@@ -18,6 +18,7 @@ import (
 
 	"github.com/philspins/opendocket/internal/db"
 	"github.com/philspins/opendocket/internal/scraper"
+	"github.com/philspins/opendocket/internal/store"
 	"github.com/philspins/opendocket/internal/summarizer"
 )
 
@@ -65,7 +66,7 @@ func TestCrawlCalendar_PersistsDates(t *testing.T) {
 		t.Fatalf("crawlCalendar: %v", err)
 	}
 
-	dates, err := db.SittingDates(conn, scraper.CurrentParliament, scraper.CurrentSession)
+	dates, err := store.SittingDates(conn, scraper.CurrentParliament, scraper.CurrentSession)
 	if err != nil {
 		t.Fatalf("SittingDates: %v", err)
 	}
@@ -281,7 +282,7 @@ func TestCrawlVotes_StoresBillIDWhenBillExists(t *testing.T) {
 
 	conn := newDB(t)
 	// Pre-insert the referenced bill so FK constraint is satisfied.
-	db.UpsertBill(conn, db.Bill{ID: "45-1-c-47", Parliament: 45, Session: 1, Number: "C-47", Chamber: "commons"})
+	store.UpsertBill(conn, store.BillRecord{ID: "45-1-c-47", Parliament: 45, Session: 1, Number: "C-47", Chamber: "commons"})
 
 	if err := scraper.CrawlVotes(conn, srv.Client(), noDelay, srv.URL); err != nil {
 		t.Fatalf("crawlVotes: %v", err)
@@ -346,10 +347,10 @@ func TestCrawlVotes_BackfillsVotesForExistingDivision(t *testing.T) {
 
 	conn := newDB(t)
 	// Pre-insert the member so the FK constraint on member_votes is satisfied.
-	db.UpsertMember(conn, db.Member{ID: "111", Name: "Alice Smith"})
+	store.UpsertMember(conn, store.MemberRecord{ID: "111", Name: "Alice Smith"})
 	// Pre-insert the division with no member_votes — simulates a DB that was
 	// populated by a previous crawl run before vote detail scraping was fixed.
-	db.UpsertDivision(conn, db.Division{
+	store.UpsertDivision(conn, store.DivisionRecord{
 		ID: "45-1-892", Parliament: 45, Session: 1, Number: 892, Chamber: "commons",
 	})
 
@@ -438,7 +439,7 @@ func TestCrawlSenate_StoresBillIDWhenBillExists(t *testing.T) {
 
 	conn := newDB(t)
 	// Pre-insert the referenced bill so FK constraint is satisfied.
-	db.UpsertBill(conn, db.Bill{ID: "45-1-s-209", Parliament: 45, Session: 1, Number: "S-209", Chamber: "senate"})
+	store.UpsertBill(conn, store.BillRecord{ID: "45-1-s-209", Parliament: 45, Session: 1, Number: "S-209", Chamber: "senate"})
 
 	if err := scraper.CrawlSenate(conn, srv.Client(), noDelay, srv.URL); err != nil {
 		t.Fatalf("crawlSenate: %v", err)
@@ -504,9 +505,9 @@ func TestCrawlSenate_BackfillsVotesForExistingDivision(t *testing.T) {
 
 	conn := newDB(t)
 	// Pre-insert the member so the FK constraint on member_votes is satisfied.
-	db.UpsertMember(conn, db.Member{ID: "555", Name: "Bob Senator"})
+	store.UpsertMember(conn, store.MemberRecord{ID: "555", Name: "Bob Senator"})
 	// Pre-insert the division with no member_votes.
-	db.UpsertDivision(conn, db.Division{
+	store.UpsertDivision(conn, store.DivisionRecord{
 		ID: "senate-45-1-42", Parliament: 45, Session: 1, Number: 42, Chamber: "senate",
 	})
 
@@ -670,7 +671,7 @@ func TestRunFrequentVoteCheck_CrawlsVotesWhenSitting(t *testing.T) {
 	conn := newDB(t)
 	// Insert today's date as a sitting date so the check proceeds.
 	today := time.Now().UTC().Format("2006-01-02")
-	db.UpsertSittingDate(conn, scraper.CurrentParliament, scraper.CurrentSession, today)
+	store.UpsertSittingDate(conn, scraper.CurrentParliament, scraper.CurrentSession, today)
 
 	if err := runFrequentVoteCheck(conn, srv.Client(), noDelay, srv.URL); err != nil {
 		t.Fatalf("runFrequentVoteCheck: %v", err)

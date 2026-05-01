@@ -617,6 +617,174 @@ templ Layout(title string, ps store.ParliamentStatus) {
 					border-color: var(--color-border);
 				}
 
+				/* Bills filter bar */
+				.bills-filter-bar {
+					display: flex;
+					flex-wrap: wrap;
+					align-items: center;
+					gap: 0.4rem;
+					position: relative;
+				}
+
+				.sort-segment {
+					display: flex;
+					align-items: center;
+					background: var(--color-bg);
+					border: 1px solid var(--color-border);
+					border-radius: 0.625rem;
+					padding: 3px;
+					gap: 1px;
+					flex-shrink: 0;
+				}
+
+				html.dark .sort-segment {
+					background: var(--color-surface-1);
+				}
+
+				.sort-tab {
+					padding: 0.3rem 0.7rem;
+					border-radius: 0.45rem;
+					font-size: 0.8125rem;
+					font-weight: 500;
+					color: var(--color-text-secondary);
+					text-decoration: none;
+					transition: background 0.12s, color 0.12s;
+					white-space: nowrap;
+					line-height: 1.4;
+				}
+
+				.sort-tab:hover {
+					color: var(--color-text-primary);
+				}
+
+				.sort-tab.active {
+					background: var(--color-surface-1);
+					color: var(--color-text-primary);
+					box-shadow: 0 1px 3px rgba(0,0,0,0.1);
+				}
+
+				html.dark .sort-tab.active {
+					background: var(--color-surface-2);
+					box-shadow: 0 1px 4px rgba(0,0,0,0.3);
+				}
+
+				.filter-sep {
+					width: 1px;
+					height: 1.4rem;
+					background: var(--color-border);
+					flex-shrink: 0;
+					margin: 0 0.1rem;
+				}
+
+				.filter-chip {
+					display: inline-flex;
+					align-items: center;
+					gap: 0.35rem;
+					padding: 0.3rem 0.65rem;
+					background: var(--color-bg);
+					border: 1px solid var(--color-border);
+					border-radius: 9999px;
+					font-size: 0.8125rem;
+					font-weight: 500;
+					color: var(--color-text-primary);
+					text-decoration: none;
+					transition: background 0.12s;
+					white-space: nowrap;
+				}
+
+				html.dark .filter-chip {
+					background: var(--color-surface-1);
+				}
+
+				.filter-chip:hover {
+					background: var(--color-border);
+				}
+
+				.filter-chip-x {
+					opacity: 0.45;
+					font-size: 0.7rem;
+					line-height: 1;
+				}
+
+				.filter-picker {
+					position: relative;
+				}
+
+				.filter-picker summary {
+					list-style: none;
+				}
+
+				.filter-picker summary::-webkit-details-marker {
+					display: none;
+				}
+
+				.filter-add-btn {
+					display: inline-flex;
+					align-items: center;
+					gap: 0.375rem;
+					padding: 0.3rem 0.75rem;
+					background: var(--color-bg);
+					border: 1px solid var(--color-border);
+					border-radius: 9999px;
+					font-size: 0.8125rem;
+					font-weight: 500;
+					color: var(--color-text-secondary);
+					cursor: pointer;
+					transition: background 0.12s, color 0.12s;
+					white-space: nowrap;
+					user-select: none;
+				}
+
+				html.dark .filter-add-btn {
+					background: var(--color-surface-1);
+				}
+
+				.filter-add-btn:hover {
+					color: var(--color-text-primary);
+					background: var(--color-border);
+				}
+
+				.filter-picker-panel {
+					position: absolute;
+					top: calc(100% + 6px);
+					right: 0;
+					z-index: 50;
+					width: 272px;
+					background: var(--color-surface-1);
+					border: 1px solid var(--color-border);
+					border-radius: 0.875rem;
+					padding: 1rem;
+					box-shadow: 0 8px 32px rgba(0,0,0,0.14);
+				}
+
+				html.dark .filter-picker-panel {
+					box-shadow: 0 8px 32px rgba(0,0,0,0.4);
+				}
+
+				@media (max-width: 640px) {
+					.filter-picker {
+						position: static;
+					}
+					.filter-picker-panel {
+						position: absolute;
+						top: calc(100% + 6px);
+						left: 0;
+						right: 0;
+						width: auto;
+						border-radius: 0.875rem;
+					}
+				}
+
+				.filter-picker-label {
+					display: block;
+					font-size: 0.7rem;
+					font-weight: 600;
+					text-transform: uppercase;
+					letter-spacing: 0.04em;
+					color: var(--color-text-secondary);
+					margin-bottom: 0.25rem;
+				}
+
 				.metric-grid {
 					display: grid;
 					grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
@@ -764,28 +932,185 @@ templ Layout(title string, ps store.ParliamentStatus) {
 					}
 				}
 
+				/* Hamburger button */
+				.hamburger-btn {
+					display: none;
+					flex-direction: column;
+					justify-content: center;
+					align-items: center;
+					gap: 5px;
+					width: 2rem;
+					height: 2rem;
+					background: transparent;
+					border: none;
+					cursor: pointer;
+					color: rgba(255,255,255,0.85);
+					flex-shrink: 0;
+					padding: 3px;
+				}
+				.hamburger-btn span {
+					display: block;
+					width: 1.1rem;
+					height: 2px;
+					background: currentColor;
+					border-radius: 1px;
+					transition: transform 200ms ease, opacity 160ms ease;
+				}
+				html.dark .hamburger-btn {
+					color: var(--color-text-secondary);
+				}
+				.hamburger-btn[aria-expanded="true"] span:nth-child(1) {
+					transform: translateY(7px) rotate(45deg);
+				}
+				.hamburger-btn[aria-expanded="true"] span:nth-child(2) {
+					opacity: 0;
+				}
+				.hamburger-btn[aria-expanded="true"] span:nth-child(3) {
+					transform: translateY(-7px) rotate(-45deg);
+				}
+
+				/* Mobile drop-down menu */
+				.mobile-menu {
+					background: var(--color-primary);
+					border-top: 1px solid rgba(255,255,255,0.1);
+					padding: 0.4rem 1.1rem 0.9rem;
+				}
+				html.dark .mobile-menu {
+					background: var(--color-surface-1);
+					border-top-color: var(--color-border);
+				}
+				.mobile-menu-link {
+					display: block;
+					padding: 0.72rem 0;
+					font-size: 0.95rem;
+					font-weight: 600;
+					color: rgba(255,255,255,0.9);
+					text-decoration: none;
+				}
+				.mobile-menu-link:hover { color: #ffffff; }
+				html.dark .mobile-menu-link {
+					color: var(--color-text-primary);
+				}
+				/* Sign Out button inside mobile menu */
+				.mobile-menu-btn {
+					display: block;
+					width: 100%;
+					padding: 0.72rem 0;
+					font-family: "DM Sans", "Segoe UI", sans-serif;
+					font-size: 0.95rem;
+					font-weight: 600;
+					color: rgba(255,255,255,0.9);
+					background: none;
+					border: none;
+					cursor: pointer;
+					text-align: left;
+				}
+				html.dark .mobile-menu-btn {
+					color: var(--color-text-primary);
+				}
+
 				@media (max-width: 760px) {
-					.hero-panel {
-						padding: 1.2rem;
+					.hero-panel { padding: 1.2rem; }
+
+					/* Collapse to single-row nav */
+					.nav-links   { display: none !important; }
+					.search-form { display: none !important; }
+					.auth-actions { display: none !important; }
+					.nav-actions { gap: 0.4rem; flex-wrap: nowrap; width: auto; }
+					.hamburger-btn { display: flex; }
+				}
+
+				@media (min-width: 761px) {
+					.hamburger-btn { display: none !important; }
+					.mobile-menu   { display: none !important; }
+				}
+
+				/* Responsive vote table: convert to two-row card layout on small screens */
+				@media (max-width: 640px) {
+					body { overflow-x: hidden; }
+
+					/* Clip any grid overflow cleanly; no horizontal scrollbar */
+					.vote-table-shell { overflow-x: hidden; }
+
+					/* Flatten the table structure so CSS Grid can take over */
+					.vote-table,
+					.vote-table tbody,
+					.vote-table tr,
+					.vote-table th,
+					.vote-table td {
+						display: block;
 					}
 
-					.nav-actions {
+					/* Force the table to fill its container width */
+					.vote-table { width: 100%; }
+
+					/* Restore display:none for JS-hidden rows — our display:grid rule
+					   has higher specificity (0,1,1) than Tailwind's .hidden (0,1,0) */
+					.vote-table tr.hidden { display: none; }
+
+					/* Hide column headers — grid areas serve as implicit labels */
+					.vote-table thead { display: none; }
+
+					/* Each row becomes a two-line card:
+					   line 1 — date | yeas | nays | result
+					   line 2 — description (full width)
+					   bill col hidden on mobile (accessible via description link) */
+					.vote-table tr {
+						display: grid;
+						grid-template-areas:
+							"date yea nay result"
+							"desc desc desc desc";
+						grid-template-columns: 1fr auto auto auto;
+						column-gap: 0.5rem;
+						row-gap: 0.25rem;
+						padding: 0.65rem 0.75rem;
+						border-bottom: 1px solid var(--color-border);
 						width: 100%;
+						box-sizing: border-box;
 					}
 
-					.search-form {
-						flex: 1;
-						min-width: 220px;
-					}
+					.vote-table td { padding: 0 !important; min-width: 0; }
 
-					.search-form input[type="text"] {
-						flex: 1;
-						min-width: 180px;
-					}
+					.vote-table td.col-date        { grid-area: date; }
+					.vote-table td.col-bill        { display: none; }
+					.vote-table td.col-yea         { grid-area: yea; text-align: left; }
+					.vote-table td.col-nay         { grid-area: nay; text-align: left; }
+					.vote-table td.col-result      { grid-area: result; text-align: right; width: auto !important; }
+					.vote-table td.col-chamber     { display: none; }
+					.vote-table td.col-alignment   { display: none; }
 
-					.nav-links {
-						font-size: 0.87rem;
-						gap: 0.7rem;
+					/* Member profile votes: date | vote | alignment | result */
+					.member-vote-table tr {
+						grid-template-areas:
+							"date vote align result"
+							"desc desc desc  desc";
+						grid-template-columns: 1fr auto auto auto;
+					}
+					.member-vote-table td.col-vote      { grid-area: vote; width: auto !important; }
+					.member-vote-table td.col-alignment { grid-area: align; width: auto !important; display: block !important; }
+					.member-vote-table td.col-meta      { grid-area: result; text-align: right; width: auto !important; }
+
+					/* Compare page votes: date | vote1 | vote2 | result */
+					.compare-vote-table tr.hidden { display: none; }
+					.compare-vote-table tr {
+						grid-template-areas:
+							"date vote1 vote2 result"
+							"desc desc  desc  desc";
+						grid-template-columns: 1fr auto auto auto;
+					}
+					.compare-vote-table td.col-vote1 { grid-area: vote1; width: auto !important; }
+					.compare-vote-table td.col-vote2 { grid-area: vote2; width: auto !important; }
+					.compare-vote-table td.col-meta  { grid-area: result; text-align: right; width: auto !important; }
+
+					.vote-table td.col-description {
+						grid-area: desc;
+						/* Override global width:100% — grid area handles sizing */
+						width: auto !important;
+						font-size: 0.78rem;
+						line-height: 1.45;
+						color: var(--color-text-secondary);
+						overflow-wrap: break-word;
+						word-break: break-word;
 					}
 				}
 			</style>
@@ -818,6 +1143,21 @@ templ Layout(title string, ps store.ParliamentStatus) {
 							<a href="/auth/signup" class="btn btn-secondary">Sign Up</a>
 							<a href="/auth/login" class="btn btn-secondary">Login</a>
 						</div>
+						<button class="hamburger-btn" id="hamburger-btn" aria-label="Open menu" aria-expanded="false">
+							<span></span>
+							<span></span>
+							<span></span>
+						</button>
+					</div>
+				</div>
+				<div id="mobile-menu" class="mobile-menu is-hidden">
+					<a href="/bills" class="mobile-menu-link">Bills</a>
+					<a href="/votes" class="mobile-menu-link">Votes</a>
+					<a href="/members" class="mobile-menu-link">MPs</a>
+					<a href="/compare" class="mobile-menu-link">Compare</a>
+					<div id="mobile-auth-actions">
+						<a href="/auth/signup" class="mobile-menu-link">Sign Up</a>
+						<a href="/auth/login" class="mobile-menu-link">Login</a>
 					</div>
 				</div>
 			</nav>
@@ -834,6 +1174,7 @@ templ Layout(title string, ps store.ParliamentStatus) {
 				// Auth check
 				(() => {
 					const authActions = document.getElementById("auth-actions");
+					const mobileAuth = document.getElementById("mobile-auth-actions");
 					const searchForm = document.getElementById("nav-search-form");
 					if (!authActions) {
 						return;
@@ -853,11 +1194,44 @@ templ Layout(title string, ps store.ParliamentStatus) {
 					}).then((user) => {
 						if (!user) return;
 						authActions.innerHTML = "<a href=\"/profile\" class=\"btn btn-secondary\">Profile</a><form method=\"POST\" action=\"/auth/logout\"><button type=\"submit\" class=\"btn btn-secondary\">Sign Out</button></form>";
+						if (mobileAuth) {
+							const profileA = document.createElement("a");
+							profileA.href = "/profile";
+							profileA.className = "mobile-menu-link";
+							profileA.textContent = "Profile";
+							const logoutForm = document.createElement("form");
+							logoutForm.method = "POST";
+							logoutForm.action = "/auth/logout";
+							const logoutBtn = document.createElement("button");
+							logoutBtn.type = "submit";
+							logoutBtn.className = "mobile-menu-btn";
+							logoutBtn.textContent = "Sign Out";
+							logoutForm.appendChild(logoutBtn);
+							mobileAuth.replaceChildren(profileA, logoutForm);
+						}
 						if (searchForm && (user.FederalRidingID || user.ProvincialRidingID)) {
 							searchForm.style.display = "none";
 						}
 					}).catch(() => {
 						// Keep default sign up / login buttons when auth check fails.
+					});
+				})();
+
+				// Hamburger menu toggle
+				(() => {
+					const btn = document.getElementById("hamburger-btn");
+					const menu = document.getElementById("mobile-menu");
+					if (!btn || !menu) return;
+					btn.addEventListener("click", function() {
+						const isOpen = !menu.classList.contains("is-hidden");
+						menu.classList.toggle("is-hidden");
+						btn.setAttribute("aria-expanded", isOpen ? "false" : "true");
+					});
+					menu.addEventListener("click", function(e) {
+						if (e.target.tagName === "A") {
+							menu.classList.add("is-hidden");
+							btn.setAttribute("aria-expanded", "false");
+						}
 					});
 				})();
 

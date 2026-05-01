@@ -1,0 +1,42 @@
+package templates
+
+import "fmt"
+
+templ serverPagination(pi PageInfo, base string, extraParams string) {
+	if pi.Total > 1 {
+		<div class="flex flex-col sm:flex-row-reverse sm:items-center sm:justify-between gap-2 mt-4 text-sm">
+			<div class="flex items-center justify-between gap-2">
+				if pi.HasPrev {
+					<a href={ templ.SafeURL(fmt.Sprintf("%s?page=%d&per_page=%d%s", base, pi.PrevPage, pi.PerPage, extraParams)) } class="btn btn-secondary">Prev</a>
+				} else {
+					<button type="button" class="btn btn-secondary" disabled>Prev</button>
+				}
+				<div class="flex items-center gap-1">
+					for _, p := range paginationPages(pi) {
+						if p == -1 {
+							<span class="px-1 text-gray-500">...</span>
+						} else {
+							<a
+								href={ templ.SafeURL(fmt.Sprintf("%s?page=%d&per_page=%d%s", base, p, pi.PerPage, extraParams)) }
+								class={ "px-2 py-1 text-gray-700 hover:underline", templ.KV("underline font-semibold", p == pi.Current) }
+							>{ fmt.Sprint(p) }</a>
+						}
+					}
+				</div>
+				if pi.HasNext {
+					<a href={ templ.SafeURL(fmt.Sprintf("%s?page=%d&per_page=%d%s", base, pi.NextPage, pi.PerPage, extraParams)) } class="btn btn-secondary">Next</a>
+				} else {
+					<button type="button" class="btn btn-secondary" disabled>Next</button>
+				}
+			</div>
+			<div class="flex items-center justify-between sm:justify-start gap-2">
+				<label class="text-gray-600">Rows per page</label>
+				<select class="input-field py-2 pr-8" onchange="window.location.href=this.value">
+					for _, n := range []int{5, 10, 25, 50} {
+						<option value={ fmt.Sprintf("%s?page=1&per_page=%d%s", base, n, extraParams) } selected?={ pi.PerPage == n }>{ fmt.Sprint(n) }</option>
+					}
+				</select>
+			</div>
+		</div>
+	}
+}

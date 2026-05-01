@@ -6,6 +6,7 @@ import (
 	"testing"
 
 	"github.com/philspins/opendocket/internal/db"
+	"github.com/philspins/opendocket/internal/store"
 )
 
 func TestParsePDFDivisionsYeasNays_ManitobaStyle(t *testing.T) {
@@ -138,10 +139,10 @@ func TestCleanupManitobaStaleSessionDivisions(t *testing.T) {
 	}
 	defer conn.Close()
 
-	if err := db.UpsertDivision(conn, db.Division{ID: "mb-43-3-2025-04-07-2", Parliament: 43, Session: 3, Number: 2, Date: "2025-04-07", SittingURL: "https://www.gov.mb.ca/legislature/business/43rd/2nd/votes_037.pdf", LastScraped: "2026-01-01T00:00:00Z"}); err != nil {
+	if err := store.UpsertDivision(conn, store.DivisionRecord{ID: "mb-43-3-2025-04-07-2", Parliament: 43, Session: 3, Number: 2, Date: "2025-04-07", SittingURL: "https://www.gov.mb.ca/legislature/business/43rd/2nd/votes_037.pdf", LastScraped: "2026-01-01T00:00:00Z"}); err != nil {
 		t.Fatalf("insert stale division: %v", err)
 	}
-	if err := db.UpsertDivision(conn, db.Division{ID: "mb-43-3-2025-10-07-44", Parliament: 43, Session: 3, Number: 44, Date: "2025-10-07", SittingURL: "https://www.gov.mb.ca/legislature/business/43rd/3rd/votes_044.pdf", LastScraped: "2026-01-01T00:00:00Z"}); err != nil {
+	if err := store.UpsertDivision(conn, store.DivisionRecord{ID: "mb-43-3-2025-10-07-44", Parliament: 43, Session: 3, Number: 44, Date: "2025-10-07", SittingURL: "https://www.gov.mb.ca/legislature/business/43rd/3rd/votes_044.pdf", LastScraped: "2026-01-01T00:00:00Z"}); err != nil {
 		t.Fatalf("insert current division: %v", err)
 	}
 	_, err = conn.Exec(`INSERT INTO members (id, name, province, chamber, active, government_level) VALUES

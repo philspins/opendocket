@@ -335,8 +335,8 @@ func TestHandleCompare_FiltersPartiesAndCandidatesByLevelAndProvince(t *testing.
 	rrFederal := httptest.NewRecorder()
 	srv.ServeHTTP(rrFederal, reqFederal)
 	bodyFederal := rrFederal.Body.String()
-	if strings.Contains(bodyFederal, `name="province"`) {
-		t.Fatalf("expected province selector to be hidden in federal mode")
+	if !strings.Contains(bodyFederal, `name="province"`) {
+		t.Fatalf("expected province selector to always be rendered")
 	}
 	if strings.Contains(bodyFederal, `value="NDP"`) || strings.Contains(bodyFederal, `value="CAQ"`) {
 		t.Fatalf("expected provincial parties to be hidden in federal mode")
@@ -550,7 +550,7 @@ func TestHandleProfile_PostManualRidingSelectionSavesRidings(t *testing.T) {
 
 func TestHandleProfile_GetRendersManualRidingDropdowns(t *testing.T) {
 	srv, st, conn := newTestServerWithConn(t)
-	if err := db.UpsertMember(conn, db.Member{
+	if err := store.UpsertMember(conn, store.MemberRecord{
 		ID:              "mp-drop-test",
 		Name:            "Test MP",
 		Party:           "Liberal",
@@ -562,7 +562,7 @@ func TestHandleProfile_GetRendersManualRidingDropdowns(t *testing.T) {
 	}); err != nil {
 		t.Fatalf("UpsertMember federal: %v", err)
 	}
-	if err := db.UpsertMember(conn, db.Member{
+	if err := store.UpsertMember(conn, store.MemberRecord{
 		ID:              "mpp-drop-test",
 		Name:            "Test MPP",
 		Party:           "NDP",
@@ -643,7 +643,7 @@ func TestHandleRiding_UnauthenticatedSetsRidingCookies(t *testing.T) {
 
 func TestHandleHome_UsesSavedRepresentativesAndHidesLookupHero(t *testing.T) {
 	srv, st, conn := newTestServerWithConn(t)
-	if err := db.UpsertMember(conn, db.Member{
+	if err := store.UpsertMember(conn, store.MemberRecord{
 		ID:              "mp-ottawa-centre",
 		Name:            "Yasir Naqvi",
 		Party:           "Liberal",
@@ -655,7 +655,7 @@ func TestHandleHome_UsesSavedRepresentativesAndHidesLookupHero(t *testing.T) {
 	}); err != nil {
 		t.Fatalf("UpsertMember federal: %v", err)
 	}
-	if err := db.UpsertMember(conn, db.Member{
+	if err := store.UpsertMember(conn, store.MemberRecord{
 		ID:              "mpp-ottawa-south",
 		Name:            "John Fraser",
 		Party:           "Ontario Liberal Party",
@@ -708,7 +708,7 @@ func TestHandleHome_UsesSavedRepresentativesAndHidesLookupHero(t *testing.T) {
 
 func TestHandleHome_UnauthenticatedUsesRidingCookies(t *testing.T) {
 	srv, _, conn := newTestServerWithConn(t)
-	if err := db.UpsertMember(conn, db.Member{
+	if err := store.UpsertMember(conn, store.MemberRecord{
 		ID:              "mpp-london-fanshawe",
 		Name:            "Teresa J. Armstrong",
 		Party:           "Ontario NDP",
@@ -834,7 +834,7 @@ func TestHandleHome_UnauthenticatedUsesUnicodeRidingCookiesFromLookup(t *testing
 func TestHandleHome_ShowsRecentBillVotesForSelectedRepresentatives(t *testing.T) {
 	srv, st, conn := newTestServerWithConn(t)
 
-	if err := db.UpsertMember(conn, db.Member{
+	if err := store.UpsertMember(conn, store.MemberRecord{
 		ID:              "mp-1",
 		Name:            "Jane MP",
 		Riding:          "Ottawa Centre",
@@ -845,7 +845,7 @@ func TestHandleHome_ShowsRecentBillVotesForSelectedRepresentatives(t *testing.T)
 	}); err != nil {
 		t.Fatalf("UpsertMember mp-1: %v", err)
 	}
-	if err := db.UpsertMember(conn, db.Member{
+	if err := store.UpsertMember(conn, store.MemberRecord{
 		ID:              "mpp-1",
 		Name:            "John MPP",
 		Riding:          "Ottawa South",
@@ -856,7 +856,7 @@ func TestHandleHome_ShowsRecentBillVotesForSelectedRepresentatives(t *testing.T)
 	}); err != nil {
 		t.Fatalf("UpsertMember mpp-1: %v", err)
 	}
-	if err := db.UpsertMember(conn, db.Member{
+	if err := store.UpsertMember(conn, store.MemberRecord{
 		ID:              "other-1",
 		Name:            "Another MP",
 		Riding:          "Elsewhere",
@@ -868,25 +868,25 @@ func TestHandleHome_ShowsRecentBillVotesForSelectedRepresentatives(t *testing.T)
 		t.Fatalf("UpsertMember other-1: %v", err)
 	}
 
-	for _, bill := range []db.Bill{
+	for _, bill := range []store.BillRecord{
 		{ID: "bill-fed-1", Parliament: 45, Session: 1, Number: "C-1", Title: "Federal bill one", LastScraped: "2026-01-01T00:00:00Z"},
 		{ID: "bill-fed-2", Parliament: 45, Session: 1, Number: "C-2", Title: "Federal bill two", LastScraped: "2026-01-01T00:00:00Z"},
 		{ID: "bill-prov-1", Parliament: 1, Session: 1, Number: "ON-1", Title: "Provincial bill one", LastScraped: "2026-01-01T00:00:00Z"},
 		{ID: "bill-other", Parliament: 45, Session: 1, Number: "C-999", Title: "Other bill", LastScraped: "2026-01-01T00:00:00Z"},
 	} {
-		if err := db.UpsertBill(conn, bill); err != nil {
+		if err := store.UpsertBill(conn, bill); err != nil {
 			t.Fatalf("UpsertBill %s: %v", bill.ID, err)
 		}
 	}
 
-	for _, div := range []db.Division{
+	for _, div := range []store.DivisionRecord{
 		{ID: "div-fed-old", Parliament: 45, Session: 1, Number: 1, Date: "2026-01-01", BillID: "bill-fed-1", Description: "Federal bill one older vote", Result: "Passed", Chamber: "commons", LastScraped: "2026-01-01T00:00:00Z"},
 		{ID: "div-fed-new", Parliament: 45, Session: 1, Number: 2, Date: "2026-02-01", BillID: "bill-fed-1", Description: "Federal bill one latest vote", Result: "Passed", Chamber: "commons", LastScraped: "2026-01-01T00:00:00Z"},
 		{ID: "div-fed-two", Parliament: 45, Session: 1, Number: 3, Date: "2026-01-15", BillID: "bill-fed-2", Description: "Federal bill two vote", Result: "Passed", Chamber: "commons", LastScraped: "2026-01-01T00:00:00Z"},
 		{ID: "div-prov-one", Parliament: 1, Session: 1, Number: 1, Date: "2026-01-20", BillID: "bill-prov-1", Description: "Provincial bill vote", Result: "Passed", Chamber: "ontario", LastScraped: "2026-01-01T00:00:00Z"},
 		{ID: "div-other", Parliament: 45, Session: 1, Number: 4, Date: "2026-02-03", BillID: "bill-other", Description: "Unrelated member vote", Result: "Passed", Chamber: "commons", LastScraped: "2026-01-01T00:00:00Z"},
 	} {
-		if err := db.UpsertDivision(conn, div); err != nil {
+		if err := store.UpsertDivision(conn, div); err != nil {
 			t.Fatalf("UpsertDivision %s: %v", div.ID, err)
 		}
 	}
@@ -902,7 +902,7 @@ func TestHandleHome_ShowsRecentBillVotesForSelectedRepresentatives(t *testing.T)
 		{divID: "div-prov-one", memberID: "mpp-1", vote: "Yea"},
 		{divID: "div-other", memberID: "other-1", vote: "Nay"},
 	} {
-		if err := db.UpsertMemberVote(conn, mv.divID, mv.memberID, mv.vote); err != nil {
+		if err := store.UpsertMemberVote(conn, mv.divID, mv.memberID, mv.vote); err != nil {
 			t.Fatalf("UpsertMemberVote %+v: %v", mv, err)
 		}
 	}
@@ -950,7 +950,7 @@ func TestHandleHome_ShowsRecentBillVotesForSelectedRepresentatives(t *testing.T)
 
 func TestHandleHome_ShowsProvincialPlaceholderWhenOnlyFederalRidingSet(t *testing.T) {
 	srv, st, conn := newTestServerWithConn(t)
-	if err := db.UpsertMember(conn, db.Member{
+	if err := store.UpsertMember(conn, store.MemberRecord{
 		ID:              "mp-ottawa-centre-prov",
 		Name:            "Yasir Naqvi",
 		Party:           "Liberal",
@@ -995,7 +995,7 @@ func TestHandleHome_ShowsProvincialPlaceholderWhenOnlyFederalRidingSet(t *testin
 
 func TestHandleHome_ShowsFederalPlaceholderWhenOnlyProvincialRidingSet(t *testing.T) {
 	srv, st, conn := newTestServerWithConn(t)
-	if err := db.UpsertMember(conn, db.Member{
+	if err := store.UpsertMember(conn, store.MemberRecord{
 		ID:              "mpp-ottawa-south-fed",
 		Name:            "John Fraser",
 		Party:           "Ontario Liberal Party",
@@ -1096,7 +1096,7 @@ func TestRecentBillVotes_DeduplicatesAndFallsBackToNonBillDivisions(t *testing.T
 
 func TestResolveRepresentativeMemberID_DoesNotFallbackToWrongGovernmentLevel(t *testing.T) {
 	srv, _, conn := newTestServerWithConn(t)
-	for _, member := range []db.Member{
+	for _, member := range []store.MemberRecord{
 		{
 			ID:              "federal-ottawa-centre",
 			Name:            "Federal Rep",
@@ -1116,7 +1116,7 @@ func TestResolveRepresentativeMemberID_DoesNotFallbackToWrongGovernmentLevel(t *
 			LastScraped:     "2026-01-01T00:00:00Z",
 		},
 	} {
-		if err := db.UpsertMember(conn, member); err != nil {
+		if err := store.UpsertMember(conn, member); err != nil {
 			t.Fatalf("UpsertMember %s: %v", member.ID, err)
 		}
 	}
