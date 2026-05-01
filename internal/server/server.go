@@ -198,7 +198,7 @@ func (s *Server) handleHome(w http.ResponseWriter, r *http.Request) {
 			}
 		}
 	}
-	_ = templates.Home(ps, provincialVotes, federalVotes, savedAddress, federalRep, provincialRep, provStatus, federalStatus).Render(r.Context(), w)
+	_ = templates.Home(ps, provincialVotes, federalVotes, savedAddress, federalRep, provincialRep, provStatus, federalStatus, v.IsAuthenticated()).Render(r.Context(), w)
 }
 
 func provinceJurisdictionKey(province string) string {
