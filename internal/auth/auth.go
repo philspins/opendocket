@@ -22,6 +22,7 @@ type Service struct {
 	store       *store.Store
 	baseURL     string
 	emailer     verificationEmailSender
+	sesSender   generalEmailSender
 	rateLimiter *simpleRateLimiter
 	httpClient  *http.Client
 	// trustProxy enables reading client IP from X-Forwarded-For / X-Real-IP.
@@ -33,6 +34,11 @@ type Service struct {
 
 type verificationEmailSender interface {
 	SendVerificationEmail(ctx context.Context, toEmail, verifyURL, code string) error
+}
+
+// generalEmailSender is a minimal interface for sending arbitrary emails via SES.
+type generalEmailSender interface {
+	SendEmail(ctx context.Context, toEmail, subject, textBody, htmlBody string) error
 }
 
 type sesVerificationSender struct {
@@ -47,6 +53,13 @@ func (s *sesVerificationSender) SendVerificationEmail(ctx context.Context, toEma
 	subject := "Open Docket verification code"
 	bodyText := fmt.Sprintf("Use this code to verify your email: %s\n\nOr verify with this link: %s\n\nIf you did not request this, you can ignore this email.", code, verifyURL)
 	bodyHTML := fmt.Sprintf("<p>Use this code to verify your email:</p><p><strong>%s</strong></p><p>Or verify with this link: <a href=\"%s\">Verify email</a></p><p>If you did not request this, you can ignore this email.</p>", code, verifyURL)
+	return s.SendEmail(ctx, toEmail, subject, bodyText, bodyHTML)
+}
+
+func (s *sesVerificationSender) SendEmail(ctx context.Context, toEmail, subject, textBody, htmlBody string) error {
+	if s == nil || s.client == nil || s.fromEmail == "" {
+		return fmt.Errorf("ses sender not configured")
+	}
 	_, err := s.client.SendEmail(ctx, &sesv2.SendEmailInput{
 		FromEmailAddress: aws.String(s.fromEmail),
 		Destination: &types.Destination{
@@ -56,8 +69,8 @@ func (s *sesVerificationSender) SendVerificationEmail(ctx context.Context, toEma
 			Simple: &types.Message{
 				Subject: &types.Content{Data: aws.String(subject), Charset: aws.String("UTF-8")},
 				Body: &types.Body{
-					Text: &types.Content{Data: aws.String(bodyText), Charset: aws.String("UTF-8")},
-					Html: &types.Content{Data: aws.String(bodyHTML), Charset: aws.String("UTF-8")},
+					Text: &types.Content{Data: aws.String(textBody), Charset: aws.String("UTF-8")},
+					Html: &types.Content{Data: aws.String(htmlBody), Charset: aws.String("UTF-8")},
 				},
 			},
 		},
@@ -72,13 +85,16 @@ func New(st *store.Store, baseURL string) *Service {
 	baseURL = strings.TrimRight(baseURL, "/")
 
 	var emailer verificationEmailSender
+	var sesSender generalEmailSender
 	fromEmail := strings.TrimSpace(os.Getenv("SES_FROM_EMAIL"))
 	if fromEmail != "" {
 		cfg, err := awsconfig.LoadDefaultConfig(context.Background())
 		if err != nil {
 			log.Printf("ses config load failed: %v", err)
 		} else {
-			emailer = &sesVerificationSender{client: sesv2.NewFromConfig(cfg), fromEmail: fromEmail}
+			sender := &sesVerificationSender{client: sesv2.NewFromConfig(cfg), fromEmail: fromEmail}
+			emailer = sender
+			sesSender = sender
 		}
 	}
 
@@ -86,6 +102,7 @@ func New(st *store.Store, baseURL string) *Service {
 		store:       st,
 		baseURL:     baseURL,
 		emailer:     emailer,
+		sesSender:   sesSender,
 		rateLimiter: newSimpleRateLimiter(),
 		httpClient:  &http.Client{Timeout: 10 * time.Second},
 		trustProxy:  strings.ToLower(strings.TrimSpace(os.Getenv("TRUST_PROXY"))) == "true",
@@ -147,4 +164,14 @@ func (s *Service) rateLimitAllowed(key string, limit int, window time.Duration) 
 		return true
 	}
 	return s.rateLimiter.allow(key, limit, window, time.Now().UTC())
+}
+
+// SendEmail sends a plain email via SES using the configured from address.
+// Returns an error when SES is not configured or the send fails.
+// Callers should log and tolerate errors gracefully.
+func (s *Service) SendEmail(ctx context.Context, toEmail, subject, textBody, htmlBody string) error {
+	if s.sesSender == nil {
+		return fmt.Errorf("ses not configured")
+	}
+	return s.sesSender.SendEmail(ctx, toEmail, subject, textBody, htmlBody)
 }
