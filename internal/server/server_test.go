@@ -335,8 +335,8 @@ func TestHandleCompare_FiltersPartiesAndCandidatesByLevelAndProvince(t *testing.
 	rrFederal := httptest.NewRecorder()
 	srv.ServeHTTP(rrFederal, reqFederal)
 	bodyFederal := rrFederal.Body.String()
-	if strings.Contains(bodyFederal, `name="province"`) {
-		t.Fatalf("expected province selector to be hidden in federal mode")
+	if !strings.Contains(bodyFederal, `name="province"`) {
+		t.Fatalf("expected province selector to always be rendered")
 	}
 	if strings.Contains(bodyFederal, `value="NDP"`) || strings.Contains(bodyFederal, `value="CAQ"`) {
 		t.Fatalf("expected provincial parties to be hidden in federal mode")

@@ -46,8 +46,8 @@ func TestHandleSignupPage_RendersOAuthWidgetsAndFallbacks(t *testing.T) {
 	if !strings.Contains(body, `src="https://accounts.google.com/gsi/client"`) {
 		t.Fatalf("expected gsi/client loaded without custom onload param")
 	}
-	if !strings.Contains(body, "fb:login-button") {
-		t.Fatalf("expected facebook widget tag")
+	if !strings.Contains(body, "odFacebookWidgetLogin") {
+		t.Fatalf("expected facebook sign-in button")
 	}
 	if !strings.Contains(body, "window.fbAsyncInit") {
 		t.Fatalf("expected fbAsyncInit callback function")
@@ -115,8 +115,8 @@ func TestHandleLoginPage_RendersLoginVariant(t *testing.T) {
 	if !strings.Contains(body, "Welcome Back") {
 		t.Fatalf("expected login heading in page body")
 	}
-	if !strings.Contains(body, "signin_with") {
-		t.Fatalf("expected login-specific google widget text")
+	if !strings.Contains(body, "Sign in with Google") {
+		t.Fatalf("expected login-specific google button text")
 	}
 }
 
