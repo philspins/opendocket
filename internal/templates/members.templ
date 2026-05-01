@@ -41,20 +41,23 @@ templ MembersDirectory(ps store.ParliamentStatus, members []store.MemberRow, sea
 				</div>
 			</form>
 
-			<div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
-				for _, m := range members {
-					@memberCard(m)
-				}
-				if len(members) == 0 {
-					<div class="col-span-3 text-center py-12 text-gray-500">No members found.</div>
-				}
-			</div>
+			<section id="members-section">
+				<div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
+					for _, m := range members {
+						@memberCard(m)
+					}
+					if len(members) == 0 {
+						<div class="col-span-3 text-center py-12 text-gray-500">No members found.</div>
+					}
+				</div>
+				@VotesPagination("members", "[data-member-card]", 10)
+			</section>
 		</div>
 	}
 }
 
 templ memberCard(m store.MemberRow) {
-	<a href={ templ.SafeURL("/members/" + m.ID) } class="surface-card block p-4">
+	<a href={ templ.SafeURL("/members/" + m.ID) } class="surface-card block p-4" data-member-card="">
 		<div class="flex items-center gap-3">
 			if m.PhotoURL != "" {
 				<img src={ m.PhotoURL } alt={ m.Name } class="w-12 h-12 rounded-full object-cover flex-shrink-0"/>
@@ -63,8 +66,8 @@ templ memberCard(m store.MemberRow) {
 					{ string([]rune(m.Name)[0:1]) }
 				</div>
 			}
-			<div class="min-w-0">
-				<div class="flex items-center gap-2">
+			<div class="flex-1 min-w-0">
+				<div class="flex items-center justify-between gap-2">
 					<p class="font-medium text-gray-900 truncate">{ m.Name }</p>
 					@GovernmentLevelBadge(m.GovernmentLevel)
 				</div>

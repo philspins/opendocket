@@ -46,7 +46,7 @@ func CompareMPs(ps store.ParliamentStatus, members []store.MemberRow, m1, m2 sto
 				}()
 			}
 			ctx = templ.InitializeContext(ctx)
-			templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 1, "<div class=\"space-y-6\"><h1 class=\"text-2xl font-bold text-gray-900\">Compare MPs</h1><form id=\"compare-form\" method=\"GET\" action=\"/compare\" class=\"filter-shell w-full\"><div class=\"flex gap-3 items-end w-full\"><!-- 4-column grid: col1+col2 = Rep1 width, col3+col4 = Rep2 width --><div class=\"flex-1\" style=\"display:grid; grid-template-columns:repeat(4,1fr); gap:0.75rem\"><div style=\"grid-column:1; grid-row:1\"><label class=\"text-xs text-gray-500 block mb-1\">Government level</label> <select name=\"level\" class=\"input-field px-3 py-1.5 text-sm w-full\" onchange=\"this.form.submit()\"><option value=\"federal\"")
+			templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 1, "<div class=\"space-y-6\"><h1 class=\"text-2xl font-bold text-gray-900\">Compare MPs</h1><form id=\"compare-form\" method=\"GET\" action=\"/compare\" class=\"filter-shell w-full\"><div class=\"grid grid-cols-2 sm:grid-cols-4 gap-2 w-full\"><div><label class=\"text-xs text-gray-500 block mb-1\">Government level</label> <select name=\"level\" class=\"input-field px-3 py-1.5 text-sm w-full\" onchange=\"this.form.submit()\"><option value=\"federal\"")
 			if templ_7745c5c3_Err != nil {
 				return templ_7745c5c3_Err
 			}
@@ -66,73 +66,73 @@ func CompareMPs(ps store.ParliamentStatus, members []store.MemberRow, m1, m2 sto
 					return templ_7745c5c3_Err
 				}
 			}
-			templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 5, ">Provincial</option></select></div><div style=\"grid-column:2; grid-row:1\"><label class=\"text-xs text-gray-500 block mb-1\">Province</label> <select name=\"province\" class=\"input-field px-3 py-1.5 text-sm w-full\"")
+			templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 5, ">Provincial</option></select></div>")
 			if templ_7745c5c3_Err != nil {
 				return templ_7745c5c3_Err
 			}
-			if level != "provincial" {
-				templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 6, " disabled")
+			if level == "provincial" {
+				templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 6, "<div><label class=\"text-xs text-gray-500 block mb-1\">Province</label> <select name=\"province\" class=\"input-field px-3 py-1.5 text-sm w-full\" onchange=\"this.form.submit()\"><option value=\"\"")
 				if templ_7745c5c3_Err != nil {
 					return templ_7745c5c3_Err
 				}
-			}
-			templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 7, " onchange=\"this.form.submit()\"><option value=\"\"")
-			if templ_7745c5c3_Err != nil {
-				return templ_7745c5c3_Err
-			}
-			if province == "" {
-				templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 8, " selected")
-				if templ_7745c5c3_Err != nil {
-					return templ_7745c5c3_Err
-				}
-			}
-			templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 9, ">All provinces</option> ")
-			if templ_7745c5c3_Err != nil {
-				return templ_7745c5c3_Err
-			}
-			for _, pv := range provinces {
-				templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 10, "<option value=\"")
-				if templ_7745c5c3_Err != nil {
-					return templ_7745c5c3_Err
-				}
-				var templ_7745c5c3_Var3 string
-				templ_7745c5c3_Var3, templ_7745c5c3_Err = templ.JoinStringErrs(pv)
-				if templ_7745c5c3_Err != nil {
-					return templ.Error{Err: templ_7745c5c3_Err, FileName: `internal/templates/compare.templ`, Line: 29, Col: 27}
-				}
-				_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var3))
-				if templ_7745c5c3_Err != nil {
-					return templ_7745c5c3_Err
-				}
-				templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 11, "\"")
-				if templ_7745c5c3_Err != nil {
-					return templ_7745c5c3_Err
-				}
-				if province == pv {
-					templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 12, " selected")
+				if province == "" {
+					templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 7, " selected")
 					if templ_7745c5c3_Err != nil {
 						return templ_7745c5c3_Err
 					}
 				}
-				templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 13, ">")
+				templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 8, ">All provinces</option> ")
 				if templ_7745c5c3_Err != nil {
 					return templ_7745c5c3_Err
 				}
-				var templ_7745c5c3_Var4 string
-				templ_7745c5c3_Var4, templ_7745c5c3_Err = templ.JoinStringErrs(pv)
-				if templ_7745c5c3_Err != nil {
-					return templ.Error{Err: templ_7745c5c3_Err, FileName: `internal/templates/compare.templ`, Line: 29, Col: 63}
+				for _, pv := range provinces {
+					templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 9, "<option value=\"")
+					if templ_7745c5c3_Err != nil {
+						return templ_7745c5c3_Err
+					}
+					var templ_7745c5c3_Var3 string
+					templ_7745c5c3_Var3, templ_7745c5c3_Err = templ.JoinStringErrs(pv)
+					if templ_7745c5c3_Err != nil {
+						return templ.Error{Err: templ_7745c5c3_Err, FileName: `internal/templates/compare.templ`, Line: 28, Col: 27}
+					}
+					_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var3))
+					if templ_7745c5c3_Err != nil {
+						return templ_7745c5c3_Err
+					}
+					templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 10, "\"")
+					if templ_7745c5c3_Err != nil {
+						return templ_7745c5c3_Err
+					}
+					if province == pv {
+						templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 11, " selected")
+						if templ_7745c5c3_Err != nil {
+							return templ_7745c5c3_Err
+						}
+					}
+					templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 12, ">")
+					if templ_7745c5c3_Err != nil {
+						return templ_7745c5c3_Err
+					}
+					var templ_7745c5c3_Var4 string
+					templ_7745c5c3_Var4, templ_7745c5c3_Err = templ.JoinStringErrs(pv)
+					if templ_7745c5c3_Err != nil {
+						return templ.Error{Err: templ_7745c5c3_Err, FileName: `internal/templates/compare.templ`, Line: 28, Col: 63}
+					}
+					_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var4))
+					if templ_7745c5c3_Err != nil {
+						return templ_7745c5c3_Err
+					}
+					templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 13, "</option>")
+					if templ_7745c5c3_Err != nil {
+						return templ_7745c5c3_Err
+					}
 				}
-				_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var4))
-				if templ_7745c5c3_Err != nil {
-					return templ_7745c5c3_Err
-				}
-				templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 14, "</option>")
+				templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 14, "</select></div>")
 				if templ_7745c5c3_Err != nil {
 					return templ_7745c5c3_Err
 				}
 			}
-			templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 15, "</select></div><div style=\"grid-column:3/span 2; grid-row:1\"><label class=\"text-xs text-gray-500 block mb-1\">Party</label> <select name=\"party\" class=\"input-field px-3 py-1.5 text-sm w-full\" onchange=\"this.form.submit()\"><option value=\"\"")
+			templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 15, "<div class=\"col-span-2\"><label class=\"text-xs text-gray-500 block mb-1\">Party</label> <select name=\"party\" class=\"input-field px-3 py-1.5 text-sm w-full\" onchange=\"this.form.submit()\"><option value=\"\"")
 			if templ_7745c5c3_Err != nil {
 				return templ_7745c5c3_Err
 			}
@@ -154,7 +154,7 @@ func CompareMPs(ps store.ParliamentStatus, members []store.MemberRow, m1, m2 sto
 				var templ_7745c5c3_Var5 string
 				templ_7745c5c3_Var5, templ_7745c5c3_Err = templ.JoinStringErrs(p)
 				if templ_7745c5c3_Err != nil {
-					return templ.Error{Err: templ_7745c5c3_Err, FileName: `internal/templates/compare.templ`, Line: 38, Col: 26}
+					return templ.Error{Err: templ_7745c5c3_Err, FileName: `internal/templates/compare.templ`, Line: 38, Col: 25}
 				}
 				_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var5))
 				if templ_7745c5c3_Err != nil {
@@ -177,7 +177,7 @@ func CompareMPs(ps store.ParliamentStatus, members []store.MemberRow, m1, m2 sto
 				var templ_7745c5c3_Var6 string
 				templ_7745c5c3_Var6, templ_7745c5c3_Err = templ.JoinStringErrs(p)
 				if templ_7745c5c3_Err != nil {
-					return templ.Error{Err: templ_7745c5c3_Err, FileName: `internal/templates/compare.templ`, Line: 38, Col: 57}
+					return templ.Error{Err: templ_7745c5c3_Err, FileName: `internal/templates/compare.templ`, Line: 38, Col: 56}
 				}
 				_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var6))
 				if templ_7745c5c3_Err != nil {
@@ -188,7 +188,7 @@ func CompareMPs(ps store.ParliamentStatus, members []store.MemberRow, m1, m2 sto
 					return templ_7745c5c3_Err
 				}
 			}
-			templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 23, "</select></div><div style=\"grid-column:1/span 2; grid-row:2\"><label class=\"text-xs text-gray-500 block mb-1\">Representative 1</label> <select name=\"a\" class=\"input-field px-3 py-1.5 text-sm w-full\" onchange=\"this.form.submit()\"><option value=\"\">Select a representative</option> ")
+			templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 23, "</select></div><div class=\"col-span-2\"><label class=\"text-xs text-gray-500 block mb-1\">Representative 1</label> <select name=\"a\" class=\"input-field px-3 py-1.5 text-sm w-full\" onchange=\"this.form.submit()\"><option value=\"\">Select a representative</option> ")
 			if templ_7745c5c3_Err != nil {
 				return templ_7745c5c3_Err
 			}
@@ -200,7 +200,7 @@ func CompareMPs(ps store.ParliamentStatus, members []store.MemberRow, m1, m2 sto
 				var templ_7745c5c3_Var7 string
 				templ_7745c5c3_Var7, templ_7745c5c3_Err = templ.JoinStringErrs(m.ID)
 				if templ_7745c5c3_Err != nil {
-					return templ.Error{Err: templ_7745c5c3_Err, FileName: `internal/templates/compare.templ`, Line: 47, Col: 29}
+					return templ.Error{Err: templ_7745c5c3_Err, FileName: `internal/templates/compare.templ`, Line: 47, Col: 28}
 				}
 				_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var7))
 				if templ_7745c5c3_Err != nil {
@@ -223,7 +223,7 @@ func CompareMPs(ps store.ParliamentStatus, members []store.MemberRow, m1, m2 sto
 				var templ_7745c5c3_Var8 string
 				templ_7745c5c3_Var8, templ_7745c5c3_Err = templ.JoinStringErrs(m.Name)
 				if templ_7745c5c3_Err != nil {
-					return templ.Error{Err: templ_7745c5c3_Err, FileName: `internal/templates/compare.templ`, Line: 47, Col: 68}
+					return templ.Error{Err: templ_7745c5c3_Err, FileName: `internal/templates/compare.templ`, Line: 47, Col: 67}
 				}
 				_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var8))
 				if templ_7745c5c3_Err != nil {
@@ -236,7 +236,7 @@ func CompareMPs(ps store.ParliamentStatus, members []store.MemberRow, m1, m2 sto
 				var templ_7745c5c3_Var9 string
 				templ_7745c5c3_Var9, templ_7745c5c3_Err = templ.JoinStringErrs(m.Party)
 				if templ_7745c5c3_Err != nil {
-					return templ.Error{Err: templ_7745c5c3_Err, FileName: `internal/templates/compare.templ`, Line: 47, Col: 81}
+					return templ.Error{Err: templ_7745c5c3_Err, FileName: `internal/templates/compare.templ`, Line: 47, Col: 80}
 				}
 				_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var9))
 				if templ_7745c5c3_Err != nil {
@@ -247,7 +247,7 @@ func CompareMPs(ps store.ParliamentStatus, members []store.MemberRow, m1, m2 sto
 					return templ_7745c5c3_Err
 				}
 			}
-			templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 30, "</select></div><div style=\"grid-column:3/span 2; grid-row:2\"><label class=\"text-xs text-gray-500 block mb-1\">Representative 2</label> <select name=\"b\" class=\"input-field px-3 py-1.5 text-sm w-full\" onchange=\"this.form.submit()\"><option value=\"\">Select a representative</option> ")
+			templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 30, "</select></div><div class=\"col-span-2\"><label class=\"text-xs text-gray-500 block mb-1\">Representative 2</label> <select name=\"b\" class=\"input-field px-3 py-1.5 text-sm w-full\" onchange=\"this.form.submit()\"><option value=\"\">Select a representative</option> ")
 			if templ_7745c5c3_Err != nil {
 				return templ_7745c5c3_Err
 			}
@@ -259,7 +259,7 @@ func CompareMPs(ps store.ParliamentStatus, members []store.MemberRow, m1, m2 sto
 				var templ_7745c5c3_Var10 string
 				templ_7745c5c3_Var10, templ_7745c5c3_Err = templ.JoinStringErrs(m.ID)
 				if templ_7745c5c3_Err != nil {
-					return templ.Error{Err: templ_7745c5c3_Err, FileName: `internal/templates/compare.templ`, Line: 56, Col: 29}
+					return templ.Error{Err: templ_7745c5c3_Err, FileName: `internal/templates/compare.templ`, Line: 56, Col: 28}
 				}
 				_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var10))
 				if templ_7745c5c3_Err != nil {
@@ -282,7 +282,7 @@ func CompareMPs(ps store.ParliamentStatus, members []store.MemberRow, m1, m2 sto
 				var templ_7745c5c3_Var11 string
 				templ_7745c5c3_Var11, templ_7745c5c3_Err = templ.JoinStringErrs(m.Name)
 				if templ_7745c5c3_Err != nil {
-					return templ.Error{Err: templ_7745c5c3_Err, FileName: `internal/templates/compare.templ`, Line: 56, Col: 68}
+					return templ.Error{Err: templ_7745c5c3_Err, FileName: `internal/templates/compare.templ`, Line: 56, Col: 67}
 				}
 				_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var11))
 				if templ_7745c5c3_Err != nil {
@@ -295,7 +295,7 @@ func CompareMPs(ps store.ParliamentStatus, members []store.MemberRow, m1, m2 sto
 				var templ_7745c5c3_Var12 string
 				templ_7745c5c3_Var12, templ_7745c5c3_Err = templ.JoinStringErrs(m.Party)
 				if templ_7745c5c3_Err != nil {
-					return templ.Error{Err: templ_7745c5c3_Err, FileName: `internal/templates/compare.templ`, Line: 56, Col: 81}
+					return templ.Error{Err: templ_7745c5c3_Err, FileName: `internal/templates/compare.templ`, Line: 56, Col: 80}
 				}
 				_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var12))
 				if templ_7745c5c3_Err != nil {
@@ -306,7 +306,7 @@ func CompareMPs(ps store.ParliamentStatus, members []store.MemberRow, m1, m2 sto
 					return templ_7745c5c3_Err
 				}
 			}
-			templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 37, "</select></div></div><!-- Clear link: aligned to bottom of flex row = bottom of Rep row --><a href=\"/compare\" class=\"text-sm text-gray-500 hover:underline shrink-0 self-end pb-[0.44rem]\">Clear</a></div></form>")
+			templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 37, "</select></div></div><div class=\"flex justify-end w-full\"><a href=\"/compare\" class=\"text-sm text-gray-500 hover:underline\">Clear</a></div></form>")
 			if templ_7745c5c3_Err != nil {
 				return templ_7745c5c3_Err
 			}
@@ -377,7 +377,7 @@ func CompareMPs(ps store.ParliamentStatus, members []store.MemberRow, m1, m2 sto
 						return templ_7745c5c3_Err
 					}
 				}
-				templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 45, "</div><section id=\"compare-votes-section\"><h2 class=\"text-lg font-semibold text-gray-800 mb-3\">Votes in Common</h2><div class=\"table-shell\"><table class=\"vote-table min-w-full text-sm\"><thead><tr><th class=\"px-4 py-2.5\">Date</th><th class=\"px-4 py-2.5\">Bill</th><th class=\"px-4 py-2.5\">Description</th><th class=\"px-4 py-2.5\">Result</th><th class=\"px-4 py-2.5\">")
+				templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 45, "</div><section id=\"compare-votes-section\"><h2 class=\"text-lg font-semibold text-gray-800 mb-3\">Votes in Common</h2><div class=\"table-shell vote-table-shell\"><table class=\"vote-table compare-vote-table min-w-full text-sm\"><thead><tr><th class=\"px-4 py-2.5\">Date</th><th class=\"px-4 py-2.5\">Bill</th><th class=\"px-4 py-2.5\">Description</th><th class=\"px-4 py-2.5\">Result</th><th class=\"px-4 py-2.5\">")
 				if templ_7745c5c3_Err != nil {
 					return templ_7745c5c3_Err
 				}
@@ -475,14 +475,14 @@ func CompareMPs(ps store.ParliamentStatus, members []store.MemberRow, m1, m2 sto
 							return templ_7745c5c3_Err
 						}
 					}
-					templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 54, "</td><td class=\"px-4 py-2.5 col-description max-w-xs truncate\">")
+					templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 54, "</td><td class=\"px-4 py-2.5 col-description\">")
 					if templ_7745c5c3_Err != nil {
 						return templ_7745c5c3_Err
 					}
 					var templ_7745c5c3_Var23 string
 					templ_7745c5c3_Var23, templ_7745c5c3_Err = templ.JoinStringErrs(v.Description)
 					if templ_7745c5c3_Err != nil {
-						return templ.Error{Err: templ_7745c5c3_Err, FileName: `internal/templates/compare.templ`, Line: 108, Col: 83}
+						return templ.Error{Err: templ_7745c5c3_Err, FileName: `internal/templates/compare.templ`, Line: 108, Col: 65}
 					}
 					_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var23))
 					if templ_7745c5c3_Err != nil {
@@ -505,7 +505,7 @@ func CompareMPs(ps store.ParliamentStatus, members []store.MemberRow, m1, m2 sto
 					if templ_7745c5c3_Err != nil {
 						return templ_7745c5c3_Err
 					}
-					var templ_7745c5c3_Var25 = []any{"px-4 py-2.5", VoteBadgeClass(v.Member1Vote)}
+					var templ_7745c5c3_Var25 = []any{"px-4 py-2.5 col-vote1", VoteBadgeClass(v.Member1Vote)}
 					templ_7745c5c3_Err = templ.RenderCSSItems(ctx, templ_7745c5c3_Buffer, templ_7745c5c3_Var25...)
 					if templ_7745c5c3_Err != nil {
 						return templ_7745c5c3_Err
@@ -530,7 +530,7 @@ func CompareMPs(ps store.ParliamentStatus, members []store.MemberRow, m1, m2 sto
 					var templ_7745c5c3_Var27 string
 					templ_7745c5c3_Var27, templ_7745c5c3_Err = templ.JoinStringErrs(v.Member1Vote)
 					if templ_7745c5c3_Err != nil {
-						return templ.Error{Err: templ_7745c5c3_Err, FileName: `internal/templates/compare.templ`, Line: 110, Col: 84}
+						return templ.Error{Err: templ_7745c5c3_Err, FileName: `internal/templates/compare.templ`, Line: 110, Col: 94}
 					}
 					_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var27))
 					if templ_7745c5c3_Err != nil {
@@ -540,7 +540,7 @@ func CompareMPs(ps store.ParliamentStatus, members []store.MemberRow, m1, m2 sto
 					if templ_7745c5c3_Err != nil {
 						return templ_7745c5c3_Err
 					}
-					var templ_7745c5c3_Var28 = []any{"px-4 py-2.5", VoteBadgeClass(v.Member2Vote)}
+					var templ_7745c5c3_Var28 = []any{"px-4 py-2.5 col-vote2", VoteBadgeClass(v.Member2Vote)}
 					templ_7745c5c3_Err = templ.RenderCSSItems(ctx, templ_7745c5c3_Buffer, templ_7745c5c3_Var28...)
 					if templ_7745c5c3_Err != nil {
 						return templ_7745c5c3_Err
@@ -565,7 +565,7 @@ func CompareMPs(ps store.ParliamentStatus, members []store.MemberRow, m1, m2 sto
 					var templ_7745c5c3_Var30 string
 					templ_7745c5c3_Var30, templ_7745c5c3_Err = templ.JoinStringErrs(v.Member2Vote)
 					if templ_7745c5c3_Err != nil {
-						return templ.Error{Err: templ_7745c5c3_Err, FileName: `internal/templates/compare.templ`, Line: 111, Col: 84}
+						return templ.Error{Err: templ_7745c5c3_Err, FileName: `internal/templates/compare.templ`, Line: 111, Col: 94}
 					}
 					_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var30))
 					if templ_7745c5c3_Err != nil {

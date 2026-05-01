@@ -920,6 +920,19 @@ templ Layout(title string, ps store.ParliamentStatus) {
 					}
 					.member-vote-table td.col-vote { grid-area: vote; width: auto !important; }
 					.member-vote-table td.col-meta { grid-area: result; text-align: right; width: auto !important; }
+
+					/* Compare page votes: date | vote1 | vote2 | result */
+					.compare-vote-table tr.hidden { display: none; }
+					.compare-vote-table tr {
+						grid-template-areas:
+							"date vote1 vote2 result"
+							"desc desc  desc  desc";
+						grid-template-columns: 1fr auto auto auto;
+					}
+					.compare-vote-table td.col-vote1 { grid-area: vote1; width: auto !important; }
+					.compare-vote-table td.col-vote2 { grid-area: vote2; width: auto !important; }
+					.compare-vote-table td.col-meta  { grid-area: result; text-align: right; width: auto !important; }
+
 					.vote-table td.col-description {
 						grid-area: desc;
 						/* Override global width:100% — grid area handles sizing */

@@ -72,7 +72,7 @@ templ BillsFeed(ps store.ParliamentStatus, bills []store.BillRow, total int, f s
 			</div>
 
 			<!-- Pagination -->
-			@paginationBar(NewPageInfo(f.Page, total, f.PerPage), "/bills", billPageParams(f))
+			@serverPagination(NewPageInfo(f.Page, total, f.PerPage), "/bills", billPageParams(f))
 		</div>
 	}
 }
@@ -144,21 +144,6 @@ templ stageProgress(currentStage string) {
 	</div>
 }
 
-templ paginationBar(pi PageInfo, base string, extraParams string) {
-	if pi.Total > 1 {
-		<div class="flex items-center justify-center gap-2 mt-6">
-			if pi.HasPrev {
-				<a href={ templ.SafeURL(fmt.Sprintf("%s?page=%d%s", base, pi.PrevPage, extraParams)) }
-				   class="btn btn-secondary">← Prev</a>
-			}
-			<span class="text-sm text-gray-600">Page { fmt.Sprint(pi.Current) } of { fmt.Sprint(pi.Total) }</span>
-			if pi.HasNext {
-				<a href={ templ.SafeURL(fmt.Sprintf("%s?page=%d%s", base, pi.NextPage, extraParams)) }
-				   class="btn btn-secondary">Next →</a>
-			}
-		</div>
-	}
-}
 
 func billPageParams(f store.BillFilter) string {
 	params := ""
