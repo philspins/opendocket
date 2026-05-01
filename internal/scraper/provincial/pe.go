@@ -485,7 +485,7 @@ func crawlPrinceEdwardIslandBills(indexURL string, legislature, session int, cli
 	}
 
 	wdfBase := peiWDFAPIBase
-	if !defaultURL {
+	if strings.HasPrefix(indexURL, "http://127.0.0.1") || strings.HasPrefix(indexURL, "http://localhost") {
 		wdfBase = indexURL
 	}
 	year := time.Now().Year()
@@ -883,16 +883,27 @@ func crawlPEIVotes(indexURL string, legislature, session int, client *http.Clien
 }
 
 func crawlPrinceEdwardIslandVotes(indexURL string, legislature, session int, client *http.Client) ([]ProvincialDivisionResult, error) {
+	if indexURL == "" {
+		indexURL = peiJournalsIndexURL
+	}
 	delay := time.Duration(0)
 	if client == nil {
 		delay = peiDefaultDelay
 		client = newPEIHTTPClient(delay)
 	}
 
-	// Only use WDF workflow API; HTML scraping will hit CAPTCHA on assembly.pe.ca
+	// Use the caller-supplied URL as the WDF base when running against a test server;
+	// otherwise use the production WDF domain.
 	wdfBase := peiWDFAPIBase
+	if strings.HasPrefix(indexURL, "http://127.0.0.1") || strings.HasPrefix(indexURL, "http://localhost") {
+		wdfBase = indexURL
+	}
 	year := time.Now().Year()
-	return crawlPEIVotesFromWorkflow(wdfBase, year, legislature, session, client, delay)
+	results, err := crawlPEIVotesFromWorkflow(wdfBase, year, legislature, session, client, delay)
+	if err != nil || len(results) > 0 {
+		return results, err
+	}
+	return crawlPEIVotes(indexURL, legislature, session, client)
 }
 
 // CrawlPrinceEdwardIslandVotes crawls PEI votes/proceedings pages.

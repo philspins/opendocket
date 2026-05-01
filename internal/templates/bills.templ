@@ -2,10 +2,12 @@ package templates
 
 import (
 	"fmt"
+	"strconv"
+
 	"github.com/philspins/opendocket/internal/store"
 )
 
-templ BillsFeed(ps store.ParliamentStatus, bills []store.BillRow, total int, f store.BillFilter, subscribedBillIDs []string) {
+templ BillsFeed(ps store.ParliamentStatus, bills []store.BillRow, total int, f store.BillFilter, subscribedBillIDs []string, provinces []string) {
 	@Layout("Bills", ps) {
 		<div class="space-y-6">
 			<div class="title-row">
@@ -13,51 +15,107 @@ templ BillsFeed(ps store.ParliamentStatus, bills []store.BillRow, total int, f s
 				<span class="text-sm text-gray-500">{ fmt.Sprint(total) } total</span>
 			</div>
 
-			<!-- Filters -->
-			<form method="GET" action="/bills" class="filter-shell">
-				<div class="flex flex-col sm:flex-row gap-3 w-full">
-					<!-- Left: filters (~3/4) -->
-					<div class="flex flex-wrap gap-2 items-center flex-1">
-						<input type="text" name="q" value={ f.Search } placeholder="Search bills…"
-							class="input-field w-40"/>
-						<select name="stage" class="input-field">
-							<option value="">All Stages</option>
-							for _, s := range Stages {
-								<option value={ s } selected?={ f.Stage == s }>{ StageLabel(s) }</option>
-							}
-						</select>
-						<select name="category" class="input-field">
-							<option value="">All Categories</option>
-							for _, c := range Categories {
-								<option value={ c } selected?={ f.Category == c }>{ c }</option>
-							}
-						</select>
-						<select name="chamber" class="input-field">
-							<option value="">Both Chambers</option>
-							<option value="commons" selected?={ f.Chamber == "commons" }>House</option>
-							<option value="senate" selected?={ f.Chamber == "senate" }>Senate</option>
-						</select>
-						<select name="level" class="input-field">
-							<option value="">Federal + Provincial</option>
-							<option value="federal" selected?={ f.Level == "federal" }>Federal only</option>
-							<option value="provincial" selected?={ f.Level == "provincial" }>Provincial only</option>
-						</select>
-						<button type="submit" class="btn btn-primary">Filter</button>
-						<a href="/bills" class="text-sm text-gray-500 hover:underline">Clear</a>
-					</div>
-					<!-- Right: sort -->
-					<div class="flex items-center gap-2 shrink-0 sm:border-l sm:border-gray-300 sm:pl-3">
-						<select name="sort" class="input-field min-w-[11rem]">
-							<option value="" selected?={ f.Sort == "" }>Latest Activity</option>
-							<option value="date_asc" selected?={ f.Sort == "date_asc" }>Oldest First</option>
-							<option value="stage" selected?={ f.Sort == "stage" }>Stage</option>
-							<option value="category" selected?={ f.Sort == "category" }>Category</option>
-							<option value="auto" selected?={ f.Sort == "auto" }>Auto (Personalized)</option>
-						</select>
-						<button type="submit" class="btn btn-secondary shrink-0">Sort</button>
-					</div>
+			<!-- Filter bar -->
+			<div class="bills-filter-bar">
+				<!-- Sort segment control -->
+				<div class="sort-segment">
+					<a href={ templ.SafeURL(billsURLWithSort(f, "")) } class={ "sort-tab", templ.KV("active", f.Sort == "") }>Latest</a>
+					<a href={ templ.SafeURL(billsURLWithSort(f, "date_asc")) } class={ "sort-tab", templ.KV("active", f.Sort == "date_asc") }>Oldest</a>
+					<a href={ templ.SafeURL(billsURLWithSort(f, "stage")) } class={ "sort-tab", templ.KV("active", f.Sort == "stage") }>Stage</a>
+					<a href={ templ.SafeURL(billsURLWithSort(f, "category")) } class={ "sort-tab", templ.KV("active", f.Sort == "category") }>Category</a>
+					<a href={ templ.SafeURL(billsURLWithSort(f, "auto")) } class={ "sort-tab", templ.KV("active", f.Sort == "auto") }>Auto</a>
 				</div>
-			</form>
+
+				<div class="filter-sep"></div>
+
+				<!-- Active filter chips -->
+				if f.Search != "" {
+					<a href={ templ.SafeURL(billsURLWithout(f, "q")) } class="filter-chip">{ f.Search }<span class="filter-chip-x">×</span></a>
+				}
+				if f.Stage != "" {
+					<a href={ templ.SafeURL(billsURLWithout(f, "stage")) } class="filter-chip">{ StageLabel(f.Stage) }<span class="filter-chip-x">×</span></a>
+				}
+				if f.Category != "" {
+					<a href={ templ.SafeURL(billsURLWithout(f, "category")) } class="filter-chip">{ f.Category }<span class="filter-chip-x">×</span></a>
+				}
+				if f.Chamber != "" {
+					<a href={ templ.SafeURL(billsURLWithout(f, "chamber")) } class="filter-chip">{ billChamberLabel(f.Chamber) }<span class="filter-chip-x">×</span></a>
+				}
+				if f.Level != "" {
+					<a href={ templ.SafeURL(billsURLWithout(f, "level")) } class="filter-chip">{ billLevelLabel(f.Level) }<span class="filter-chip-x">×</span></a>
+				}
+				if f.Province != "" {
+					<a href={ templ.SafeURL(billsURLWithout(f, "province")) } class="filter-chip">{ f.Province }<span class="filter-chip-x">×</span></a>
+				}
+
+				<!-- Filter picker -->
+				<details class="filter-picker">
+					<summary class="filter-add-btn">
+						<svg xmlns="http://www.w3.org/2000/svg" width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="16"/><line x1="8" y1="12" x2="16" y2="12"/></svg>
+						Filter
+					</summary>
+					<div class="filter-picker-panel">
+						<form method="GET" action="/bills">
+							<input type="hidden" name="per_page" value={ strconv.Itoa(f.PerPage) }/>
+							<input type="hidden" name="sort" value={ f.Sort }/>
+							<div class="space-y-2.5">
+								<div>
+									<label class="filter-picker-label">Search</label>
+									<input type="text" name="q" value={ f.Search } placeholder="Bill title or number…" class="input-field w-full text-sm"/>
+								</div>
+								<div>
+									<label class="filter-picker-label">Stage</label>
+									<select name="stage" class="input-field w-full text-sm">
+										<option value="">All Stages</option>
+										for _, s := range Stages {
+											<option value={ s } selected?={ f.Stage == s }>{ StageLabel(s) }</option>
+										}
+									</select>
+								</div>
+								<div>
+									<label class="filter-picker-label">Category</label>
+									<select name="category" class="input-field w-full text-sm">
+										<option value="">All Categories</option>
+										for _, c := range Categories {
+											<option value={ c } selected?={ f.Category == c }>{ c }</option>
+										}
+									</select>
+								</div>
+								<div>
+									<label class="filter-picker-label">Chamber</label>
+									<select name="chamber" class="input-field w-full text-sm">
+										<option value="">Both Chambers</option>
+										<option value="commons" selected?={ f.Chamber == "commons" }>House of Commons</option>
+										<option value="senate" selected?={ f.Chamber == "senate" }>Senate</option>
+									</select>
+								</div>
+								<div>
+									<label class="filter-picker-label">Government Level</label>
+									<select name="level" class="input-field w-full text-sm">
+										<option value="">Federal + Provincial</option>
+										<option value="federal" selected?={ f.Level == "federal" }>Federal only</option>
+										<option value="provincial" selected?={ f.Level == "provincial" }>Provincial only</option>
+									</select>
+								</div>
+								<div>
+									<label class="filter-picker-label">Province</label>
+									<select name="province" class="input-field w-full text-sm">
+										<option value="">All provinces</option>
+										for _, pv := range provinces {
+											<option value={ pv } selected?={ f.Province == pv }>{ pv }</option>
+										}
+									</select>
+								</div>
+							</div>
+							<div class="flex items-center justify-between mt-4 pt-3 border-t border-gray-200 dark:border-gray-700">
+								<a href="/bills" class="text-sm text-gray-400 hover:text-gray-600">Clear all</a>
+								<button type="submit" class="btn btn-primary text-sm">Apply</button>
+							</div>
+						</form>
+					</div>
+				</details>
+			</div>
+
 			if f.Sort == "auto" && len(f.PreferredCategories) == 0 && len(f.SubscribedBillIDs) == 0 {
 				<div class="rounded-lg border border-blue-200 bg-blue-50 px-4 py-3 text-sm text-blue-800">
 					To personalise your feed, <a href="/profile" class="underline font-medium">set your interests on your profile</a> or subscribe to bills.
@@ -77,7 +135,7 @@ templ BillsFeed(ps store.ParliamentStatus, bills []store.BillRow, total int, f s
 			</div>
 
 			<!-- Pagination -->
-			@paginationBar(NewPageInfo(f.Page, total, f.PerPage), "/bills", billPageParams(f))
+			@serverPagination(NewPageInfo(f.Page, total, f.PerPage), "/bills", billPageParams(f))
 		</div>
 	}
 }
@@ -93,37 +151,39 @@ func billIsSubscribed(billID string, subscribedIDs []string) bool {
 
 templ billCard(b store.BillRow, subscribed bool) {
 	<article class="surface-card p-5">
-		<div class="flex items-start justify-between gap-4">
-			<div class="flex-1 min-w-0">
-				<div class="flex items-center gap-2 mb-2">
-					<span class="font-mono font-semibold text-blue-600">{ b.Number }</span>
-					@BillLevelBadge(b)
-					if b.Category != "" {
-						@CategoryBadge(b.Category, "text-xs px-2 py-0.5")
-					}
-					<span class="text-xs text-gray-500">{ ChamberLabel(b.Chamber) }</span>
-					if subscribed {
-						<span class="text-xs px-2 py-0.5 rounded-full bg-yellow-100 text-yellow-800 font-medium">📌 Pinned</span>
-					}
-				</div>
-				<h2 class="font-medium text-gray-900">
-					<a href={ templ.SafeURL("/bills/" + b.ID) } class="hover:text-blue-700">{ ShortOrFullTitle(b) }</a>
-				</h2>
-				if b.SponsorName != "" {
-					<p class="text-sm text-gray-600 mt-1">Sponsor: { b.SponsorName }</p>
+		<!-- Row 1: number (left) + badges (right) -->
+		<div class="flex items-center justify-between gap-2 mb-1">
+			<span class="font-mono font-semibold text-blue-600">{ b.Number }</span>
+			<div class="flex items-center gap-2 flex-wrap justify-end">
+				@BillLevelBadge(b)
+				if b.Category != "" {
+					@CategoryBadge(b.Category, "text-xs px-2 py-0.5")
 				}
-				<!-- Summary preview -->
-				if b.SummaryLoP != "" {
-					<p class="text-sm text-gray-600 mt-2">{ truncate(b.SummaryLoP, 120) }</p>
-				} else if b.SummaryAI != "" {
-					<p class="text-sm text-amber-700 mt-2 italic">{ ParseAISummary(b.SummaryAI).OneSentence }</p>
+				if subscribed {
+					<span class="text-xs px-2 py-0.5 rounded-full bg-yellow-100 text-yellow-800 font-medium">📌 Pinned</span>
 				}
-			</div>
-			<div class="shrink-0 text-right">
-				<p class="text-sm font-medium text-gray-700">{ StageLabel(b.CurrentStage) }</p>
-				<p class="text-xs text-gray-500 mt-0.5">{ FormatDate(b.LastActivityDate) }</p>
 			</div>
 		</div>
+		<!-- Row 2: chamber (left) + stage + date (right) -->
+		<div class="flex items-center justify-between gap-2 mb-2">
+			<span class="text-xs text-gray-500">{ ChamberLabel(b.Chamber) }</span>
+			<div class="text-right">
+				<span class="text-sm font-medium text-gray-700">{ StageLabel(b.CurrentStage) }</span>
+				<span class="text-xs text-gray-500 ml-2">{ FormatDate(b.LastActivityDate) }</span>
+			</div>
+		</div>
+		<!-- Title + sponsor + summary: all full-width -->
+		<h2 class="font-medium text-gray-900">
+			<a href={ templ.SafeURL("/bills/" + b.ID) } class="hover:text-blue-700">{ ShortOrFullTitle(b) }</a>
+		</h2>
+		if b.SponsorName != "" {
+			<p class="text-sm text-gray-600 mt-1">Sponsor: { b.SponsorName }</p>
+		}
+		if b.SummaryLoP != "" {
+			<p class="text-sm text-gray-600 mt-2">{ truncate(b.SummaryLoP, 120) }</p>
+		} else if b.SummaryAI != "" {
+			<p class="text-sm text-amber-700 mt-2 italic">{ ParseAISummary(b.SummaryAI).OneSentence }</p>
+		}
 		if b.CurrentStage != "" {
 			<div class="mt-3">
 				@stageProgress(b.CurrentStage)
@@ -147,22 +207,6 @@ templ stageProgress(currentStage string) {
 	</div>
 }
 
-templ paginationBar(pi PageInfo, base string, extraParams string) {
-	if pi.Total > 1 {
-		<div class="flex items-center justify-center gap-2 mt-6">
-			if pi.HasPrev {
-				<a href={ templ.SafeURL(fmt.Sprintf("%s?page=%d%s", base, pi.PrevPage, extraParams)) }
-				   class="btn btn-secondary">← Prev</a>
-			}
-			<span class="text-sm text-gray-600">Page { fmt.Sprint(pi.Current) } of { fmt.Sprint(pi.Total) }</span>
-			if pi.HasNext {
-				<a href={ templ.SafeURL(fmt.Sprintf("%s?page=%d%s", base, pi.NextPage, extraParams)) }
-				   class="btn btn-secondary">Next →</a>
-			}
-		</div>
-	}
-}
-
 func billPageParams(f store.BillFilter) string {
 	params := ""
 	if f.Search != "" {
@@ -180,8 +224,84 @@ func billPageParams(f store.BillFilter) string {
 	if f.Level != "" {
 		params += "&level=" + f.Level
 	}
+	if f.Province != "" {
+		params += "&province=" + f.Province
+	}
 	if f.Sort != "" {
 		params += "&sort=" + f.Sort
 	}
 	return params
+}
+
+func billsQueryString(f store.BillFilter) string {
+	params := "per_page=" + strconv.Itoa(f.PerPage)
+	if f.Search != "" {
+		params += "&q=" + f.Search
+	}
+	if f.Stage != "" {
+		params += "&stage=" + f.Stage
+	}
+	if f.Category != "" {
+		params += "&category=" + f.Category
+	}
+	if f.Chamber != "" {
+		params += "&chamber=" + f.Chamber
+	}
+	if f.Level != "" {
+		params += "&level=" + f.Level
+	}
+	if f.Province != "" {
+		params += "&province=" + f.Province
+	}
+	if f.Sort != "" {
+		params += "&sort=" + f.Sort
+	}
+	return params
+}
+
+func billsURLWithSort(f store.BillFilter, sort string) string {
+	g := f
+	g.Sort = sort
+	g.Page = 0
+	return "/bills?" + billsQueryString(g)
+}
+
+func billsURLWithout(f store.BillFilter, field string) string {
+	g := f
+	g.Page = 0
+	switch field {
+	case "q":
+		g.Search = ""
+	case "stage":
+		g.Stage = ""
+	case "category":
+		g.Category = ""
+	case "chamber":
+		g.Chamber = ""
+	case "level":
+		g.Level = ""
+	case "province":
+		g.Province = ""
+	}
+	return "/bills?" + billsQueryString(g)
+}
+
+func billChamberLabel(chamber string) string {
+	switch chamber {
+	case "commons":
+		return "House"
+	case "senate":
+		return "Senate"
+	}
+	return chamber
+}
+
+func billLevelLabel(level string) string {
+	switch level {
+	case "federal":
+		return "Federal"
+	case "provincial":
+		return "Provincial"
+	}
+	return level
 }

@@ -382,6 +382,7 @@ type PageInfo struct {
 	HasNext  bool
 	PrevPage int
 	NextPage int
+	PerPage  int
 }
 
 // ordinal returns the ordinal suffix for a number (1st, 2nd, 3rd, 4th...).
@@ -413,7 +414,7 @@ func initial(s string) string {
 // NewPageInfo computes PageInfo from the current page, total items, and page size.
 func NewPageInfo(page, total, perPage int) PageInfo {
 	if perPage <= 0 {
-		perPage = 20
+		perPage = 10
 	}
 	pages := (total + perPage - 1) / perPage
 	if pages < 1 {
@@ -429,7 +430,45 @@ func NewPageInfo(page, total, perPage int) PageInfo {
 		HasNext:  page < pages,
 		PrevPage: page - 1,
 		NextPage: page + 1,
+		PerPage:  perPage,
 	}
+}
+
+// paginationPages returns page numbers to display, using -1 as an ellipsis sentinel.
+// Mirrors the visiblePages logic in votes_pagination.templ JS.
+func paginationPages(pi PageInfo) []int {
+	total, current := pi.Total, pi.Current
+	if total <= 5 {
+		pages := make([]int, total)
+		for i := range pages {
+			pages[i] = i + 1
+		}
+		return pages
+	}
+	pages := []int{1}
+	start, end := current-1, current+1
+	if start < 2 {
+		start = 2
+		end = 4
+	}
+	if end > total-1 {
+		end = total - 1
+		start = total - 3
+	}
+	if start < 2 {
+		start = 2
+	}
+	if start > 2 {
+		pages = append(pages, -1)
+	}
+	for p := start; p <= end; p++ {
+		pages = append(pages, p)
+	}
+	if end < total-1 {
+		pages = append(pages, -1)
+	}
+	pages = append(pages, total)
+	return pages
 }
 
 // ── Summary helpers ───────────────────────────────────────────────────────────

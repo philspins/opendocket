@@ -21,11 +21,11 @@ func New(db *sql.DB) *Store { return &Store{db: db} }
 
 // ── bill queries ──────────────────────────────────────────────────────────────
 
-// ListBills returns a paginated list of bills matching the filter, plus total count.
-func (s *Store) ListBills(f BillFilter) ([]BillRow, int, error) {
+// buildBillWhereClause returns the WHERE clause and bound arguments for a BillFilter.
+// The returned whereClause is safe to embed directly in a query after "WHERE ".
+func buildBillWhereClause(f BillFilter) (whereClause string, args []interface{}) {
 	where := []string{"1=1"}
-	args := []interface{}{}
-	provincialPredicate := `( 
+	provincialPredicate := `(
 		(b.chamber NOT IN ('commons','senate') AND b.chamber <> '')
 		OR b.id LIKE 'ab-%' OR b.id LIKE 'bc-%' OR b.id LIKE 'mb-%' OR b.id LIKE 'nb-%'
 		OR b.id LIKE 'nl-%' OR b.id LIKE 'ns-%' OR b.id LIKE 'on-%' OR b.id LIKE 'pe-%'
@@ -60,8 +60,49 @@ func (s *Store) ListBills(f BillFilter) ([]BillRow, int, error) {
 	if f.Level == "federal" {
 		where = append(where, "NOT "+provincialPredicate)
 	}
+	return strings.Join(where, " AND "), args
+}
 
-	whereClause := strings.Join(where, " AND ")
+// buildBillOrderClause returns the ORDER BY clause and any additional bound
+// arguments needed for the sort strategy (only "auto" sort appends args).
+func buildBillOrderClause(f BillFilter) (orderClause string, extraArgs []interface{}) {
+	switch f.Sort {
+	case "date_asc":
+		return "b.last_activity_date ASC, b.id ASC", nil
+	case "stage":
+		return "b.current_stage ASC, b.last_activity_date DESC, b.id DESC", nil
+	case "category":
+		return "b.category ASC, b.last_activity_date DESC, b.id DESC", nil
+	case "auto":
+		// Personalized sort: subscribed bills first, then preferred categories, then by date.
+		// Use CASE WHEN expressions (not bare literals) to avoid SQLite column-index confusion.
+		var orderParts []string
+		if len(f.SubscribedBillIDs) > 0 {
+			placeholders := make([]string, len(f.SubscribedBillIDs))
+			for i, id := range f.SubscribedBillIDs {
+				placeholders[i] = "?"
+				extraArgs = append(extraArgs, id)
+			}
+			orderParts = append(orderParts, "CASE WHEN b.id IN ("+strings.Join(placeholders, ",")+") THEN 0 ELSE 1 END")
+		}
+		if len(f.PreferredCategories) > 0 {
+			placeholders := make([]string, len(f.PreferredCategories))
+			for i, cat := range f.PreferredCategories {
+				placeholders[i] = "?"
+				extraArgs = append(extraArgs, cat)
+			}
+			orderParts = append(orderParts, "CASE WHEN b.category IN ("+strings.Join(placeholders, ",")+") THEN 0 ELSE 1 END")
+		}
+		orderParts = append(orderParts, "b.last_activity_date DESC", "b.id DESC")
+		return strings.Join(orderParts, ", "), extraArgs
+	default:
+		return "b.last_activity_date DESC, b.id DESC", nil
+	}
+}
+
+// ListBills returns a paginated list of bills matching the filter, plus total count.
+func (s *Store) ListBills(f BillFilter) ([]BillRow, int, error) {
+	whereClause, args := buildBillWhereClause(f)
 
 	// Count
 	var total int
@@ -80,40 +121,8 @@ func (s *Store) ListBills(f BillFilter) ([]BillRow, int, error) {
 	}
 	offset := (f.Page - 1) * f.PerPage
 
-	// Build ORDER BY clause based on Sort option.
-	var orderClause string
-	switch f.Sort {
-	case "date_asc":
-		orderClause = "b.last_activity_date ASC, b.id ASC"
-	case "stage":
-		orderClause = "b.current_stage ASC, b.last_activity_date DESC, b.id DESC"
-	case "category":
-		orderClause = "b.category ASC, b.last_activity_date DESC, b.id DESC"
-	case "auto":
-		// Personalized sort: subscribed bills first, then preferred categories, then by date.
-		// Use CASE WHEN expressions (not bare literals) to avoid SQLite column-index confusion.
-		var orderParts []string
-		if len(f.SubscribedBillIDs) > 0 {
-			placeholders := make([]string, len(f.SubscribedBillIDs))
-			for i := range f.SubscribedBillIDs {
-				placeholders[i] = "?"
-				args = append(args, f.SubscribedBillIDs[i])
-			}
-			orderParts = append(orderParts, "CASE WHEN b.id IN ("+strings.Join(placeholders, ",")+") THEN 0 ELSE 1 END")
-		}
-		if len(f.PreferredCategories) > 0 {
-			placeholders := make([]string, len(f.PreferredCategories))
-			for i := range f.PreferredCategories {
-				placeholders[i] = "?"
-				args = append(args, f.PreferredCategories[i])
-			}
-			orderParts = append(orderParts, "CASE WHEN b.category IN ("+strings.Join(placeholders, ",")+") THEN 0 ELSE 1 END")
-		}
-		orderParts = append(orderParts, "b.last_activity_date DESC", "b.id DESC")
-		orderClause = strings.Join(orderParts, ", ")
-	default:
-		orderClause = "b.last_activity_date DESC, b.id DESC"
-	}
+	orderClause, orderArgs := buildBillOrderClause(f)
+	args = append(args, orderArgs...)
 
 	query := `
 		SELECT b.id, b.parliament, b.session, b.number, b.title,
@@ -495,6 +504,55 @@ func (s *Store) GetMembersByRiding(riding string) ([]MemberRow, error) {
 	return scanMemberRows(rows)
 }
 
+// batchPartyMajority returns the majority vote direction ("Yea" | "Nay" | "")
+// per division for the given party. If excludeMemberID is non-empty, that
+// member's own votes are excluded from the tally — used when computing stats
+// for a sole-party member (e.g. Elizabeth May) so their vote doesn't define
+// their own party majority.
+func (s *Store) batchPartyMajority(divIDs []string, party, excludeMemberID string) (map[string]string, error) {
+	if len(divIDs) == 0 || party == "" {
+		return nil, nil
+	}
+	placeholders := strings.Repeat("?,", len(divIDs))
+	placeholders = placeholders[:len(placeholders)-1]
+	args := make([]interface{}, 0, len(divIDs)+2)
+	for _, d := range divIDs {
+		args = append(args, d)
+	}
+	args = append(args, party)
+	query := `
+		SELECT mv.division_id,
+		       COALESCE(SUM(CASE WHEN mv.vote = 'Yea' THEN 1 ELSE 0 END), 0),
+		       COALESCE(SUM(CASE WHEN mv.vote = 'Nay' THEN 1 ELSE 0 END), 0)
+		FROM member_votes mv
+		JOIN members m ON m.id = mv.member_id
+		WHERE mv.division_id IN (` + placeholders + `) AND m.party = ?`
+	if excludeMemberID != "" {
+		query += ` AND m.id != ?`
+		args = append(args, excludeMemberID)
+	}
+	query += ` GROUP BY mv.division_id`
+	rows, err := s.db.Query(query, args...)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	result := make(map[string]string, len(divIDs))
+	for rows.Next() {
+		var divID string
+		var y, n int
+		if err := rows.Scan(&divID, &y, &n); err != nil {
+			return nil, err
+		}
+		if y > n {
+			result[divID] = "Yea"
+		} else if n > y {
+			result[divID] = "Nay"
+		}
+	}
+	return result, rows.Err()
+}
+
 // GetMemberVotes returns the most recent votes for a member.
 func (s *Store) GetMemberVotes(id string, limit int) ([]VoteRow, error) {
 	if limit <= 0 {
@@ -546,44 +604,13 @@ func (s *Store) GetMemberVotes(id string, limit int) ([]VoteRow, error) {
 	var party string
 	_ = s.db.QueryRow("SELECT COALESCE(party,'') FROM members WHERE id = ?", id).Scan(&party)
 
-	// Batch-fetch party majority for all divisions in one query.
-	// partyMajority maps division_id → "Yea" | "Nay" | ""
-	partyMajorityMap := make(map[string]string, len(rawVotes))
-	if party != "" {
-		divIDs := make([]string, len(rawVotes))
-		for i, rv := range rawVotes {
-			divIDs[i] = rv.divisionID
-		}
-		placeholders := strings.Repeat("?,", len(divIDs))
-		placeholders = placeholders[:len(placeholders)-1]
-		args := make([]interface{}, 0, len(divIDs)+1)
-		for _, d := range divIDs {
-			args = append(args, d)
-		}
-		args = append(args, party)
-
-		pmRows, err := s.db.Query(`
-			SELECT mv.division_id,
-			       COALESCE(SUM(CASE WHEN mv.vote = 'Yea' THEN 1 ELSE 0 END), 0),
-			       COALESCE(SUM(CASE WHEN mv.vote = 'Nay' THEN 1 ELSE 0 END), 0)
-			FROM member_votes mv
-			JOIN members m ON m.id = mv.member_id
-			WHERE mv.division_id IN (`+placeholders+`) AND m.party = ?
-			GROUP BY mv.division_id`, args...)
-		if err == nil {
-			defer pmRows.Close()
-			for pmRows.Next() {
-				var divID string
-				var y, n int
-				if err := pmRows.Scan(&divID, &y, &n); err == nil {
-					if y > n {
-						partyMajorityMap[divID] = "Yea"
-					} else if n > y {
-						partyMajorityMap[divID] = "Nay"
-					}
-				}
-			}
-		}
+	divIDs := make([]string, len(rawVotes))
+	for i, rv := range rawVotes {
+		divIDs[i] = rv.divisionID
+	}
+	partyMajorityMap, _ := s.batchPartyMajority(divIDs, party, "")
+	if partyMajorityMap == nil {
+		partyMajorityMap = make(map[string]string)
 	}
 
 	out := make([]VoteRow, 0, len(rawVotes))
@@ -662,6 +689,7 @@ func (s *Store) GetMemberStats(id string) (MemberStats, error) {
 	}
 
 	// Batch-fetch party majority for all divisions in one query to avoid N+1.
+	// Exclude the member themselves so a sole-party member doesn't define their own majority.
 	if len(votes) > 0 && party != "" && partyMemberCount > 1 {
 		divIDs := make([]string, len(votes))
 		memberVoteMap := make(map[string]string, len(votes))
@@ -669,37 +697,10 @@ func (s *Store) GetMemberStats(id string) (MemberStats, error) {
 			divIDs[i] = dv.divisionID
 			memberVoteMap[dv.divisionID] = dv.vote
 		}
-		placeholders := strings.Repeat("?,", len(divIDs))
-		placeholders = placeholders[:len(placeholders)-1]
-		args := make([]interface{}, 0, len(divIDs)+2)
-		for _, d := range divIDs {
-			args = append(args, d)
-		}
-		args = append(args, party, id)
-
-		pmRows, err := s.db.Query(`
-			SELECT mv.division_id,
-			       COALESCE(SUM(CASE WHEN mv.vote = 'Yea' THEN 1 ELSE 0 END), 0),
-			       COALESCE(SUM(CASE WHEN mv.vote = 'Nay' THEN 1 ELSE 0 END), 0)
-			FROM member_votes mv
-			JOIN members m ON m.id = mv.member_id
-			WHERE mv.division_id IN (`+placeholders+`) AND m.party = ? AND m.id != ?
-			GROUP BY mv.division_id`, args...)
-		if err == nil {
-			defer pmRows.Close()
-			for pmRows.Next() {
-				var divID string
-				var y, n int
-				if scanErr := pmRows.Scan(&divID, &y, &n); scanErr == nil {
-					partyMajority := ""
-					if y > n {
-						partyMajority = "Yea"
-					} else if n > y {
-						partyMajority = "Nay"
-					}
-					if partyMajority != "" && memberVoteMap[divID] == partyMajority {
-						partyLine++
-					}
+		if partyMajorityMap, _ := s.batchPartyMajority(divIDs, party, id); partyMajorityMap != nil {
+			for divID, majority := range partyMajorityMap {
+				if majority != "" && memberVoteMap[divID] == majority {
+					partyLine++
 				}
 			}
 		}

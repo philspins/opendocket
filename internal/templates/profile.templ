@@ -33,19 +33,21 @@ templ ProfilePage(ps store.ParliamentStatus, user store.UserRow, address string,
 
 				<form method="POST" action="/profile" class="filter-shell">
 					<input type="text" id="profile-address-input" name="address" value={ address } placeholder="Enter your full Canadian address"
-						class="input-field w-full max-w-2xl" autocomplete="off"/>
-					<button type="submit" class="btn btn-primary">Update Riding</button>
-					<a href="/profile" class="text-sm text-gray-500 hover:underline">Reset</a>
+						class="input-field w-full" autocomplete="off"/>
+					<div class="flex w-full justify-end items-center gap-3">
+						<a href="/profile" class="text-sm text-gray-500 hover:underline">Reset</a>
+						<button type="submit" class="btn btn-primary">Update Riding</button>
+					</div>
 				</form>
 
 				if len(federalRidings) > 0 || len(provincialRidings) > 0 {
 					<div class="border-t border-gray-100 pt-4 space-y-3">
 						<p class="text-sm text-gray-500">Can&#39;t find your riding by address? Select manually:</p>
-						<form method="POST" action="/profile" class="flex flex-wrap gap-3 items-end">
+						<form method="POST" action="/profile" class="flex flex-col gap-3 w-full">
 							if len(federalRidings) > 0 {
 								<div class="flex flex-col gap-1">
 									<label class="text-xs text-gray-500" for="federal_riding">Federal riding</label>
-									<select id="federal_riding" name="federal_riding" class="input-field px-3 py-2 text-sm">
+									<select id="federal_riding" name="federal_riding" class="input-field w-full px-3 py-2 text-sm">
 										<option value="">— select —</option>
 										for _, r := range federalRidings {
 											<option value={ r } selected?={ r == user.FederalRidingID }>{ r }</option>
@@ -56,7 +58,7 @@ templ ProfilePage(ps store.ParliamentStatus, user store.UserRow, address string,
 							if len(provincialRidings) > 0 {
 								<div class="flex flex-col gap-1">
 									<label class="text-xs text-gray-500" for="provincial_riding">Provincial riding</label>
-									<select id="provincial_riding" name="provincial_riding" class="input-field px-3 py-2 text-sm">
+									<select id="provincial_riding" name="provincial_riding" class="input-field w-full px-3 py-2 text-sm">
 										<option value="">— select —</option>
 										for _, r := range provincialRidings {
 											<option value={ r } selected?={ r == user.ProvincialRidingID }>{ r }</option>
@@ -64,7 +66,9 @@ templ ProfilePage(ps store.ParliamentStatus, user store.UserRow, address string,
 									</select>
 								</div>
 							}
-							<button type="submit" class="btn btn-primary">Save</button>
+							<div class="flex justify-end">
+								<button type="submit" class="btn btn-primary">Save</button>
+							</div>
 						</form>
 					</div>
 				}
@@ -106,7 +110,7 @@ templ ProfilePage(ps store.ParliamentStatus, user store.UserRow, address string,
 							</label>
 						}
 					</div>
-					<div class="mt-4 flex items-center gap-3">
+					<div class="mt-4 flex justify-end items-center gap-3">
 						<button type="submit" class="btn btn-primary">Save Interests</button>
 					</div>
 				</form>

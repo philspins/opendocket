@@ -20,7 +20,7 @@ import (
 	"strings"
 	"time"
 
-	"github.com/philspins/opendocket/internal/db"
+	"github.com/philspins/opendocket/internal/store"
 	"github.com/philspins/opendocket/internal/scraper/provincial"
 	"github.com/philspins/opendocket/internal/utils"
 )
@@ -65,7 +65,7 @@ func CrawlAndPersistLegislatureCalendars(conn *sql.DB, client *http.Client) erro
 		if len(dates) == 0 {
 			continue
 		}
-		if err := db.ReplaceLegislatureCalendarDates(conn, jurisdiction, dates, scrapedAt); err != nil {
+		if err := store.ReplaceLegislatureCalendarDates(conn, jurisdiction, dates, scrapedAt); err != nil {
 			if firstErr == nil {
 				firstErr = err
 			}

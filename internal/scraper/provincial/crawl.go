@@ -10,7 +10,7 @@ import (
 	"time"
 
 	"github.com/PuerkitoBio/goquery"
-	"github.com/philspins/opendocket/internal/db"
+	"github.com/philspins/opendocket/internal/store"
 	"golang.org/x/sync/errgroup"
 )
 
@@ -104,12 +104,25 @@ var provinceCrawlers = map[string]ProvinceCrawler{
 	"sk": provinceCrawlerFuncs{bills: CrawlSaskatchewanBills},
 }
 
-// CrawlProvinceSource crawls bills and votes for one province source and upserts
-// normalized records into bills/divisions/member_votes tables.
-// seedMembers is called when fewer than 10 provincial members exist in the DB;
-// pass nil to skip member seeding (e.g. in tests).
-func CrawlProvinceSource(conn *sql.DB, client *http.Client, delay time.Duration, src ProvincialSource, enqueueSummary BillSummaryEnqueue, seedMembers MemberSeeder) error {
-	log.Printf("[provincial] crawling %s", src.Province)
+// SessionPlan holds the raw network output for one legislature/session crawl.
+type SessionPlan struct {
+	Legislature int
+	Session     int
+	Bills       []ProvincialBillStub
+	Divisions   []ProvincialDivisionResult
+}
+
+// CrawlPlan is the output of the network discovery phase for one province source.
+type CrawlPlan struct {
+	Source   ProvincialSource
+	Sessions []SessionPlan
+}
+
+// BuildCrawlPlan performs the network discovery phase for src: it resolves the
+// current legislature/session, crawls bills and votes for each session, and
+// returns a plan ready to pass to ExecuteCrawlPlan.
+// conn is used read-only to guide fallback decisions (e.g. seeding previous session).
+func BuildCrawlPlan(conn *sql.DB, client *http.Client, delay time.Duration, src ProvincialSource) (CrawlPlan, error) {
 	legislature, currentSession := resolveProvincialLegislatureSession(conn, src, client)
 	sessions := sessionsToCrawlForSource(src, currentSession)
 	if len(sessions) == 1 {
@@ -118,6 +131,80 @@ func CrawlProvinceSource(conn *sql.DB, client *http.Client, delay time.Duration,
 		log.Printf("[provincial][%s] detected legislature/current session: %d/%d; crawling sessions %v", src.Code, legislature, currentSession, sessions)
 	}
 
+	plan := CrawlPlan{Source: src}
+	allowPreviousSessionFallback := len(sessions) == 1
+	for _, session := range sessions {
+		log.Printf("[provincial][%s] crawling legislature/session: %d/%d", src.Code, legislature, session)
+		sp, err := buildSessionPlan(conn, client, delay, src, legislature, session, allowPreviousSessionFallback)
+		if err != nil {
+			return plan, err
+		}
+		plan.Sessions = append(plan.Sessions, sp)
+	}
+	return plan, nil
+}
+
+// buildSessionPlan performs the network discovery for a single legislature/session.
+// conn is used read-only for previous-session fallback checks.
+func buildSessionPlan(conn *sql.DB, client *http.Client, delay time.Duration, src ProvincialSource, legislature, session int, allowPreviousSessionFallback bool) (SessionPlan, error) {
+	sp := SessionPlan{Legislature: legislature, Session: session}
+
+	bills, berr := crawlBillsForSource(src, legislature, session, client)
+	if allowPreviousSessionFallback && berr == nil && len(bills) == 0 && session > 1 && provinceBillCountInDB(conn, src.Code) == 0 {
+		log.Printf("[provincial][%s] 0 bills for session %d; retrying with previous session %d to seed DB", src.Code, session, session-1)
+		prevBills, prevErr := crawlBillsForSource(src, legislature, session-1, client)
+		if prevErr == nil && len(prevBills) > 0 {
+			bills = prevBills
+			session--
+			sp.Session = session
+		}
+	}
+	if berr != nil {
+		log.Printf("[provincial] %s bills error: %v", src.Code, berr)
+	}
+	sp.Bills = bills
+
+	var divs []ProvincialDivisionResult
+	switch src.Special {
+	case "on":
+		dates, err := CrawlOntarioVPSittingDates(src.VotesURL, legislature, session, client)
+		if err != nil {
+			return sp, fmt.Errorf("ontario dates: %w", err)
+		}
+		ontarioDivs, _ := crawlOntarioDaysConcurrently(dates, legislature, session, client, delay)
+		divs = ontarioDivs
+	case "sk":
+		links, err := CrawlSaskatchewanMinutesLinks(src.VotesURL, client)
+		if err != nil {
+			log.Printf("[provincial] sk: cannot discover minutes links (archive URL may have changed): %v", err)
+		} else {
+			skDivs, _ := crawlSaskatchewanMinutesConcurrently(links, legislature, session, client, delay)
+			divs = skDivs
+		}
+	default:
+		parsed, err := crawlDivisionsForSource(src, legislature, session, client)
+		if err != nil {
+			return sp, err
+		}
+		if allowPreviousSessionFallback && len(parsed) == 0 && session > 1 && provinceDivisionCountInDB(conn, src.Code) == 0 {
+			log.Printf("[provincial][%s] 0 divisions for session %d; retrying with previous session %d to seed DB", src.Code, session, session-1)
+			prevParsed, prevErr := crawlDivisionsForSource(src, legislature, session-1, client)
+			if prevErr == nil && len(prevParsed) > 0 {
+				parsed = prevParsed
+			}
+		}
+		divs = parsed
+	}
+	sp.Divisions = divs
+
+	return sp, nil
+}
+
+// ExecuteCrawlPlan writes a CrawlPlan to the database.
+// client and delay are only used when seedMembers is non-nil and fewer than
+// 10 provincial members exist for the province (lazy member seeding).
+func ExecuteCrawlPlan(conn *sql.DB, client *http.Client, delay time.Duration, plan CrawlPlan, enqueueSummary BillSummaryEnqueue, seedMembers MemberSeeder) error {
+	src := plan.Source
 	stats := provincialCrawlStats{}
 	defer func() {
 		if stats.MemberVotesSeen > 0 && stats.MemberVotesUpserted == 0 && stats.MemberVotesUnmatched == stats.MemberVotesSeen {
@@ -139,113 +226,43 @@ func CrawlProvinceSource(conn *sql.DB, client *http.Client, delay time.Duration,
 		)
 	}()
 
-	allowPreviousSessionFallback := len(sessions) == 1
-	for _, session := range sessions {
-		log.Printf("[provincial][%s] crawling legislature/session: %d/%d", src.Code, legislature, session)
-		if err := crawlProvinceSession(conn, client, delay, src, legislature, session, enqueueSummary, seedMembers, allowPreviousSessionFallback, &stats); err != nil {
+	for _, sp := range plan.Sessions {
+		if err := executeSessionPlan(conn, client, delay, src, sp, enqueueSummary, seedMembers, &stats); err != nil {
 			return err
 		}
 	}
-
 	return nil
 }
 
-func sessionsToCrawlForSource(src ProvincialSource, currentSession int) []int {
-	if src.Code != "pe" || currentSession <= 1 {
-		return []int{currentSession}
-	}
-	sessions := make([]int, 0, currentSession)
-	for session := currentSession; session >= 1; session-- {
-		sessions = append(sessions, session)
-	}
-	return sessions
-}
-
-func crawlProvinceSession(conn *sql.DB, client *http.Client, delay time.Duration, src ProvincialSource, legislature, session int, enqueueSummary BillSummaryEnqueue, seedMembers MemberSeeder, allowPreviousSessionFallback bool, stats *provincialCrawlStats) error {
-	var (
-		bills []ProvincialBillStub
-		berr  error
-	)
-	bills, berr = crawlBillsForSource(src, legislature, session, client)
-	if allowPreviousSessionFallback && berr == nil && len(bills) == 0 && session > 1 && provinceBillCountInDB(conn, src.Code) == 0 {
-		log.Printf("[provincial][%s] 0 bills for session %d; retrying with previous session %d to seed DB", src.Code, session, session-1)
-		bills, berr = crawlBillsForSource(src, legislature, session-1, client)
-		if berr == nil && len(bills) > 0 {
-			session--
-		}
-	}
-	if berr != nil {
-		stats.Errors++
-		log.Printf("[provincial] %s bills error: %v", src.Code, berr)
-	} else {
-		stats.BillsSeen += len(bills)
-		for _, b := range bills {
-			if err := db.UpsertBill(conn, db.Bill{
-				ID:               b.ID,
-				Parliament:       b.Parliament,
-				Session:          b.Session,
-				Number:           b.Number,
-				Title:            b.Title,
-				Chamber:          b.Chamber,
-				LegisInfoURL:     b.DetailURL,
-				FullTextURL:      b.DetailURL,
-				LastActivityDate: b.LastActivityDate,
-				LastScraped:      b.LastScraped,
-			}); err != nil {
-				stats.Errors++
-				log.Printf("[provincial] %s bill upsert %s: %v", src.Code, b.ID, err)
-			} else {
-				stats.BillsUpserted++
-				if enqueueSummary != nil && strings.TrimSpace(b.DetailURL) != "" {
-					enqueueSummary(b.ID, b.Title, b.DetailURL, b.LastActivityDate)
-				}
-			}
-			time.Sleep(delay)
-		}
-	}
-
-	var divs []ProvincialDivisionResult
-	switch src.Special {
-	case "on":
-		dates, err := CrawlOntarioVPSittingDates(src.VotesURL, legislature, session, client)
-		if err != nil {
+// executeSessionPlan writes one session's bills and divisions to the database.
+func executeSessionPlan(conn *sql.DB, client *http.Client, delay time.Duration, src ProvincialSource, sp SessionPlan, enqueueSummary BillSummaryEnqueue, seedMembers MemberSeeder, stats *provincialCrawlStats) error {
+	stats.BillsSeen += len(sp.Bills)
+	for _, b := range sp.Bills {
+		if err := store.UpsertBill(conn, store.BillRecord{
+			ID:               b.ID,
+			Parliament:       b.Parliament,
+			Session:          b.Session,
+			Number:           b.Number,
+			Title:            b.Title,
+			Chamber:          b.Chamber,
+			LegisInfoURL:     b.DetailURL,
+			FullTextURL:      b.DetailURL,
+			LastActivityDate: b.LastActivityDate,
+			LastScraped:      b.LastScraped,
+		}); err != nil {
 			stats.Errors++
-			return fmt.Errorf("ontario dates: %w", err)
-		}
-		ontarioDivs, errCount := crawlOntarioDaysConcurrently(dates, legislature, session, client, delay)
-		stats.Errors += errCount
-		divs = append(divs, ontarioDivs...)
-	case "sk":
-		links, err := CrawlSaskatchewanMinutesLinks(src.VotesURL, client)
-		if err != nil {
-			stats.Errors++
-			log.Printf("[provincial] sk: cannot discover minutes links (archive URL may have changed): %v", err)
-			break
-		}
-		skDivs, errCount := crawlSaskatchewanMinutesConcurrently(links, legislature, session, client, delay)
-		stats.Errors += errCount
-		divs = append(divs, skDivs...)
-	default:
-		var (
-			parsed []ProvincialDivisionResult
-			err    error
-		)
-		parsed, err = crawlDivisionsForSource(src, legislature, session, client)
-		if err != nil {
-			stats.Errors++
-			return err
-		}
-		if allowPreviousSessionFallback && len(parsed) == 0 && session > 1 && provinceDivisionCountInDB(conn, src.Code) == 0 {
-			log.Printf("[provincial][%s] 0 divisions for session %d; retrying with previous session %d to seed DB", src.Code, session, session-1)
-			prevParsed, prevErr := crawlDivisionsForSource(src, legislature, session-1, client)
-			if prevErr == nil && len(prevParsed) > 0 {
-				parsed = prevParsed
+			log.Printf("[provincial] %s bill upsert %s: %v", src.Code, b.ID, err)
+		} else {
+			stats.BillsUpserted++
+			if enqueueSummary != nil && strings.TrimSpace(b.DetailURL) != "" {
+				enqueueSummary(b.ID, b.Title, b.DetailURL, b.LastActivityDate)
 			}
 		}
-		divs = parsed
+		time.Sleep(delay)
 	}
-	stats.DivisionsSeen += len(divs)
-	if count := provinceMemberCountInDB(conn, src.Province); len(divs) > 0 && count < 10 && seedMembers != nil {
+
+	stats.DivisionsSeen += len(sp.Divisions)
+	if count := provinceMemberCountInDB(conn, src.Province); len(sp.Divisions) > 0 && count < 10 && seedMembers != nil {
 		seedMembers(conn, src.Code, src.Province, client, delay)
 	}
 	memberCandidates, err := loadProvincialMemberCandidates(conn, src.Province)
@@ -254,9 +271,9 @@ func crawlProvinceSession(conn *sql.DB, client *http.Client, delay time.Duration
 		return fmt.Errorf("load provincial members for %s: %w", src.Province, err)
 	}
 
-	for _, res := range divs {
-		billID := provincialBillIDFromDescription(conn, src.Code, legislature, session, res.Division.Description)
-		if err := db.UpsertDivision(conn, db.Division{
+	for _, res := range sp.Divisions {
+		billID := provincialBillIDFromDescription(conn, src.Code, sp.Legislature, sp.Session, res.Division.Description)
+		if err := store.UpsertDivision(conn, store.DivisionRecord{
 			ID:          res.Division.ID,
 			Parliament:  res.Division.Parliament,
 			Session:     res.Division.Session,
@@ -285,7 +302,7 @@ func crawlProvinceSession(conn *sql.DB, client *http.Client, delay time.Duration
 				stats.MemberVotesUnmatched++
 				continue
 			}
-			if err := db.UpsertMemberVote(conn, res.Division.ID, memberID, mv.Vote); err != nil {
+			if err := store.UpsertMemberVote(conn, res.Division.ID, memberID, mv.Vote); err != nil {
 				stats.Errors++
 				log.Printf("[provincial] %s member vote upsert: %v", src.Code, err)
 			} else {
@@ -297,6 +314,31 @@ func crawlProvinceSession(conn *sql.DB, client *http.Client, delay time.Duration
 
 	return nil
 }
+
+// CrawlProvinceSource crawls bills and votes for one province source and upserts
+// normalized records into bills/divisions/member_votes tables.
+// seedMembers is called when fewer than 10 provincial members exist in the DB;
+// pass nil to skip member seeding (e.g. in tests).
+func CrawlProvinceSource(conn *sql.DB, client *http.Client, delay time.Duration, src ProvincialSource, enqueueSummary BillSummaryEnqueue, seedMembers MemberSeeder) error {
+	log.Printf("[provincial] crawling %s", src.Province)
+	plan, err := BuildCrawlPlan(conn, client, delay, src)
+	if err != nil {
+		return err
+	}
+	return ExecuteCrawlPlan(conn, client, delay, plan, enqueueSummary, seedMembers)
+}
+
+func sessionsToCrawlForSource(src ProvincialSource, currentSession int) []int {
+	if src.Code != "pe" || currentSession <= 1 {
+		return []int{currentSession}
+	}
+	sessions := make([]int, 0, currentSession)
+	for session := currentSession; session >= 1; session-- {
+		sessions = append(sessions, session)
+	}
+	return sessions
+}
+
 
 func crawlOntarioDaysConcurrently(dates []string, legislature, session int, client *http.Client, delay time.Duration) ([]ProvincialDivisionResult, int) {
 	if len(dates) == 0 {

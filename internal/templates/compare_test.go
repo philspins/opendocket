@@ -52,8 +52,8 @@ func TestCompareMPs_RendersDropdownFilters(t *testing.T) {
 			t.Fatalf("expected compare page to contain %q", needle)
 		}
 	}
-	if strings.Contains(html, `<select name="province"`) {
-		t.Fatalf("expected province selector to be hidden when level is federal")
+	if !strings.Contains(html, `<select name="province"`) {
+		t.Fatalf("expected province selector to always be rendered")
 	}
 }
 
@@ -148,8 +148,8 @@ func TestCompareMPs_RendersSharedVotesTable(t *testing.T) {
 		`id="compare-votes-prev"`,
 		`id="compare-votes-next"`,
 		`id="compare-votes-page-size"`,
-		`<th class="px-4 py-2">Alex Federal</th>`,
-		`<th class="px-4 py-2">Blake Federal</th>`,
+		`<th class="px-4 py-2.5">Alex Federal</th>`,
+		`<th class="px-4 py-2.5">Blake Federal</th>`,
 		`C-1`,
 		`Yea`,
 		`Nay`,
@@ -158,7 +158,7 @@ func TestCompareMPs_RendersSharedVotesTable(t *testing.T) {
 			t.Fatalf("expected compare shared votes section to contain %q", needle)
 		}
 	}
-	for _, size := range []string{"5", "10", "20", "50"} {
+	for _, size := range []string{"5", "10", "25", "50"} {
 		if !strings.Contains(html, `option value="`+size+`"`) {
 			t.Fatalf("expected compare page-size option %s to be rendered", size)
 		}

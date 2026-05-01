@@ -8,49 +8,56 @@ templ MembersDirectory(ps store.ParliamentStatus, members []store.MemberRow, sea
 			<h1 class="page-title">Members of Parliament</h1>
 
 			<form method="GET" action="/members" class="filter-shell">
-				<input type="text" name="q" value={ search } placeholder="Search by name…"
-					class="input-field w-48"/>
-				<select name="party" class="input-field w-44">
-					<option value="" selected?={ party == "" }>All parties</option>
-					for _, p := range parties {
-						<option value={ p } selected?={ party == p }>{ p }</option>
-					}
-				</select>
-				<select name="province" class="input-field w-48">
-					<option value="" selected?={ province == "" }>All provinces</option>
-					for _, pv := range provinces {
-						<option value={ pv } selected?={ province == pv }>{ pv }</option>
-					}
-				</select>
-				<select name="riding" class="input-field w-56">
-					<option value="" selected?={ riding == "" }>All ridings</option>
-					for _, rd := range ridings {
-						<option value={ rd } selected?={ riding == rd }>{ rd }</option>
-					}
-				</select>
-				<select name="level" class="input-field w-46">
-					<option value="" selected?={ governmentLevel == "" }>Federal &amp; Provincial</option>
-					<option value="federal" selected?={ governmentLevel == "federal" }>Federal</option>
-					<option value="provincial" selected?={ governmentLevel == "provincial" }>Provincial</option>
-				</select>
-				<button type="submit" class="btn btn-primary">Search</button>
-				<a href="/members" class="text-sm text-gray-500 hover:underline">Clear</a>
+				<div class="grid grid-cols-1 gap-2 w-full sm:flex sm:flex-wrap sm:items-center">
+					<input type="text" name="q" value={ search } placeholder="Search by name…"
+						class="input-field sm:w-48"/>
+					<select name="level" class="input-field sm:w-auto">
+						<option value="" selected?={ governmentLevel == "" }>Federal &amp; Provincial</option>
+						<option value="federal" selected?={ governmentLevel == "federal" }>Federal</option>
+						<option value="provincial" selected?={ governmentLevel == "provincial" }>Provincial</option>
+					</select>
+					<select name="province" class="input-field">
+						<option value="" selected?={ province == "" }>All provinces</option>
+						for _, pv := range provinces {
+							<option value={ pv } selected?={ province == pv }>{ pv }</option>
+						}
+					</select>
+					<select name="riding" class="input-field sm:w-56">
+						<option value="" selected?={ riding == "" }>All ridings</option>
+						for _, rd := range ridings {
+							<option value={ rd } selected?={ riding == rd }>{ rd }</option>
+						}
+					</select>
+					<select name="party" class="input-field">
+						<option value="" selected?={ party == "" }>All parties</option>
+						for _, p := range parties {
+							<option value={ p } selected?={ party == p }>{ p }</option>
+						}
+					</select>
+				</div>
+				<div class="flex justify-end items-center gap-3 w-full">
+					<a href="/members" class="text-sm text-gray-500 hover:underline">Clear</a>
+					<button type="submit" class="btn btn-primary">Search</button>
+				</div>
 			</form>
 
-			<div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
-				for _, m := range members {
-					@memberCard(m)
-				}
-				if len(members) == 0 {
-					<div class="col-span-3 text-center py-12 text-gray-500">No members found.</div>
-				}
-			</div>
+			<section id="members-section">
+				<div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
+					for _, m := range members {
+						@memberCard(m)
+					}
+					if len(members) == 0 {
+						<div class="col-span-3 text-center py-12 text-gray-500">No members found.</div>
+					}
+				</div>
+				@VotesPagination("members", "[data-member-card]", 10)
+			</section>
 		</div>
 	}
 }
 
 templ memberCard(m store.MemberRow) {
-	<a href={ templ.SafeURL("/members/" + m.ID) } class="surface-card block p-4">
+	<a href={ templ.SafeURL("/members/" + m.ID) } class="surface-card block p-4" data-member-card="">
 		<div class="flex items-center gap-3">
 			if m.PhotoURL != "" {
 				<img src={ m.PhotoURL } alt={ m.Name } class="w-12 h-12 rounded-full object-cover flex-shrink-0"/>
@@ -59,8 +66,8 @@ templ memberCard(m store.MemberRow) {
 					{ string([]rune(m.Name)[0:1]) }
 				</div>
 			}
-			<div class="min-w-0">
-				<div class="flex items-center gap-2">
+			<div class="flex-1 min-w-0">
+				<div class="flex items-center justify-between gap-2">
 					<p class="font-medium text-gray-900 truncate">{ m.Name }</p>
 					@GovernmentLevelBadge(m.GovernmentLevel)
 				</div>
