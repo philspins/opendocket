@@ -52,8 +52,8 @@ func TestCompareMPs_RendersDropdownFilters(t *testing.T) {
 			t.Fatalf("expected compare page to contain %q", needle)
 		}
 	}
-	if strings.Contains(html, `<select name="province"`) {
-		t.Fatalf("expected province selector to be hidden when level is federal")
+	if !strings.Contains(html, `<select name="province"`) {
+		t.Fatalf("expected province selector to always be rendered")
 	}
 }
 

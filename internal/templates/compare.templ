@@ -19,17 +19,15 @@ templ CompareMPs(ps store.ParliamentStatus, members []store.MemberRow, m1, m2 st
 							<option value="provincial" selected?={ level == "provincial" }>Provincial</option>
 						</select>
 					</div>
-					if level == "provincial" {
-						<div>
-							<label class="text-xs text-gray-500 block mb-1">Province</label>
-							<select name="province" class="input-field px-3 py-1.5 text-sm w-full" onchange="this.form.submit()">
-								<option value="" selected?={ province == "" }>All provinces</option>
-								for _, pv := range provinces {
-									<option value={ pv } selected?={ province == pv }>{ pv }</option>
-								}
-							</select>
-						</div>
-					}
+					<div>
+						<label class="text-xs text-gray-500 block mb-1">Province</label>
+						<select name="province" class="input-field px-3 py-1.5 text-sm w-full" onchange="this.form.submit()">
+							<option value="" selected?={ province == "" }>All provinces</option>
+							for _, pv := range provinces {
+								<option value={ pv } selected?={ province == pv }>{ pv }</option>
+							}
+						</select>
+					</div>
 					<div class="col-span-2">
 						<label class="text-xs text-gray-500 block mb-1">Party</label>
 						<select name="party" class="input-field px-3 py-1.5 text-sm w-full" onchange="this.form.submit()">

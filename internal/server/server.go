@@ -344,6 +344,7 @@ func (s *Server) handleBills(w http.ResponseWriter, r *http.Request) {
 		Category: q.Get("category"),
 		Chamber:  q.Get("chamber"),
 		Level:    q.Get("level"),
+		Province: q.Get("province"),
 		Sort:     sortParam,
 		Page:     page,
 		PerPage:  perPage,
@@ -367,7 +368,8 @@ func (s *Server) handleBills(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, "internal error", http.StatusInternalServerError)
 		return
 	}
-	_ = templates.BillsFeed(ps, bills, total, f, subscribedIDs).Render(r.Context(), w)
+	provinces, _ := s.store.ListDistinctBillProvinces()
+	_ = templates.BillsFeed(ps, bills, total, f, subscribedIDs, provinces).Render(r.Context(), w)
 }
 
 func (s *Server) handleBillDetail(w http.ResponseWriter, r *http.Request) {
@@ -444,13 +446,13 @@ func (s *Server) handleCompare(w http.ResponseWriter, r *http.Request) {
 		level = "federal"
 	}
 
-	provincialMembers, err := s.store.ListMembers("", "", "", "", "provincial")
+	allMembers, err := s.store.ListMembers("", "", "", "", level)
 	if err != nil {
-		log.Printf("handleCompare: list provincial members: %v", err)
+		log.Printf("handleCompare: list members for provinces: %v", err)
 	}
-	provinces := uniqueSortedMemberFields(provincialMembers, func(m store.MemberRow) string { return m.Province })
+	provinces := uniqueSortedMemberFields(allMembers, func(m store.MemberRow) string { return m.Province })
 	province := q.Get("province")
-	if level != "provincial" || !isValidSelection(provinces, province) {
+	if !isValidSelection(provinces, province) {
 		province = ""
 	}
 

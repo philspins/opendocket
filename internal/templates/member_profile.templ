@@ -98,11 +98,11 @@ templ MemberProfile(ps store.ParliamentStatus, member store.MemberRow, votes []s
 						<thead>
 							<tr>
 								<th class="px-4 py-2.5 col-date">Date</th>
-								<th class="px-4 py-2.5">Vote</th>
 								<th class="px-4 py-2.5">Bill</th>
 								<th class="px-4 py-2.5">Description</th>
-								<th class="px-4 py-2.5">Result</th>
+								<th class="px-4 py-2.5">Vote</th>
 								<th class="px-4 py-2.5 col-alignment">Alignment</th>
+								<th class="px-4 py-2.5">Result</th>
 							</tr>
 						</thead>
 						<tbody>
@@ -112,14 +112,13 @@ templ MemberProfile(ps store.ParliamentStatus, member store.MemberRow, votes []s
 									data-vote-row=""
 								>
 									<td class="px-4 py-2.5 col-date">{ FormatDate(v.Date) }</td>
-									<td class={ "px-4 py-2.5 col-vote", VoteBadgeClass(v.Vote) }>{ v.Vote }</td>
 									<td class="px-4 py-2.5 col-bill">
 										if v.BillNumber != "" {
 											<a href={ templ.SafeURL("/bills/" + v.BillID) } class="hover:underline">{ v.BillNumber }</a>
 										}
 									</td>
 									<td class="px-4 py-2.5 col-description">{ v.Description }</td>
-									<td class="px-4 py-2.5 col-meta">{ v.Result }</td>
+									<td class={ "px-4 py-2.5 col-vote", VoteBadgeClass(v.Vote) }>{ v.Vote }</td>
 									<td class="px-4 py-2.5 col-alignment">
 										if v.VotedWithParty {
 											<span class="vote-yea text-xs">✓ party</span>
@@ -127,6 +126,7 @@ templ MemberProfile(ps store.ParliamentStatus, member store.MemberRow, votes []s
 											<span class="vote-nay text-xs">✗ rebel</span>
 										}
 									</td>
+									<td class="px-4 py-2.5 col-meta">{ v.Result }</td>
 								</tr>
 							}
 							if len(votes) == 0 {
