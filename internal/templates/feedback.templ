@@ -1,0 +1,100 @@
+package templates
+
+import (
+	"strconv"
+
+	"github.com/philspins/opendocket/internal/store"
+)
+
+templ FeedbackPage(ps store.ParliamentStatus, user *store.UserRow, successMsg string, issueURL string, errMsg string, maxSubjectLen int, maxDescLen int) {
+	@Layout("Feedback", ps) {
+		<section class="surface-card p-6 space-y-6" style="max-width: 640px; margin: 0 auto;">
+			<div>
+				<span class="kicker">Community</span>
+				<h1 class="page-title mt-3">Feedback</h1>
+				<p class="section-lead mt-2">
+					Have a suggestion, found a bug, or want to request new data? We'd love to hear from you.
+				</p>
+			</div>
+			if successMsg != "" {
+				<div class="border border-green-200 bg-green-50 px-4 py-3 text-sm text-green-800 space-y-1">
+					<p>{ successMsg }</p>
+					if issueURL != "" {
+						<p><a href={ templ.SafeURL(issueURL) } target="_blank" rel="noopener noreferrer" class="underline font-medium">View it here</a></p>
+					}
+				</div>
+			}
+			if errMsg != "" {
+				<div class="border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-800">
+					{ errMsg }
+				</div>
+			}
+			if user == nil {
+				<div class="border border-yellow-200 bg-yellow-50 px-4 py-3 text-sm text-yellow-800 space-y-2">
+					<p>You must be signed in and have a verified email address to submit feedback.</p>
+					<div class="flex gap-3">
+						<a href="/auth/login" class="btn btn-primary text-xs">Sign In</a>
+						<a href="/auth/signup" class="btn btn-secondary text-xs">Sign Up</a>
+					</div>
+				</div>
+			} else if !user.EmailVerified {
+				<div class="border border-yellow-200 bg-yellow-50 px-4 py-3 text-sm text-yellow-800 space-y-2">
+					<p>Please verify your email address before submitting feedback.</p>
+					<a href="/auth/verify" class="btn btn-primary text-xs">Verify Email</a>
+				</div>
+			} else if successMsg == "" {
+				<form method="POST" action="/feedback" class="space-y-4">
+					<div class="flex flex-col gap-1">
+						<label for="feedback-category" class="text-sm font-medium text-gray-700 dark:text-gray-300">Category</label>
+						<select id="feedback-category" name="category" required class="input-field w-full px-3 py-2 text-sm">
+							<option value="">— select a category —</option>
+							<option value="bug">Bug</option>
+							<option value="data">Data</option>
+							<option value="ui">UI / Design</option>
+							<option value="new_feature">New Feature</option>
+							<option value="performance">Performance</option>
+							<option value="other">Other</option>
+						</select>
+					</div>
+					<div class="flex flex-col gap-1">
+						<label for="feedback-priority" class="text-sm font-medium text-gray-700 dark:text-gray-300">Priority</label>
+						<select id="feedback-priority" name="priority" required class="input-field w-full px-3 py-2 text-sm">
+							<option value="">— select a priority —</option>
+							<option value="low">Low</option>
+							<option value="medium">Medium</option>
+							<option value="high">High</option>
+							<option value="critical">Critical</option>
+						</select>
+					</div>
+					<div class="flex flex-col gap-1">
+						<label for="feedback-subject" class="text-sm font-medium text-gray-700 dark:text-gray-300">Subject</label>
+						<input
+							id="feedback-subject"
+							type="text"
+							name="subject"
+							required
+							maxlength={ strconv.Itoa(maxSubjectLen) }
+							placeholder="Brief summary of your feedback"
+							class="input-field w-full px-3 py-2 text-sm"
+						/>
+					</div>
+					<div class="flex flex-col gap-1">
+						<label for="feedback-description" class="text-sm font-medium text-gray-700 dark:text-gray-300">Description</label>
+						<textarea
+							id="feedback-description"
+							name="description"
+							rows="6"
+							required
+							maxlength={ strconv.Itoa(maxDescLen) }
+							placeholder="Describe your feedback in detail…"
+							class="input-field w-full px-3 py-2 text-sm resize-y"
+						></textarea>
+					</div>
+					<div class="flex justify-end">
+						<button type="submit" class="btn btn-primary">Submit Feedback</button>
+					</div>
+				</form>
+			}
+		</section>
+	}
+}

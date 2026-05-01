@@ -35,6 +35,7 @@ Built with the **GOAT Stack**: Go · Templ · Alpine.js · Tailwind CSS.
 | `GOOGLE_CLIENT_SECRET` | Only for Google login | server | Google OAuth client secret |
 | `FACEBOOK_CLIENT_ID` | Only for Facebook login | server | Facebook OAuth app client ID |
 | `FACEBOOK_CLIENT_SECRET` | Only for Facebook login | server | Facebook OAuth app client secret |
+| `GITHUB_FEEDBACK_TOKEN` | Only for feedback form | server | GitHub fine-grained PAT (or classic PAT with `repo` scope) used to open feedback issues in the opendocket repository. When unset, form submissions are acknowledged but no issue is created. |
 | `AWS_REGION` | Usually yes for SES | server | AWS region for SES client (for example `ca-central-1`) |
 | `AWS_ACCESS_KEY_ID` | Optional (depends on credential source) | server | AWS credentials for SES if not using instance/profile credentials |
 | `AWS_SECRET_ACCESS_KEY` | Optional (depends on credential source) | server | AWS credentials for SES if not using instance/profile credentials |

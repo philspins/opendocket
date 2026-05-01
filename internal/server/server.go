@@ -81,6 +81,8 @@ func New(st *store.Store) *Server {
 	s.mux.HandleFunc("POST /profile", s.handleProfile)
 	s.mux.HandleFunc("GET /privacy", s.handlePrivacy)
 	s.mux.HandleFunc("GET /tos", s.handleTerms)
+	s.mux.HandleFunc("GET /feedback", s.handleFeedback)
+	s.mux.HandleFunc("POST /feedback", s.handleFeedback)
 	s.mux.HandleFunc("GET /delete-data", s.handleDeleteDataPage)
 	s.mux.HandleFunc("POST /delete-data", s.handleDeleteDataCallback)
 	s.mux.HandleFunc("GET /riding", s.handleRiding)
