@@ -991,6 +991,9 @@ func TestHandleHome_ShowsProvincialPlaceholderWhenOnlyFederalRidingSet(t *testin
 	if !strings.Contains(body, "Yasir Naqvi") {
 		t.Fatalf("expected federal representative name to be shown")
 	}
+	if !strings.Contains(body, `href="/profile"`) {
+		t.Fatalf("expected profile link in provincial placeholder for logged-in user with riding set")
+	}
 }
 
 func TestHandleHome_ShowsFederalPlaceholderWhenOnlyProvincialRidingSet(t *testing.T) {
@@ -1035,6 +1038,9 @@ func TestHandleHome_ShowsFederalPlaceholderWhenOnlyProvincialRidingSet(t *testin
 	}
 	if !strings.Contains(body, "John Fraser") {
 		t.Fatalf("expected provincial representative name to be shown")
+	}
+	if !strings.Contains(body, `href="/profile"`) {
+		t.Fatalf("expected profile link in federal placeholder for logged-in user with riding set")
 	}
 }
 

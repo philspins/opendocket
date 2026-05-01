@@ -7,7 +7,7 @@ import (
 	"github.com/philspins/opendocket/internal/store"
 )
 
-templ Home(ps store.ParliamentStatus, provincialVotes []store.VoteRow, federalVotes []store.VoteRow, savedAddress string, federalRep opennorth.Representative, provincialRep opennorth.Representative, provincialStatus string, federalStatus string) {
+templ Home(ps store.ParliamentStatus, provincialVotes []store.VoteRow, federalVotes []store.VoteRow, savedAddress string, federalRep opennorth.Representative, provincialRep opennorth.Representative, provincialStatus string, federalStatus string, isLoggedIn bool) {
 	@Layout("Home", ps) {
 		{{
 			provParty := provincialRep.PartyName
@@ -54,8 +54,13 @@ templ Home(ps store.ParliamentStatus, provincialVotes []store.VoteRow, federalVo
 					if !hasProvincialRep {
 						<div class="surface-card p-6 flex flex-col items-center text-center space-y-3 h-full">
 							<p class="text-base font-semibold">Provincial representative not found</p>
-							<p class="section-lead text-sm max-w-xs">Your provincial riding hasn't been set up yet. Enter your address to find your local representative.</p>
-							<a href="/riding" class="btn btn-primary text-sm">Update Address</a>
+							if hasSavedRiding && isLoggedIn {
+								<p class="section-lead text-sm max-w-xs">Your provincial representative could not be found automatically. Please manually select your riding on your profile page.</p>
+								<a href="/profile" class="btn btn-primary text-sm">Go to Profile</a>
+							} else {
+								<p class="section-lead text-sm max-w-xs">Your provincial riding hasn't been set up yet. Enter your address to find your local representative.</p>
+								<a href="/riding" class="btn btn-primary text-sm">Enter Your Address</a>
+							}
 						</div>
 					} else {
 						{{
@@ -116,8 +121,13 @@ templ Home(ps store.ParliamentStatus, provincialVotes []store.VoteRow, federalVo
 					if !hasFederalRep {
 						<div class="surface-card p-6 flex flex-col items-center text-center space-y-3 h-full">
 							<p class="text-base font-semibold">Federal representative not found</p>
-							<p class="section-lead text-sm max-w-xs">Your federal riding hasn't been set up yet. Enter your address to find your local representative.</p>
-							<a href="/riding" class="btn btn-primary text-sm">Update Address</a>
+							if hasSavedRiding && isLoggedIn {
+								<p class="section-lead text-sm max-w-xs">Your federal representative could not be found automatically. Please manually select your riding on your profile page.</p>
+								<a href="/profile" class="btn btn-primary text-sm">Go to Profile</a>
+							} else {
+								<p class="section-lead text-sm max-w-xs">Your federal riding hasn't been set up yet. Enter your address to find your local representative.</p>
+								<a href="/riding" class="btn btn-primary text-sm">Enter Your Address</a>
+							}
 						</div>
 					} else {
 						{{
