@@ -16,9 +16,10 @@ import (
 )
 
 const (
-	feedbackRepo             = "philspins/opendocket"
-	githubIssuesAPI          = "https://api.github.com/repos/" + feedbackRepo + "/issues"
-	githubAPIVersion         = "2022-11-28"
+	feedbackRepo              = "philspins/opendocket"
+	githubIssuesAPI           = "https://api.github.com/repos/" + feedbackRepo + "/issues"
+	githubAPIVersion          = "2022-11-28"
+	feedbackMaxSubjectLen     = 200
 	feedbackMaxDescriptionLen = 5000
 )
 
@@ -35,7 +36,7 @@ func (s *Server) handleFeedback(w http.ResponseWriter, r *http.Request) {
 		if r.URL.Query().Get("submitted") == "1" {
 			successMsg = "Thank you! Your feedback has been submitted as a GitHub issue."
 		}
-		_ = templates.FeedbackPage(ps, userPtr, successMsg, "", feedbackMaxDescriptionLen).Render(r.Context(), w)
+		_ = templates.FeedbackPage(ps, userPtr, successMsg, "", feedbackMaxSubjectLen, feedbackMaxDescriptionLen).Render(r.Context(), w)
 
 	case http.MethodPost:
 		u, ok := s.auth.RequireVerifiedSessionUser(w, r)
@@ -49,14 +50,19 @@ func (s *Server) handleFeedback(w http.ResponseWriter, r *http.Request) {
 
 		category := strings.TrimSpace(r.FormValue("category"))
 		priority := strings.TrimSpace(r.FormValue("priority"))
+		subject := strings.TrimSpace(r.FormValue("subject"))
 		description := strings.TrimSpace(r.FormValue("description"))
 
-		if category == "" || priority == "" || description == "" {
-			_ = templates.FeedbackPage(ps, &u, "", "Please fill in all fields.", feedbackMaxDescriptionLen).Render(r.Context(), w)
+		if category == "" || priority == "" || subject == "" || description == "" {
+			_ = templates.FeedbackPage(ps, &u, "", "Please fill in all fields.", feedbackMaxSubjectLen, feedbackMaxDescriptionLen).Render(r.Context(), w)
+			return
+		}
+		if len(subject) > feedbackMaxSubjectLen {
+			_ = templates.FeedbackPage(ps, &u, "", fmt.Sprintf("Subject must be %d characters or fewer.", feedbackMaxSubjectLen), feedbackMaxSubjectLen, feedbackMaxDescriptionLen).Render(r.Context(), w)
 			return
 		}
 		if len(description) > feedbackMaxDescriptionLen {
-			_ = templates.FeedbackPage(ps, &u, "", fmt.Sprintf("Description must be %d characters or fewer.", feedbackMaxDescriptionLen), feedbackMaxDescriptionLen).Render(r.Context(), w)
+			_ = templates.FeedbackPage(ps, &u, "", fmt.Sprintf("Description must be %d characters or fewer.", feedbackMaxDescriptionLen), feedbackMaxSubjectLen, feedbackMaxDescriptionLen).Render(r.Context(), w)
 			return
 		}
 
@@ -68,13 +74,12 @@ func (s *Server) handleFeedback(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 
-		title := fmt.Sprintf("[Feedback] %s — %s priority", categoryLabel(category), priority)
 		body := buildIssueBody(u.Email, categoryLabel(category), priority, description)
-		labels := []string{"feedback", category}
+		labels := []string{"feedback", categoryGitHubLabel(category)}
 
-		if err := createGitHubIssue(r.Context(), token, title, body, labels); err != nil {
+		if err := createGitHubIssue(r.Context(), token, subject, body, labels); err != nil {
 			log.Printf("feedback: GitHub issue creation failed for user %s: %v", u.Email, err)
-			_ = templates.FeedbackPage(ps, &u, "", "Failed to submit feedback. Please try again later.", feedbackMaxDescriptionLen).Render(r.Context(), w)
+			_ = templates.FeedbackPage(ps, &u, "", "Failed to submit feedback. Please try again later.", feedbackMaxSubjectLen, feedbackMaxDescriptionLen).Render(r.Context(), w)
 			return
 		}
 
@@ -151,6 +156,26 @@ func categoryLabel(v string) string {
 		return "Performance"
 	case "other":
 		return "Other"
+	default:
+		return v
+	}
+}
+
+// categoryGitHubLabel returns the GitHub label name for a given category value.
+func categoryGitHubLabel(v string) string {
+	switch v {
+	case "bug":
+		return "bug"
+	case "data":
+		return "data"
+	case "new_feature":
+		return "feature"
+	case "ui":
+		return "ui"
+	case "performance":
+		return "performance"
+	case "other":
+		return "investigation"
 	default:
 		return v
 	}

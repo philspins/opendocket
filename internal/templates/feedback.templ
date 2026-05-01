@@ -6,7 +6,7 @@ import (
 	"github.com/philspins/opendocket/internal/store"
 )
 
-templ FeedbackPage(ps store.ParliamentStatus, user *store.UserRow, successMsg string, errMsg string, maxDescLen int) {
+templ FeedbackPage(ps store.ParliamentStatus, user *store.UserRow, successMsg string, errMsg string, maxSubjectLen int, maxDescLen int) {
 	@Layout("Feedback", ps) {
 		<section class="surface-card p-6 space-y-6" style="max-width: 640px; margin: 0 auto;">
 			<div>
@@ -62,6 +62,18 @@ templ FeedbackPage(ps store.ParliamentStatus, user *store.UserRow, successMsg st
 							<option value="high">High</option>
 							<option value="critical">Critical</option>
 						</select>
+					</div>
+					<div class="flex flex-col gap-1">
+						<label for="feedback-subject" class="text-sm font-medium text-gray-700 dark:text-gray-300">Subject</label>
+						<input
+							id="feedback-subject"
+							type="text"
+							name="subject"
+							required
+							maxlength={ strconv.Itoa(maxSubjectLen) }
+							placeholder="Brief summary of your feedback"
+							class="input-field w-full px-3 py-2 text-sm"
+						/>
 					</div>
 					<div class="flex flex-col gap-1">
 						<label for="feedback-description" class="text-sm font-medium text-gray-700 dark:text-gray-300">Description</label>
