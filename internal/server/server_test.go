@@ -991,6 +991,9 @@ func TestHandleHome_ShowsProvincialPlaceholderWhenOnlyFederalRidingSet(t *testin
 	if !strings.Contains(body, "Yasir Naqvi") {
 		t.Fatalf("expected federal representative name to be shown")
 	}
+	if !strings.Contains(body, `href="/profile"`) {
+		t.Fatalf("expected profile link in provincial placeholder for logged-in user with riding set")
+	}
 }
 
 func TestHandleHome_ShowsFederalPlaceholderWhenOnlyProvincialRidingSet(t *testing.T) {
@@ -1035,6 +1038,31 @@ func TestHandleHome_ShowsFederalPlaceholderWhenOnlyProvincialRidingSet(t *testin
 	}
 	if !strings.Contains(body, "John Fraser") {
 		t.Fatalf("expected provincial representative name to be shown")
+	}
+	if !strings.Contains(body, `href="/profile"`) {
+		t.Fatalf("expected profile link in federal placeholder for logged-in user with riding set")
+	}
+}
+
+func TestHandleHome_UnauthenticatedNoAddressHidesRepSections(t *testing.T) {
+	srv, _ := newTestServer(t)
+
+	req := httptest.NewRequest(http.MethodGet, "/", nil)
+	rr := httptest.NewRecorder()
+	srv.ServeHTTP(rr, req)
+
+	if rr.Code != http.StatusOK {
+		t.Fatalf("status=%d want %d", rr.Code, http.StatusOK)
+	}
+	body := rr.Body.String()
+	if !strings.Contains(body, "Find Your Riding") {
+		t.Fatalf("expected hero section with Find Your Riding button for unauthenticated user with no address")
+	}
+	if strings.Contains(body, "representative not found") {
+		t.Fatalf("expected rep-grid to be hidden for unauthenticated user with no address")
+	}
+	if strings.Contains(body, "Recent provincial bill votes") {
+		t.Fatalf("expected Overall section to be hidden for unauthenticated user with no address")
 	}
 }
 

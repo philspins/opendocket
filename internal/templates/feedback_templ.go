@@ -113,12 +113,12 @@ func FeedbackPage(ps store.ParliamentStatus, user *store.UserRow, successMsg str
 				}
 			}
 			if user == nil {
-				templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 9, "<div class=\"border border-yellow-200 bg-yellow-50 px-4 py-3 text-sm text-yellow-800 space-y-2\"><p>You must be signed in and have a verified email address to submit feedback.</p><div class=\"flex gap-3\"><a href=\"/auth/login\" class=\"btn btn-primary text-xs\">Sign In</a> <a href=\"/auth/signup\" class=\"btn btn-secondary text-xs\">Sign Up</a></div></div>")
+				templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 9, "<div class=\"border border-blue-200 bg-[#f4f7fb] text-gray-700 dark:border-[#1E2A3A] dark:bg-[#1E2A3A] dark:text-white px-4 py-3 text-sm space-y-2\"><p>You must be signed in and have a verified email address to submit feedback.</p><div class=\"flex gap-3\"><a href=\"/auth/login\" class=\"btn btn-primary text-xs\">Sign In</a> <a href=\"/auth/signup\" class=\"btn btn-secondary text-xs\">Sign Up</a></div></div>")
 				if templ_7745c5c3_Err != nil {
 					return templ_7745c5c3_Err
 				}
 			} else if !user.EmailVerified {
-				templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 10, "<div class=\"border border-yellow-200 bg-yellow-50 px-4 py-3 text-sm text-yellow-800 space-y-2\"><p>Please verify your email address before submitting feedback.</p><a href=\"/auth/verify\" class=\"btn btn-primary text-xs\">Verify Email</a></div>")
+				templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 10, "<div class=\"border border-blue-200 bg-[#f4f7fb] text-gray-700 dark:border-[#1E2A3A] dark:bg-[#1E2A3A] dark:text-white px-4 py-3 text-sm space-y-2\"><p>Please verify your email address before submitting feedback.</p><a href=\"/auth/verify\" class=\"btn btn-primary text-xs\">Verify Email</a></div>")
 				if templ_7745c5c3_Err != nil {
 					return templ_7745c5c3_Err
 				}
