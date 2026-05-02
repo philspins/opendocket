@@ -44,7 +44,6 @@ type BillRecord struct {
 	CurrentStatus    string
 	Category         string
 	SummaryAI        string
-	SummaryLoP       string
 	FullTextURL      string
 	LegisInfoURL     string
 	IntroducedDate   string
@@ -131,15 +130,15 @@ func UpsertProfiles(db *sql.DB, members []MemberRecord, delay time.Duration) {
 }
 
 // UpsertBill inserts or updates a bill record.
-// Existing AI/LoP summaries are preserved when the incoming value is empty.
+// Existing AI summaries are preserved when the incoming value is empty.
 func UpsertBill(db *sql.DB, b BillRecord) error {
 	_, err := db.Exec(`
 		INSERT INTO bills
 			(id, parliament, session, number, title, short_title, bill_type,
 			 chamber, sponsor_id, current_stage, current_status, category,
-			 summary_ai, summary_lop, full_text_url, legisinfo_url,
+			 summary_ai, full_text_url, legisinfo_url,
 			 introduced_date, last_activity_date, last_scraped)
-		VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)
+		VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)
 		ON CONFLICT(id) DO UPDATE SET
 			parliament         = excluded.parliament,
 			session            = excluded.session,
@@ -153,7 +152,6 @@ func UpsertBill(db *sql.DB, b BillRecord) error {
 			current_status     = excluded.current_status,
 			category           = COALESCE(NULLIF(excluded.category,''), bills.category),
 			summary_ai         = COALESCE(NULLIF(excluded.summary_ai,''), bills.summary_ai),
-			summary_lop        = COALESCE(NULLIF(excluded.summary_lop,''), bills.summary_lop),
 			full_text_url      = excluded.full_text_url,
 			legisinfo_url      = excluded.legisinfo_url,
 			introduced_date    = excluded.introduced_date,
@@ -161,7 +159,7 @@ func UpsertBill(db *sql.DB, b BillRecord) error {
 			last_scraped       = excluded.last_scraped`,
 		b.ID, b.Parliament, b.Session, b.Number, b.Title, b.ShortTitle,
 		b.BillType, b.Chamber, nullStr(b.SponsorID), b.CurrentStage, b.CurrentStatus,
-		b.Category, b.SummaryAI, b.SummaryLoP, b.FullTextURL, b.LegisInfoURL,
+		b.Category, b.SummaryAI, b.FullTextURL, b.LegisInfoURL,
 		b.IntroducedDate, b.LastActivityDate, b.LastScraped,
 	)
 	return err

@@ -628,16 +628,13 @@ func SummarizeBillsFromChannel(ctx context.Context, db *sql.DB, requests <-chan 
 	return int(atomic.LoadInt64(&processed)), nil
 }
 
-// SummarizeNewBills processes all bills that still lack summaries.
-// Priority: LoP > AI fallback.
+// SummarizeNewBills processes all bills that still lack AI summaries.
 // This is meant to be called by a robfig/cron scheduler job.
 func SummarizeNewBills(ctx context.Context, db *sql.DB, onlyMissing bool) (int, error) {
-	// Find bills without summaries (neither LoP nor AI).
 	query := `
 		SELECT id, number, title, full_text_url
 		FROM bills
-		WHERE (summary_lop IS NULL OR summary_lop = '')
-		  AND (summary_ai IS NULL OR summary_ai = '')
+		WHERE (summary_ai IS NULL OR summary_ai = '')
 		ORDER BY introduced_date DESC
 		LIMIT 50  -- Batch size to avoid API overload
 	`

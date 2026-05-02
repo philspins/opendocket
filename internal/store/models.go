@@ -15,7 +15,6 @@ type BillRow struct {
 	CurrentStatus    string
 	Category         string
 	SummaryAI        string
-	SummaryLoP       string
 	FullTextURL      string
 	LegisInfoURL     string
 	IntroducedDate   string

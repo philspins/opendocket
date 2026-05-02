@@ -21,8 +21,7 @@ type Config struct {
 	DB                *sql.DB
 	FullCrawlFn       CrawlFunc     // run nightly at 02:00 UTC
 	FrequentVoteCheck CrawlFunc     // run every 4 hours
-	LoPSummaryFn      SummarizeFunc // run nightly at 04:00 UTC (after FullCrawlFn)
-	AISummarizationFn SummarizeFunc // run nightly at 05:00 UTC (after LoPSummaryFn)
+	AISummarizationFn SummarizeFunc // run nightly at 04:00 UTC
 }
 
 // CronSpec holds the cron schedule expressions used by the scheduler.
@@ -30,8 +29,7 @@ type Config struct {
 const (
 	NightlyCronSpec      = "0 2 * * *"
 	FrequentVoteCronSpec = "0 */4 * * *"
-	LoPSummaryCronSpec   = "0 4 * * *" // 04:00 UTC
-	AISummaryCronSpec    = "0 5 * * *" // 05:00 UTC
+	AISummaryCronSpec    = "0 4 * * *" // 04:00 UTC
 )
 
 // New creates and registers all cron jobs from cfg, returning the configured
@@ -60,22 +58,7 @@ func New(cfg Config) *cron.Cron {
 		}
 	})
 
-	// Library of Parliament summary scrape at 04:00 UTC (after FullCrawlFn completes)
-	if cfg.LoPSummaryFn != nil {
-		c.AddFunc(LoPSummaryCronSpec, func() {
-			log.Printf("[scheduler] lop_summary_download starting at %s", time.Now().UTC().Format(time.RFC3339))
-			ctx, cancel := context.WithTimeout(context.Background(), 30*time.Minute)
-			defer cancel()
-			count, err := cfg.LoPSummaryFn(ctx, cfg.DB)
-			if err != nil {
-				log.Printf("[scheduler] lop_summary_download error: %v", err)
-			} else {
-				log.Printf("[scheduler] lop_summary_download complete (%d downloaded)", count)
-			}
-		})
-	}
-
-	// AI summarization at 05:00 UTC (after LoP summary completes)
+	// AI summarization at 04:00 UTC
 	if cfg.AISummarizationFn != nil {
 		c.AddFunc(AISummaryCronSpec, func() {
 			log.Printf("[scheduler] ai_summarization starting at %s", time.Now().UTC().Format(time.RFC3339))
@@ -99,11 +82,8 @@ func Start(cfg Config) {
 	log.Println("[scheduler] starting (UTC)")
 	log.Println("[scheduler]   nightly_full_crawl   : daily at 02:00 UTC")
 	log.Println("[scheduler]   frequent_vote_check  : every 4 hours")
-	if cfg.LoPSummaryFn != nil {
-		log.Println("[scheduler]   lop_summary_download : daily at 04:00 UTC")
-	}
 	if cfg.AISummarizationFn != nil {
-		log.Println("[scheduler]   ai_summarization     : daily at 05:00 UTC")
+		log.Println("[scheduler]   ai_summarization     : daily at 04:00 UTC")
 	}
 
 	c := New(cfg)

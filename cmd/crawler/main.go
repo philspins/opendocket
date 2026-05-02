@@ -96,9 +96,6 @@ func main() {
 			FrequentVoteCheck: func(sdb *sql.DB) error {
 				return runFrequentVoteCheck(sdb, client, delay, "")
 			},
-			LoPSummaryFn: func(ctx context.Context, sdb *sql.DB) (int, error) {
-				return summarizer.DownloadLoPSummaries(ctx, sdb, nil)
-			},
 			AISummarizationFn: func(ctx context.Context, sdb *sql.DB) (int, error) {
 				return summarizer.SummarizeNewBills(ctx, sdb, true)
 			},
@@ -108,17 +105,6 @@ func main() {
 
 	// ── One-shot mode ────────────────────────────────────────────────────────
 	shouldRunAll := !(*billsFlag || *votesFlag || *senateFlag || *provincialFlag || *membersFlag || *calendarFlag)
-
-	// Download LoP summaries early so the summary_lop column is populated
-	// before bill detail pages are rendered.
-	if *billsFlag || shouldRunAll {
-		ctx := context.Background()
-		if n, err := summarizer.DownloadLoPSummaries(ctx, conn, nil); err != nil {
-			log.Printf("[main] lop summary job error: %v", err)
-		} else {
-			log.Printf("[main] lop summaries updated: %d", n)
-		}
-	}
 
 	// Wire up the same channel-based summarization pipeline used by runAll.
 	// The producer (crawlBills) emits requests while crawling; the consumer

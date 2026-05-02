@@ -190,7 +190,6 @@ func TestSummarizeBillsFromChannel_Clears404FullTextURL(t *testing.T) {
 		title TEXT,
 		full_text_url TEXT,
 		summary_ai TEXT,
-		summary_lop TEXT,
 		last_activity_date TEXT
 	)`); err != nil {
 		t.Fatalf("create bills: %v", err)

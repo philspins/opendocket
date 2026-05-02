@@ -39,14 +39,6 @@ func CrawlBills(conn *sql.DB, client *http.Client, delay time.Duration, rssURL s
 		time.Sleep(delay)
 
 		parl, sess, ok := utils.ParliamentSessionFromBillID(stub.ID)
-		var lopSummary string
-		if ok {
-			lopSummary = CrawlLibraryOfParliamentSummary(
-				utils.BillNumberFromID(stub.ID), parl, sess, client,
-			)
-			time.Sleep(delay)
-		}
-
 		bill := store.BillRecord{
 			ID:               stub.ID,
 			Parliament:       parl,
@@ -62,7 +54,6 @@ func CrawlBills(conn *sql.DB, client *http.Client, delay time.Duration, rssURL s
 			BillType:         detail.BillType,
 			FullTextURL:      detail.FullTextURL,
 			IntroducedDate:   detail.IntroducedDate,
-			SummaryLoP:       lopSummary,
 			LastScraped:      utils.NowISO(),
 		}
 		if !ok {
