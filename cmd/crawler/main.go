@@ -133,17 +133,32 @@ func main() {
 		}
 	}
 
-	// Phase 2: build the remaining crawl tasks and run them concurrently.
+	// Phase 2: crawl bills, calendar, and provincial concurrently.
+	// Votes must not start until bills are persisted — divisions.bill_id is a FK
+	// into bills, so inserting a vote before its bill exists causes a constraint error.
 	type task struct {
 		name string
 		fn   func() error
 	}
-	var tasks []task
+	run := func(tasks []task) {
+		fns := make([]func(), len(tasks))
+		for i, t := range tasks {
+			t := t
+			fns[i] = func() {
+				if err := t.fn(); err != nil {
+					log.Printf("[main] %s error: %v", t.name, err)
+				}
+			}
+		}
+		scraper.RunParallel(*parallelism, fns)
+	}
+
+	var billTasks []task
 	if *calendarFlag || shouldRunAll {
-		tasks = append(tasks, task{"calendar", func() error { return scraper.CrawlCalendar(conn, client, delay, "") }})
+		billTasks = append(billTasks, task{"calendar", func() error { return scraper.CrawlCalendar(conn, client, delay, "") }})
 	}
 	if *billsFlag || shouldRunAll {
-		tasks = append(tasks, task{"bills", func() error {
+		billTasks = append(billTasks, task{"bills", func() error {
 			return scraper.CrawlBills(conn, client, delay, "", func(billID, billTitle, fullTextURL, lastActivityDate string) {
 				if summaryRequests == nil || strings.TrimSpace(fullTextURL) == "" {
 					return
@@ -157,18 +172,12 @@ func main() {
 			})
 		}})
 	}
-	if *votesFlag || shouldRunAll {
-		tasks = append(tasks, task{"votes", func() error { return scraper.CrawlVotes(conn, client, delay, "") }})
-	}
-	if *senateFlag || shouldRunAll {
-		tasks = append(tasks, task{"senate", func() error { return scraper.CrawlSenate(conn, client, delay, "") }})
-	}
 	if *provincialFlag || shouldRunAll {
-		filter := provinceFilter // nil when running all
+		filter := provinceFilter
 		if shouldRunAll {
 			filter = nil
 		}
-		tasks = append(tasks, task{"provincial", func() error {
+		billTasks = append(billTasks, task{"provincial", func() error {
 			return scraper.CrawlProvincial(conn, client, delay, *parallelism, filter, func(billID, billTitle, fullTextURL, lastActivityDate string) {
 				if summaryRequests == nil || strings.TrimSpace(fullTextURL) == "" {
 					return
@@ -182,18 +191,17 @@ func main() {
 			})
 		}})
 	}
+	run(billTasks)
 
-	// Wrap each task so errors are logged with the domain name.
-	fns := make([]func(), len(tasks))
-	for i, t := range tasks {
-		fns[i] = func() {
-			if err := t.fn(); err != nil {
-				log.Printf("[main] %s error: %v", t.name, err)
-			}
-		}
+	// Phase 3: crawl votes after all bills are in the DB.
+	var voteTasks []task
+	if *votesFlag || shouldRunAll {
+		voteTasks = append(voteTasks, task{"votes", func() error { return scraper.CrawlVotes(conn, client, delay, "") }})
 	}
-
-	scraper.RunParallel(*parallelism, fns)
+	if *senateFlag || shouldRunAll {
+		voteTasks = append(voteTasks, task{"senate", func() error { return scraper.CrawlSenate(conn, client, delay, "") }})
+	}
+	run(voteTasks)
 
 	// Signal the summarizer worker that all bills have been submitted, then
 	// wait for it to finish and log the result.
@@ -228,8 +236,9 @@ func runAll(conn *sql.DB, client *http.Client, delay time.Duration, parallelism 
 	// linkage can resolve against freshly-stored member records.
 	scraper.CrawlMembers(conn, client, delay, "")
 
-	// Phase 2: crawl all remaining domains concurrently.
-	fns := []func(){
+	// Phase 2: crawl bills and calendar concurrently. Votes must not start
+	// until bills are persisted, otherwise divisions.bill_id FK constraints fail.
+	scraper.RunParallel(parallelism, []func(){
 		func() { scraper.CrawlCalendar(conn, client, delay, "") },
 		func() {
 			scraper.CrawlBills(conn, client, delay, "", func(billID, billTitle, fullTextURL, lastActivityDate string) {
@@ -244,8 +253,6 @@ func runAll(conn *sql.DB, client *http.Client, delay time.Duration, parallelism 
 				}
 			})
 		},
-		func() { scraper.CrawlVotes(conn, client, delay, "") },
-		func() { scraper.CrawlSenate(conn, client, delay, "") },
 		func() {
 			scraper.CrawlProvincial(conn, client, delay, parallelism, nil, func(billID, billTitle, fullTextURL, lastActivityDate string) {
 				if strings.TrimSpace(fullTextURL) == "" {
@@ -259,8 +266,13 @@ func runAll(conn *sql.DB, client *http.Client, delay time.Duration, parallelism 
 				}
 			})
 		},
-	}
-	scraper.RunParallel(parallelism, fns)
+	})
+
+	// Phase 3: crawl votes only after all bills are in the DB.
+	scraper.RunParallel(parallelism, []func(){
+		func() { scraper.CrawlVotes(conn, client, delay, "") },
+		func() { scraper.CrawlSenate(conn, client, delay, "") },
+	})
 	close(summaryRequests)
 	res := <-summaryResultCh
 	if res.err != nil {
