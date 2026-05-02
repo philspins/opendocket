@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"log"
 	"net/http"
+	neturl "net/url"
 	"regexp"
 	"strconv"
 	"strings"
@@ -50,6 +51,7 @@ type DivisionStub struct {
 type MemberVote struct {
 	DivisionID string
 	MemberID   string
+	MemberName string
 	Vote       string // "Yea" | "Nay" | "Paired" | "Abstain"
 }
 
@@ -264,7 +266,99 @@ func CrawlDivisionDetail(divisionID, url string, client *http.Client) ([]MemberV
 		}
 	}
 
+	// ── Journals fallback ──────────────────────────────────────────────────────
+	// Some divisions render an empty member table and point to a Journals entry
+	// in Motion Text (DocumentViewer link). Parse that section for vote names.
+	if len(votes) == 0 {
+		if journalURL := findDivisionJournalURL(doc, url); journalURL != "" {
+			journalVotes, err := crawlDivisionVotesFromJournal(divisionID, journalURL, client)
+			if err != nil {
+				log.Printf("[votes] journals fallback error for %s: %v", divisionID, err)
+			} else {
+				votes = journalVotes
+			}
+		}
+	}
+
 	log.Printf("[votes] division %s: %d member votes", divisionID, len(votes))
+	return votes, nil
+}
+
+func findDivisionJournalURL(doc *goquery.Document, pageURL string) string {
+	journalURL := ""
+	doc.Find("a[href]").EachWithBreak(func(_ int, a *goquery.Selection) bool {
+		href, ok := a.Attr("href")
+		if !ok {
+			return true
+		}
+		href = strings.TrimSpace(href)
+		if href == "" {
+			return true
+		}
+		text := strings.ToLower(strings.TrimSpace(a.Text()))
+		hrefLower := strings.ToLower(href)
+		if !strings.Contains(text, "journals of") && !strings.Contains(hrefLower, "/documentviewer/") {
+			return true
+		}
+		journalURL = resolveRelativeURL(pageURL, href)
+		return false
+	})
+	return journalURL
+}
+
+func crawlDivisionVotesFromJournal(divisionID, journalURL string, client *http.Client) ([]MemberVote, error) {
+	journalDoc, err := fetchDoc(journalURL, client)
+	if err != nil {
+		return nil, fmt.Errorf("journals page %q: %w", journalURL, err)
+	}
+
+	var table *goquery.Selection
+	if parsed, err := neturl.Parse(journalURL); err == nil {
+		anchor := strings.TrimSpace(parsed.Fragment)
+		if anchor != "" {
+			if target := journalDoc.Find(fmt.Sprintf("a[name='%s']", anchor)).First(); target.Length() > 0 {
+				table = target.NextAllFiltered("table").First()
+			}
+		}
+	}
+	if table == nil || table.Length() == 0 {
+		table = journalDoc.Find("table").FilterFunction(func(_ int, s *goquery.Selection) bool {
+			text := strings.ToUpper(s.Text())
+			return strings.Contains(text, "YEAS") && strings.Contains(text, "NAYS")
+		}).First()
+	}
+	if table == nil || table.Length() == 0 {
+		return nil, nil
+	}
+
+	votes := make([]MemberVote, 0)
+	table.Find("td.DivisionType").Each(func(_ int, td *goquery.Selection) {
+		header := strings.ToUpper(strings.TrimSpace(td.Find("p.DivisionType").First().Text()))
+		voteType := ""
+		switch {
+		case strings.Contains(header, "YEAS") || strings.Contains(header, "AYES"):
+			voteType = "Yea"
+		case strings.Contains(header, "NAYS"):
+			voteType = "Nay"
+		case strings.Contains(header, "PAIRED"):
+			voteType = "Paired"
+		default:
+			return
+		}
+
+		td.Find("span.DivisionItem").Each(func(_ int, span *goquery.Selection) {
+			name := strings.TrimSpace(span.Text())
+			if name == "" {
+				return
+			}
+			votes = append(votes, MemberVote{
+				DivisionID: divisionID,
+				MemberName: name,
+				Vote:       voteType,
+			})
+		})
+	})
+
 	return votes, nil
 }
 

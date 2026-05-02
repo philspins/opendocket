@@ -46,7 +46,7 @@ func ProvincialDivisionID(province string, legislature, session, num int, date s
 // ── PDF extraction ────────────────────────────────────────────────────────────
 
 func downloadAndExtractPDFText(pdfURL, province string, client *http.Client) (string, error) {
-	resp, err := client.Get(pdfURL)
+	resp, err := getWithRetry(client, pdfURL)
 	if err != nil {
 		return "", fmt.Errorf("GET %q: %w", pdfURL, err)
 	}

@@ -120,12 +120,11 @@ func UpsertMember(db *sql.DB, m MemberRecord) error {
 
 // UpsertProfiles persists a slice of members, logging individual row failures
 // and continuing to process the remaining records.
-func UpsertProfiles(db *sql.DB, members []MemberRecord, delay time.Duration) {
+func UpsertProfiles(db *sql.DB, members []MemberRecord) {
 	for _, m := range members {
 		if err := UpsertMember(db, m); err != nil {
 			log.Printf("[members] upsert %s: %v", m.ID, err)
 		}
-		time.Sleep(delay)
 	}
 }
 

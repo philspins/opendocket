@@ -44,7 +44,7 @@ const (
 	peiCaptchaSignature    = "captcha.perfdrive.com"
 	peiBotManagerSignature = "perfdrive.com"
 
-	peiDefaultDelay = 1 * time.Second
+	peiDefaultDelay = 0 * time.Millisecond
 )
 
 const peiGeneralAssembly = 67
@@ -96,7 +96,7 @@ func isPEICaptchaBody(body []byte) bool {
 	return strings.Contains(lower, peiCaptchaSignature) || strings.Contains(lower, peiBotManagerSignature)
 }
 
-func postPEIWorkflow(ctx context.Context, wdfBase, workflowName, activityName string, queryVars map[string]string, client *http.Client, delay time.Duration) ([]byte, error) {
+func postPEIWorkflow(ctx context.Context, wdfBase, workflowName, activityName string, queryVars map[string]interface{}, client *http.Client, delay time.Duration) ([]byte, error) {
 	if ctx == nil {
 		ctx = context.Background()
 	}
@@ -113,7 +113,7 @@ func postPEIWorkflow(ctx context.Context, wdfBase, workflowName, activityName st
 	return postPEIWorkflowHTTP(ctx, wdfBase, workflowName, activityName, queryVars, client, delay)
 }
 
-func invokePEIFetchJS(ctx context.Context, workflowName, activityName string, queryVars map[string]string) ([]byte, error) {
+func invokePEIFetchJS(ctx context.Context, workflowName, activityName string, queryVars map[string]interface{}) ([]byte, error) {
 	if ctx == nil {
 		ctx = context.Background()
 	}
@@ -142,7 +142,7 @@ func invokePEIFetchJS(ctx context.Context, workflowName, activityName string, qu
 	return stdout.Bytes(), nil
 }
 
-func postPEIWorkflowHTTP(ctx context.Context, wdfBase, workflowName, activityName string, queryVars map[string]string, client *http.Client, delay time.Duration) ([]byte, error) {
+func postPEIWorkflowHTTP(ctx context.Context, wdfBase, workflowName, activityName string, queryVars map[string]interface{}, client *http.Client, delay time.Duration) ([]byte, error) {
 	if ctx == nil {
 		ctx = context.Background()
 	}
@@ -173,26 +173,18 @@ func postPEIWorkflowHTTP(ctx context.Context, wdfBase, workflowName, activityNam
 	req.Header.Set("Accept", "application/json")
 	req.Header.Set("Client-Show-Status", "true")
 
-	transport := http.RoundTripper(http.DefaultTransport)
-	if client != nil && client.Transport != nil {
-		transport = client.Transport
+	var httpClient *http.Client
+	if client != nil {
+		httpClient = client
+	} else {
+		httpClient = &http.Client{Timeout: 20 * time.Second}
 	}
-	timeout := 20 * time.Second
-	if client != nil && client.Timeout > 0 {
-		timeout = client.Timeout
-	}
-	noRedirect := &http.Client{
-		Transport:     transport,
-		Timeout:       timeout,
-		CheckRedirect: func(_ *http.Request, _ []*http.Request) error { return http.ErrUseLastResponse },
-	}
-	resp, err := noRedirect.Do(req)
+	resp, err := httpClient.Do(req)
 	if err != nil {
 		return nil, fmt.Errorf("pe wdf do: %w", err)
 	}
 	defer resp.Body.Close()
 	if resp.StatusCode != http.StatusOK {
-		log.Printf("[pe-wdf] %s returned HTTP %d; will fall back to HTML", workflowName, resp.StatusCode)
 		return nil, nil
 	}
 	data, err := io.ReadAll(io.LimitReader(resp.Body, 2<<20))
@@ -240,16 +232,31 @@ func newPEIHTTPClient(delay time.Duration) *http.Client {
 	}
 }
 
+func peiConfiguredDelay() time.Duration {
+	v := strings.TrimSpace(os.Getenv("PEI_REQUEST_DELAY_MS"))
+	if v == "" {
+		return peiDefaultDelay
+	}
+	ms, err := strconv.Atoi(v)
+	if err != nil || ms < 0 {
+		return peiDefaultDelay
+	}
+	return time.Duration(ms) * time.Millisecond
+}
+
 // ── PEI assembly session detection ───────────────────────────────────────────
 
-func fetchPEICurrentAssemblySession() (int, int, bool) {
-	queryVars := map[string]string{
+func fetchPEICurrentAssemblySession(client *http.Client) (int, int, bool) {
+	if client == nil {
+		client = newPEIHTTPClient(0)
+	}
+	queryVars := map[string]interface{}{
 		"year":          strconv.Itoa(time.Now().Year()),
 		"search":        "year",
 		"search_bills":  "true",
 		"wdf_url_query": "true",
 	}
-	data, err := invokePEIFetchJS(context.Background(), peiWorkflowBills, peiWDFActivityBills, queryVars)
+	data, err := postPEIWorkflow(context.Background(), peiWDFAPIBase, peiWorkflowBills, peiWDFActivityBills, queryVars, client, 0)
 	if err != nil || data == nil {
 		return 0, 0, false
 	}
@@ -287,8 +294,8 @@ func fetchPEICurrentAssemblySession() (int, int, bool) {
 	return 0, 0, false
 }
 
-func FetchPEICurrentAssemblySession() (int, int, bool) {
-	return fetchPEICurrentAssemblySession()
+func FetchPEICurrentAssemblySession(client *http.Client) (int, int, bool) {
+	return fetchPEICurrentAssemblySession(client)
 }
 
 func PEIFallbackAssembly() int {
@@ -344,7 +351,7 @@ func fetchPEIBillDetailURL(wdfBase, billDocID string, client *http.Client, delay
 	if strings.TrimSpace(billDocID) == "" {
 		return ""
 	}
-	body, err := postPEIWorkflow(context.Background(), wdfBase, peiWorkflowBills, peiWDFActivityBillView, map[string]string{
+	body, err := postPEIWorkflow(context.Background(), wdfBase, peiWorkflowBills, peiWDFActivityBillView, map[string]interface{}{
 		"id": billDocID,
 	}, client, delay)
 	if err != nil || body == nil {
@@ -357,119 +364,150 @@ func fetchPEIBillDetailURL(wdfBase, billDocID string, client *http.Client, delay
 	return firstWDFLinkHref(resp.Data)
 }
 
+const peiPageSize = 20
+
 func crawlPEIBillsFromWorkflow(wdfBase string, year, legislature, session int, client *http.Client, delay time.Duration) ([]ProvincialBillStub, error) {
-	params := map[string]string{
+	baseParams := map[string]interface{}{
 		"search_bills":  "true",
 		"wdf_url_query": "true",
+		"page_size":     peiPageSize,
 	}
 	if legislature > 0 && session > 0 {
-		params["search"] = "assembly"
-		params["general_assembly"] = strconv.Itoa(legislature)
-		params["session"] = strconv.Itoa(session)
+		baseParams["search"] = "assembly"
+		baseParams["general_assembly"] = strconv.Itoa(legislature)
+		baseParams["session"] = strconv.Itoa(session)
 	} else {
-		params["year"] = strconv.Itoa(year)
-		params["search"] = "year"
-	}
-	body, err := postPEIWorkflow(context.Background(), wdfBase, peiWorkflowBills, peiWDFActivityBills, params, client, delay)
-	if err != nil || body == nil {
-		return nil, err
-	}
-
-	var resp wdfTreeResponse
-	if err := json.Unmarshal(body, &resp); err != nil {
-		log.Printf("[pe-bills] wdf tree decode: %v; falling back to HTML", err)
-		return nil, nil
-	}
-	if resp.Data == nil {
-		log.Printf("[pe-bills] wdf returned null data; falling back to HTML")
-		return nil, nil
-	}
-
-	rows := wdfCollectRows(resp.Data)
-	if len(rows) == 0 {
-		log.Printf("[pe-bills] wdf returned 0 bill rows; falling back to HTML")
-		return nil, nil
+		baseParams["year"] = strconv.Itoa(year)
+		baseParams["search"] = "year"
 	}
 
 	seen := make(map[string]bool)
-	out := make([]ProvincialBillStub, 0, len(rows))
-	for _, row := range rows {
-		if len(row.Children) < 2 {
-			continue
+	var out []ProvincialBillStub
+
+	for page := 1; ; page++ {
+		params := make(map[string]interface{}, len(baseParams)+1)
+		for k, v := range baseParams {
+			params[k] = v
 		}
-		var title, detailURL, billDocID string
-		if len(row.Children[0].Children) > 0 {
-			lnk := row.Children[0].Children[0]
-			if lnk.Type == "LinkV2" {
-				var ld wdfLinkData
-				if json.Unmarshal(lnk.Data, &ld) == nil {
-					title = strings.TrimSpace(ld.Text)
-					if id, ok := ld.QueryParams["id"]; ok {
-						billDocID = strings.TrimSpace(id)
-					}
-					if ld.Href != nil && *ld.Href != "" {
-						detailURL = *ld.Href
-					} else if ld.RouterLink != nil && *ld.RouterLink != "" {
-						detailURL = *ld.RouterLink
+		params["page_number"] = page
+
+		body, err := postPEIWorkflow(context.Background(), wdfBase, peiWorkflowBills, peiWDFActivityBills, params, client, delay)
+		if err != nil || body == nil {
+			if page == 1 {
+				return nil, err
+			}
+			break
+		}
+
+		var resp wdfTreeResponse
+		if err := json.Unmarshal(body, &resp); err != nil {
+			if page == 1 {
+				log.Printf("[pe-bills] wdf tree decode: %v; falling back to HTML", err)
+				return nil, nil
+			}
+			break
+		}
+		if resp.Data == nil {
+			if page == 1 {
+				log.Printf("[pe-bills] wdf returned null data; falling back to HTML")
+				return nil, nil
+			}
+			break
+		}
+
+		rows := wdfCollectRows(resp.Data)
+		if len(rows) == 0 {
+			if page == 1 {
+				log.Printf("[pe-bills] wdf returned 0 bill rows; falling back to HTML")
+				return nil, nil
+			}
+			break
+		}
+		log.Printf("[pe-bills] page %d: %d rows", page, len(rows))
+
+		for _, row := range rows {
+			if len(row.Children) < 2 {
+				continue
+			}
+			var title, detailURL, billDocID string
+			if len(row.Children[0].Children) > 0 {
+				lnk := row.Children[0].Children[0]
+				if lnk.Type == "LinkV2" {
+					var ld wdfLinkData
+					if json.Unmarshal(lnk.Data, &ld) == nil {
+						title = strings.TrimSpace(ld.Text)
+						if id, ok := ld.QueryParams["id"]; ok {
+							billDocID = strings.TrimSpace(id)
+						}
+						if ld.Href != nil && *ld.Href != "" {
+							detailURL = *ld.Href
+						} else if ld.RouterLink != nil && *ld.RouterLink != "" {
+							detailURL = *ld.RouterLink
+						}
 					}
 				}
 			}
-		}
 
-		billNumber := ""
-		var cd1 wdfCellData
-		if json.Unmarshal(row.Children[1].Data, &cd1) == nil && cd1.Text != nil {
-			billNumber = strings.ToUpper(strings.TrimSpace(*cd1.Text))
-		}
-		if billNumber == "" {
-			billNumber = ExtractProvincialBillNumber(title)
-		}
-		if billNumber == "" {
-			continue
-		}
-
-		lastActivity := ""
-		if len(row.Children) > 3 {
-			var cd wdfCellData
-			if json.Unmarshal(row.Children[3].Data, &cd) == nil && cd.Text != nil {
-				lastActivity = utils.FindDateInText(*cd.Text)
+			billNumber := ""
+			var cd1 wdfCellData
+			if json.Unmarshal(row.Children[1].Data, &cd1) == nil && cd1.Text != nil {
+				billNumber = strings.ToUpper(strings.TrimSpace(*cd1.Text))
 			}
-		}
-
-		id := ProvincialBillID("pe", legislature, session, billNumber)
-		if id == "" || seen[id] {
-			continue
-		}
-		seen[id] = true
-
-		if title == "" {
-			title = "Bill " + billNumber
-		}
-
-		if billDocID != "" {
-			if pdfURL := fetchPEIBillDetailURL(wdfBase, billDocID, client, delay); pdfURL != "" {
-				detailURL = pdfURL
+			if billNumber == "" {
+				billNumber = ExtractProvincialBillNumber(title)
 			}
-		}
-		detailURL = resolveRelativeURL(peiAssemblyBase, detailURL)
+			if billNumber == "" {
+				continue
+			}
 
-		out = append(out, ProvincialBillStub{
-			ID:               id,
-			ProvinceCode:     "pe",
-			Parliament:       legislature,
-			Session:          session,
-			Number:           billNumber,
-			Title:            title,
-			Chamber:          "pei",
-			DetailURL:        detailURL,
-			SourceURL:        strings.TrimRight(wdfBase, "/") + "/legislative-assembly/services/api/workflow",
-			LastActivityDate: lastActivity,
-			LastScraped:      utils.NowISO(),
-		})
+			lastActivity := ""
+			if len(row.Children) > 3 {
+				var cd wdfCellData
+				if json.Unmarshal(row.Children[3].Data, &cd) == nil && cd.Text != nil {
+					lastActivity = utils.FindDateInText(*cd.Text)
+				}
+			}
+
+			id := ProvincialBillID("pe", legislature, session, billNumber)
+			if id == "" || seen[id] {
+				continue
+			}
+			seen[id] = true
+
+			if title == "" {
+				title = "Bill " + billNumber
+			}
+
+			if billDocID != "" {
+				if pdfURL := fetchPEIBillDetailURL(wdfBase, billDocID, client, delay); pdfURL != "" {
+					detailURL = pdfURL
+				}
+			}
+			detailURL = resolveRelativeURL(peiAssemblyBase, detailURL)
+
+			out = append(out, ProvincialBillStub{
+				ID:               id,
+				ProvinceCode:     "pe",
+				Parliament:       legislature,
+				Session:          session,
+				Number:           billNumber,
+				Title:            title,
+				Chamber:          "pei",
+				DetailURL:        detailURL,
+				SourceURL:        strings.TrimRight(wdfBase, "/") + "/legislative-assembly/services/api/workflow",
+				LastActivityDate: lastActivity,
+				LastScraped:      utils.NowISO(),
+			})
+		}
+
+		// Stop if this page was not full — it's the last page.
+		if len(rows) < peiPageSize {
+			break
+		}
 	}
 
 	sort.Slice(out, func(i, j int) bool { return out[i].ID < out[j].ID })
-	log.Printf("[pe-bills] wdf parsed %d bills", len(out))
+	log.Printf("[pe-bills] wdf parsed %d bills total", len(out))
 	return out, nil
 }
 
@@ -480,7 +518,7 @@ func crawlPrinceEdwardIslandBills(indexURL string, legislature, session int, cli
 	}
 	delay := time.Duration(0)
 	if client == nil {
-		delay = peiDefaultDelay
+		delay = peiConfiguredDelay()
 		client = newPEIHTTPClient(delay)
 	}
 
@@ -751,7 +789,7 @@ func ParsePEIJournalDivisionsForTest(text, pdfURL string, legislature, session, 
 // ── PEI votes ─────────────────────────────────────────────────────────────────
 
 func crawlPEIVotesFromWorkflow(wdfBase string, year, legislature, session int, client *http.Client, delay time.Duration) ([]ProvincialDivisionResult, error) {
-	queryVars := map[string]string{
+	queryVars := map[string]interface{}{
 		"wdf_url_query": "true",
 	}
 	if legislature > 0 && session > 0 {
@@ -899,7 +937,7 @@ func crawlPrinceEdwardIslandVotes(indexURL string, legislature, session int, cli
 	}
 	delay := time.Duration(0)
 	if client == nil {
-		delay = peiDefaultDelay
+		delay = peiConfiguredDelay()
 		client = newPEIHTTPClient(delay)
 	}
 

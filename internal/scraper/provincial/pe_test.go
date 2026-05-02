@@ -36,23 +36,27 @@ func TestCrawlPrinceEdwardIslandBills_UsesWorkflowAPI(t *testing.T) {
 		}
 		defer r.Body.Close()
 		var req struct {
-			QueryName string            `json:"queryName"`
-			QueryVars map[string]string `json:"queryVars"`
+			QueryName string                 `json:"queryName"`
+			QueryVars map[string]interface{} `json:"queryVars"`
 		}
 		if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
 			http.Error(w, err.Error(), http.StatusBadRequest)
 			return
 		}
 		w.Header().Set("Content-Type", "application/json")
-		if req.QueryName == "LegislativeAssemblyBillView" && req.QueryVars["id"] == "bill-doc-1" {
+		idVal, _ := req.QueryVars["id"].(string)
+		if req.QueryName == "LegislativeAssemblyBillView" && idVal == "bill-doc-1" {
 			w.Write([]byte(detailJSON))
 			return
 		}
-		if req.QueryVars["search"] != "assembly" {
-			t.Fatalf("search=%q, want assembly", req.QueryVars["search"])
+		searchVal, _ := req.QueryVars["search"].(string)
+		if searchVal != "assembly" {
+			t.Fatalf("search=%q, want assembly", searchVal)
 		}
-		if req.QueryVars["general_assembly"] != "68" || req.QueryVars["session"] != "1" {
-			t.Fatalf("assembly/session=(%q,%q), want (68,1)", req.QueryVars["general_assembly"], req.QueryVars["session"])
+		gaVal, _ := req.QueryVars["general_assembly"].(string)
+		sessVal, _ := req.QueryVars["session"].(string)
+		if gaVal != "68" || sessVal != "1" {
+			t.Fatalf("assembly/session=(%q,%q), want (68,1)", gaVal, sessVal)
 		}
 		w.Write([]byte(billsJSON))
 	})
@@ -207,20 +211,23 @@ func TestCrawlProvinceSource_PEICrawlsAllSessionsInCurrentLegislature(t *testing
 	workflowHandler := func(w http.ResponseWriter, r *http.Request) {
 		defer r.Body.Close()
 		var req struct {
-			QueryName string            `json:"queryName"`
-			QueryVars map[string]string `json:"queryVars"`
+			QueryName string                 `json:"queryName"`
+			QueryVars map[string]interface{} `json:"queryVars"`
 		}
 		if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
 			http.Error(w, err.Error(), http.StatusBadRequest)
 			return
 		}
-		session := req.QueryVars["session"]
+		session, _ := req.QueryVars["session"].(string)
+		idVal, _ := req.QueryVars["id"].(string)
 		if req.QueryName != "LegislativeAssemblyBillView" {
-			if req.QueryVars["search"] != "assembly" {
-				t.Fatalf("search=%q, want assembly", req.QueryVars["search"])
+			searchVal, _ := req.QueryVars["search"].(string)
+			if searchVal != "assembly" {
+				t.Fatalf("search=%q, want assembly", searchVal)
 			}
-			if req.QueryVars["general_assembly"] != "67" {
-				t.Fatalf("general_assembly=%q, want 67", req.QueryVars["general_assembly"])
+			gaVal, _ := req.QueryVars["general_assembly"].(string)
+			if gaVal != "67" {
+				t.Fatalf("general_assembly=%q, want 67", gaVal)
 			}
 		}
 		w.Header().Set("Content-Type", "application/json")
@@ -228,7 +235,7 @@ func TestCrawlProvinceSource_PEICrawlsAllSessionsInCurrentLegislature(t *testing
 		case "LegislativeAssemblyBillSearch":
 			_, _ = fmt.Fprintf(w, `{"processInstanceId":"b%s","messages":{"error":[]},"data":[{"id":"1","type":"TableV2","data":{},"children":[{"id":"2","type":"TableV2Row","data":{},"children":[{"id":"3","type":"TableV2Cell","data":{},"children":[{"id":"4","type":"LinkV2","data":{"text":"Bill %s - Session %s Act","routerLink":"../LegislativeAssemblyBillView","queryParams":{"id":"bill-doc-%s"}},"children":[]}]},{"id":"5","type":"TableV2Cell","data":{"text":"%s"},"children":[]},{"id":"6","type":"TableV2Cell","data":{"text":"First Reading"},"children":[]},{"id":"7","type":"TableV2Cell","data":{"text":"March 15, 2026"},"children":[]}]}]}]}`, session, session, session, session, session)
 		case "LegislativeAssemblyBillView":
-			billDocID := req.QueryVars["id"]
+			billDocID := idVal
 			_, _ = fmt.Fprintf(w, `{"processInstanceId":"d%s","messages":{"error":[]},"data":[{"id":"10","type":"TableV2","data":{},"children":[{"id":"11","type":"TableV2Row","data":{},"children":[{"id":"12","type":"TableV2Header","data":{"text":"Read Original Bill Text* (PDF)"},"children":[]},{"id":"13","type":"TableV2Cell","data":{"text":null},"children":[{"id":"14","type":"LinkV2","data":{"text":"Bill Text","href":"https://docs.assembly.pe.ca/download/dms?objectId=%s&fileName=%s.pdf"},"children":[]}]}]}]}]}`, billDocID, billDocID, strings.TrimPrefix(billDocID, "bill-doc-"))
 		case "LegislativeAssemblyJournalsSearch":
 			_, _ = fmt.Fprintf(w, `{"processInstanceId":"j%s","messages":{"error":[]},"data":[{"id":"1","type":"TableV2","data":{},"children":[{"id":"2","type":"TableV2Row","data":{},"children":[{"id":"3","type":"TableV2Cell","data":{},"children":[{"id":"4","type":"LinkV2","data":{"text":"Journal Session %s","href":"%s/journals/session-%s"},"children":[]}]}]}]}]}`, session, session, srv.URL, session)

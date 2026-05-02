@@ -49,6 +49,12 @@ func crawlQuebecBills(indexURL string, legislature, session int, client *http.Cl
 	if indexURL == "" {
 		indexURL = "https://www.assnat.qc.ca/en/travaux-parlementaires/projets-loi/index.html"
 	}
+	// assnat.qc.ca is slow to respond; use a longer timeout than the default 15s.
+	if client != nil && client.Timeout > 0 && client.Timeout <= 15*time.Second {
+		slow := *client
+		slow.Timeout = 60 * time.Second
+		client = &slow
+	}
 	return crawlProvincialBillsFromIndexWithMatcher(indexURL, "qc", legislature, session, "quebec", client, quebecBillLinkRe)
 }
 

@@ -1,6 +1,8 @@
 package scraper_test
 
 import (
+	"net/http"
+	"net/http/httptest"
 	"testing"
 
 	"github.com/philspins/opendocket/internal/scraper"
@@ -252,6 +254,61 @@ func TestCrawlDivisionDetail_LegacyFallback(t *testing.T) {
 	}
 	if nays != 1 {
 		t.Errorf("legacy nays=%d want 1", nays)
+	}
+}
+
+func TestCrawlDivisionDetail_FollowsMotionTextJournalsLink(t *testing.T) {
+	divisionHTML := `<html><body>
+<h2>Motion Text</h2>
+<p>See the published vote in the <a href="/DocumentViewer/en/14032878#DOC--14035119">Journals of Wednesday, April 22, 2026</a></p>
+<table class="table table-striped ce-mip-table-mobile"><tbody></tbody></table>
+</body></html>`
+
+	journalHTML := `<html><body>
+<a name="DOC--14035119"></a>
+<table>
+  <tr><td class="DivisionType"><p class="DivisionType">YEAS -- POUR</p>
+    <span class="DivisionItem">Alice Smith</span><span class="DivisionItem">Bob Jones</span></td></tr>
+  <tr><td class="DivisionType"><p class="DivisionType">NAYS -- CONTRE</p>
+    <span class="DivisionItem">Carol Brown</span></td></tr>
+  <tr><td class="DivisionType"><p class="DivisionType">PAIRED -- PAIRES</p>
+    <span class="DivisionItem">David White</span></td></tr>
+</table>
+</body></html>`
+
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		switch r.URL.Path {
+		case "/division":
+			w.WriteHeader(http.StatusOK)
+			_, _ = w.Write([]byte(divisionHTML))
+		case "/DocumentViewer/en/14032878":
+			w.WriteHeader(http.StatusOK)
+			_, _ = w.Write([]byte(journalHTML))
+		default:
+			http.NotFound(w, r)
+		}
+	}))
+	defer srv.Close()
+
+	votes, err := scraper.CrawlDivisionDetail("45-1-100", srv.URL+"/division", srv.Client())
+	if err != nil {
+		t.Fatalf("CrawlDivisionDetail: %v", err)
+	}
+	if len(votes) != 4 {
+		t.Fatalf("len(votes)=%d want 4", len(votes))
+	}
+
+	counts := map[string]int{}
+	names := map[string]bool{}
+	for _, v := range votes {
+		counts[v.Vote]++
+		names[v.MemberName] = true
+	}
+	if counts["Yea"] != 2 || counts["Nay"] != 1 || counts["Paired"] != 1 {
+		t.Fatalf("unexpected vote counts: %+v", counts)
+	}
+	if !names["Alice Smith"] || !names["Bob Jones"] || !names["Carol Brown"] || !names["David White"] {
+		t.Fatalf("expected journal names in fallback votes, got %+v", names)
 	}
 }
 

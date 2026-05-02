@@ -7,6 +7,7 @@ import (
 	"log"
 	"net/http"
 	"os"
+	"regexp"
 	"sort"
 	"strconv"
 	"strings"
@@ -85,31 +86,52 @@ func CrawlMembers(conn *sql.DB, client *http.Client, delay time.Duration, apiURL
 	if err != nil {
 		return err
 	}
-	store.UpsertProfiles(conn, toDBMembers(profiles), delay)
+	store.UpsertProfiles(conn, toDBMembers(profiles))
 
-	setSlugsSorted := make([]string, 0, len(ProvincialLegislatureAPIs))
+	slugs := make([]string, 0, len(ProvincialLegislatureAPIs))
 	for slug := range ProvincialLegislatureAPIs {
-		setSlugsSorted = append(setSlugsSorted, slug)
+		slugs = append(slugs, slug)
 	}
-	sort.Strings(setSlugsSorted)
-	for _, setSlug := range setSlugsSorted {
-		provProfiles, perr := CrawlProvincialMembersFromAPI(setSlug, "", client)
-		if perr != nil {
-			log.Printf("[members] provincial set %s: %v", setSlug, perr)
-			continue
-		}
-		// The Represent API for nb-legislature currently returns 0 members.
-		// Fall back to scraping the NB legislature website directly.
-		if len(provProfiles) == 0 && setSlug == "nb-legislature" {
-			log.Printf("[members] nb-legislature: Represent API returned 0 members; falling back to NB website scraper")
-			nbProfiles, nberr := CrawlNewBrunswickMembersFromWebsite("", client)
-			if nberr != nil {
-				log.Printf("[members] nb-legislature website fallback: %v", nberr)
-			} else {
-				provProfiles = nbProfiles
+	sort.Strings(slugs)
+
+	type result struct {
+		slug     string
+		profiles []MemberProfile
+	}
+	results := make([]result, len(slugs))
+	var wg sync.WaitGroup
+	sem := make(chan struct{}, 5) // fetch up to 5 provincial APIs concurrently
+	for i, setSlug := range slugs {
+		wg.Add(1)
+		go func(i int, setSlug string) {
+			defer wg.Done()
+			sem <- struct{}{}
+			defer func() { <-sem }()
+
+			time.Sleep(delay) // polite delay per request to represent.opennorth.ca
+			provProfiles, perr := CrawlProvincialMembersFromAPI(setSlug, "", client)
+			if perr != nil {
+				log.Printf("[members] provincial set %s: %v", setSlug, perr)
+				return
 			}
+			if len(provProfiles) == 0 && setSlug == "nb-legislature" {
+				log.Printf("[members] nb-legislature: Represent API returned 0 members; falling back to NB website scraper")
+				nbProfiles, nberr := CrawlNewBrunswickMembersFromWebsite("", client)
+				if nberr != nil {
+					log.Printf("[members] nb-legislature website fallback: %v", nberr)
+				} else {
+					provProfiles = nbProfiles
+				}
+			}
+			results[i] = result{slug: setSlug, profiles: provProfiles}
+		}(i, setSlug)
+	}
+	wg.Wait()
+
+	for _, r := range results {
+		if len(r.profiles) > 0 {
+			store.UpsertProfiles(conn, toDBMembers(r.profiles))
 		}
-		store.UpsertProfiles(conn, toDBMembers(provProfiles), delay)
 	}
 	return nil
 }
@@ -159,6 +181,10 @@ func CrawlVotes(conn *sql.DB, client *http.Client, delay time.Duration, indexURL
 	if err != nil {
 		return err
 	}
+	federalCandidates, err := loadFederalMemberCandidates(conn)
+	if err != nil {
+		log.Printf("[votes] load federal member candidates: %v", err)
+	}
 	for _, div := range divs {
 		existed, err := store.DivisionExists(conn, div.ID)
 		if err != nil {
@@ -197,12 +223,197 @@ func CrawlVotes(conn *sql.DB, client *http.Client, delay time.Duration, indexURL
 				log.Printf("[votes] detail error %s: %v", div.ID, err)
 			}
 			for _, v := range votes {
-				store.UpsertMemberVote(conn, v.DivisionID, v.MemberID, v.Vote)
+				memberID := strings.TrimSpace(v.MemberID)
+				if memberID == "" && strings.TrimSpace(v.MemberName) != "" {
+					memberID = resolveFederalMemberIDFromCandidates(federalCandidates, v.MemberName)
+				}
+				if memberID == "" {
+					continue
+				}
+				store.UpsertMemberVote(conn, v.DivisionID, memberID, v.Vote)
 			}
 			time.Sleep(delay)
 		}
 	}
 	return nil
+}
+
+type federalMemberCandidate struct {
+	ID     string
+	Name   string
+	Riding string
+	Active bool
+}
+
+func loadFederalMemberCandidates(conn *sql.DB) ([]federalMemberCandidate, error) {
+	if conn == nil {
+		return nil, nil
+	}
+	rows, err := conn.Query(`
+		SELECT id, name, COALESCE(riding,''), COALESCE(active, 1)
+		FROM members
+		WHERE lower(government_level) = 'federal' AND lower(chamber) = 'commons'`)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+
+	list := make([]federalMemberCandidate, 0)
+	for rows.Next() {
+		var c federalMemberCandidate
+		if err := rows.Scan(&c.ID, &c.Name, &c.Riding, &c.Active); err != nil {
+			continue
+		}
+		list = append(list, c)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return list, nil
+}
+
+var federalNameParenRe = regexp.MustCompile(`\s*\([^)]*\)`)
+
+func normalizeFederalMemberName(s string) string {
+	s = strings.TrimSpace(s)
+	s = federalNameParenRe.ReplaceAllString(s, "")
+	s = strings.ToLower(strings.TrimSpace(s))
+	s = strings.ReplaceAll(s, "'", "")
+	s = strings.ReplaceAll(s, ".", " ")
+	s = strings.ReplaceAll(s, ",", " ")
+	s = strings.ReplaceAll(s, "-", " ")
+	s = strings.Join(strings.Fields(s), " ")
+	return s
+}
+
+func normalizeFederalText(s string) string {
+	s = strings.ToLower(strings.TrimSpace(s))
+	s = strings.ReplaceAll(s, "'", "")
+	s = strings.ReplaceAll(s, ".", " ")
+	s = strings.ReplaceAll(s, ",", " ")
+	s = strings.ReplaceAll(s, "-", " ")
+	s = strings.ReplaceAll(s, "(", " ")
+	s = strings.ReplaceAll(s, ")", " ")
+	s = strings.Join(strings.Fields(s), " ")
+	return s
+}
+
+func federalNameQualifier(sourceName string) string {
+	m := regexp.MustCompile(`\(([^)]*)\)`).FindStringSubmatch(sourceName)
+	if len(m) < 2 {
+		return ""
+	}
+	return normalizeFederalText(m[1])
+}
+
+func federalTokenOverlap(a, b string) int {
+	if a == "" || b == "" {
+		return 0
+	}
+	set := map[string]struct{}{}
+	for _, token := range strings.Fields(a) {
+		set[token] = struct{}{}
+	}
+	score := 0
+	for _, token := range strings.Fields(b) {
+		if _, ok := set[token]; ok {
+			score++
+		}
+	}
+	return score
+}
+
+func pickBestFederalCandidate(candidates []federalMemberCandidate, qualifier string) string {
+	if len(candidates) == 0 {
+		return ""
+	}
+	bestID := ""
+	bestScore := -1
+	bestActive := false
+	for _, c := range candidates {
+		score := 0
+		if qualifier != "" {
+			score = federalTokenOverlap(normalizeFederalText(c.Riding), qualifier)
+		}
+		if bestID == "" || score > bestScore ||
+			(score == bestScore && c.Active && !bestActive) ||
+			(score == bestScore && c.Active == bestActive && c.ID < bestID) {
+			bestID = c.ID
+			bestScore = score
+			bestActive = c.Active
+		}
+	}
+	return bestID
+}
+
+func hasTokenSuffix(haystack, suffix []string) bool {
+	if len(suffix) == 0 || len(haystack) < len(suffix) {
+		return false
+	}
+	start := len(haystack) - len(suffix)
+	for i := range suffix {
+		if haystack[start+i] != suffix[i] {
+			return false
+		}
+	}
+	return true
+}
+
+func resolveFederalMemberIDFromCandidates(list []federalMemberCandidate, sourceName string) string {
+	want := normalizeFederalMemberName(sourceName)
+	if want == "" {
+		return ""
+	}
+	qualifier := federalNameQualifier(sourceName)
+
+	exactMatches := make([]federalMemberCandidate, 0, 1)
+	for _, c := range list {
+		if normalizeFederalMemberName(c.Name) == want {
+			exactMatches = append(exactMatches, c)
+		}
+	}
+	if len(exactMatches) > 0 {
+		return pickBestFederalCandidate(exactMatches, qualifier)
+	}
+
+	wantParts := strings.Fields(want)
+	if len(wantParts) == 0 {
+		return ""
+	}
+
+	suffixMatches := make([]federalMemberCandidate, 0, 2)
+	for _, c := range list {
+		candidateParts := strings.Fields(normalizeFederalMemberName(c.Name))
+		if !hasTokenSuffix(candidateParts, wantParts) {
+			continue
+		}
+		suffixMatches = append(suffixMatches, c)
+	}
+	if len(suffixMatches) > 0 {
+		return pickBestFederalCandidate(suffixMatches, qualifier)
+	}
+
+	// Journal pages often list only surnames. Best-effort fallback:
+	// match last-name token to Commons members and pick the best candidate
+	// by riding qualifier overlap, active status, then deterministic ID order.
+	if len(wantParts) == 1 {
+		surname := wantParts[0]
+		surnameMatches := make([]federalMemberCandidate, 0, 2)
+		for _, c := range list {
+			candidateParts := strings.Fields(normalizeFederalMemberName(c.Name))
+			if len(candidateParts) == 0 {
+				continue
+			}
+			if candidateParts[len(candidateParts)-1] == surname {
+				surnameMatches = append(surnameMatches, c)
+			}
+		}
+		if len(surnameMatches) > 0 {
+			return pickBestFederalCandidate(surnameMatches, qualifier)
+		}
+	}
+
+	return ""
 }
 
 // CrawlSenate indexes senate votes and fills detail rows when needed.
@@ -325,7 +536,7 @@ func ensureProvincialMembersForSource(conn *sql.DB, client *http.Client, delay t
 	if len(profiles) == 0 {
 		return nil
 	}
-	store.UpsertProfiles(conn, toDBMembers(profiles), delay)
+	store.UpsertProfiles(conn, toDBMembers(profiles))
 	return nil
 }
 

@@ -283,7 +283,7 @@ func newProvinceDB(t *testing.T) *sql.DB {
 
 func TestCrawlProvinceSource_PersistsBillsAndDivisions(t *testing.T) {
 	vpHTML := `<!DOCTYPE html><html><body>
-<p>Bill 12 second reading carried on the following division:</p>
+<p>Bill 12 second reading.</p>
 <table class="division">
 <tr><td class="head" colspan="4">Yeas &#8212; 8</td></tr>
 <tr><td>Smith <br>Jones <br></td><td>Brown <br>Davis <br></td><td>Wilson <br>Taylor <br></td><td>Allen <br>Foster <br></td></tr>
@@ -341,6 +341,18 @@ func TestCrawlProvinceSource_PersistsBillsAndDivisions(t *testing.T) {
 	}
 	if divCount == 0 {
 		t.Fatal("expected at least one british_columbia division")
+	}
+
+	var desc string
+	if err := conn.QueryRow(`
+		SELECT COALESCE(description,'')
+		FROM divisions
+		WHERE bill_id='bc-31-1-12'
+		LIMIT 1`).Scan(&desc); err != nil {
+		t.Fatalf("division description query: %v", err)
+	}
+	if !strings.Contains(desc, "Test Act") {
+		t.Fatalf("division description=%q, want bill title containing %q", desc, "Test Act")
 	}
 }
 

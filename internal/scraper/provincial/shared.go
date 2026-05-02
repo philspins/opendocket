@@ -1,12 +1,14 @@
 package provincial
 
 import (
+	"errors"
 	"fmt"
 	"io"
 	"net/http"
 	"regexp"
 	"strconv"
 	"strings"
+	"time"
 
 	"github.com/PuerkitoBio/goquery"
 )
@@ -29,8 +31,45 @@ type DivisionStub struct {
 	LastScraped string
 }
 
+// getWithRetry performs client.Get(url) and retries up to maxRetries times on
+// transient network errors (EOF, connection reset). Many provincial legislature
+// servers drop connections under light load — retrying with a short back-off
+// recovers without any manual intervention.
+func getWithRetry(client *http.Client, url string) (*http.Response, error) {
+	const maxRetries = 3
+	backoff := 2 * time.Second
+	var lastErr error
+	for attempt := 0; attempt <= maxRetries; attempt++ {
+		if attempt > 0 {
+			time.Sleep(backoff)
+			backoff *= 2
+		}
+		resp, err := client.Get(url)
+		if err == nil {
+			return resp, nil
+		}
+		lastErr = err
+		if !isTransientNetErr(err) {
+			break
+		}
+	}
+	return nil, lastErr
+}
+
+// isTransientNetErr reports whether err looks like a recoverable network
+// hiccup (EOF, connection reset) that is worth retrying.
+func isTransientNetErr(err error) bool {
+	if errors.Is(err, io.EOF) {
+		return true
+	}
+	msg := err.Error()
+	return strings.Contains(msg, "EOF") ||
+		strings.Contains(msg, "connection reset") ||
+		strings.Contains(msg, "broken pipe")
+}
+
 func fetchDoc(url string, client *http.Client) (*goquery.Document, error) {
-	resp, err := client.Get(url)
+	resp, err := getWithRetry(client, url)
 	if err != nil {
 		return nil, fmt.Errorf("GET %q: %w", url, err)
 	}

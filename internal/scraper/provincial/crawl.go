@@ -273,6 +273,12 @@ func executeSessionPlan(conn *sql.DB, client *http.Client, delay time.Duration, 
 
 	for _, res := range sp.Divisions {
 		billID := provincialBillIDFromDescription(conn, src.Code, sp.Legislature, sp.Session, res.Division.Description)
+		description := strings.TrimSpace(res.Division.Description)
+		if billID != "" {
+			if title := billTitleForDivisionDescription(conn, billID); title != "" {
+				description = title
+			}
+		}
 		if err := store.UpsertDivision(conn, store.DivisionRecord{
 			ID:          res.Division.ID,
 			Parliament:  res.Division.Parliament,
@@ -280,7 +286,7 @@ func executeSessionPlan(conn *sql.DB, client *http.Client, delay time.Duration, 
 			Number:      res.Division.Number,
 			Date:        res.Division.Date,
 			BillID:      billID,
-			Description: res.Division.Description,
+			Description: description,
 			Yeas:        res.Division.Yeas,
 			Nays:        res.Division.Nays,
 			Paired:      res.Division.Paired,
@@ -313,6 +319,20 @@ func executeSessionPlan(conn *sql.DB, client *http.Client, delay time.Duration, 
 	}
 
 	return nil
+}
+
+func billTitleForDivisionDescription(conn *sql.DB, billID string) string {
+	if conn == nil || strings.TrimSpace(billID) == "" {
+		return ""
+	}
+	var title string
+	if err := conn.QueryRow(`
+		SELECT COALESCE(NULLIF(short_title,''), title, '')
+		FROM bills
+		WHERE id = ?`, billID).Scan(&title); err != nil {
+		return ""
+	}
+	return strings.TrimSpace(title)
 }
 
 // CrawlProvinceSource crawls bills and votes for one province source and upserts
@@ -484,7 +504,7 @@ func resolveProvincialLegislatureSession(conn *sql.DB, src ProvincialSource, cli
 	}
 
 	if src.Code == "pe" {
-		if l, s, ok := FetchPEICurrentAssemblySession(); ok {
+		if l, s, ok := FetchPEICurrentAssemblySession(client); ok {
 			log.Printf("[pe] auto-detected assembly=%d session=%d from WDF API", l, s)
 			return l, s
 		}

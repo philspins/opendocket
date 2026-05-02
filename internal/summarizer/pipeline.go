@@ -257,7 +257,7 @@ Provide your response as valid JSON only (no markdown or extra text):
   "plain_summary": "2–3 paragraphs in plain English. What does the bill do? Who does it affect? Why was it introduced? Use short sentences and simple words.",
   "key_changes": ["List of 3–6 specific things this bill would change or create, in plain language"],
   "who_is_affected": ["List of groups, industries, or people most affected"],
-  "notable_considerations": ["List of 0–5 tricky details, surprises, or non-obvious trade-offs, written simply and neutrally"],
+  "notable_considerations": ["List of 0–5 tricky details, hidden un-related clauses, gotchas/surprises, or non-obvious trade-offs, written simply and neutrally"],
   "category": "One of: Budget, Criminal Justice, Environment, Health, Housing, Immigration, Indigenous, Infrastructure, Justice, Labour, National Security, Social Policy, Trade, Veterans"
 }`
 
@@ -562,7 +562,7 @@ func SummarizeBillsFromChannel(ctx context.Context, db *sql.DB, requests <-chan 
 					// The bill text doesn't exist at the stored URL (e.g. pro-forma
 					// Senate bills like S-1).  Clear full_text_url so we don't
 					// retry on every future crawl run.
-					log.Printf("[summarizer] bill text unavailable (404) for %q; clearing full_text_url", req.BillID)
+					log.Printf("[summarizer] bill text unavailable (404) for %q (%s); clearing full_text_url", req.BillID, req.FullTextURL)
 					db.ExecContext(ctx, `UPDATE bills SET full_text_url = '' WHERE id = ?`, req.BillID)
 				} else {
 					log.Printf("[summarizer] fetch bill text %q: %v", req.BillID, err)
@@ -692,16 +692,41 @@ func SummarizeNewBills(ctx context.Context, db *sql.DB, onlyMissing bool) (int, 
 }
 
 // fetchBillText fetches and extracts plain text from a bill's HTML document using goquery.
+// Slow government sites (e.g. assnat.qc.ca) need a generous timeout; transient
+// network errors are retried with exponential back-off.
 func fetchBillText(ctx context.Context, url string) (string, error) {
-	client := utils.NewHTTPClient()
-	req, err := http.NewRequestWithContext(ctx, http.MethodGet, url, nil)
-	if err != nil {
-		return "", err
-	}
+	client := utils.NewHTTPClientWithTimeout(60 * time.Second)
 
-	resp, err := client.Do(req)
-	if err != nil {
-		return "", err
+	const maxRetries = 3
+	backoff := 5 * time.Second
+	var (
+		resp    *http.Response
+		lastErr error
+	)
+	for attempt := 0; attempt <= maxRetries; attempt++ {
+		if attempt > 0 {
+			select {
+			case <-ctx.Done():
+				return "", ctx.Err()
+			case <-time.After(backoff):
+			}
+			backoff *= 2
+		}
+		req, err := http.NewRequestWithContext(ctx, http.MethodGet, url, nil)
+		if err != nil {
+			return "", err
+		}
+		resp, lastErr = client.Do(req)
+		if lastErr == nil {
+			break
+		}
+		if !isFetchRetryable(lastErr) {
+			return "", lastErr
+		}
+		log.Printf("[summarizer] fetch bill text transient error (attempt %d/%d): %v", attempt+1, maxRetries, lastErr)
+	}
+	if lastErr != nil {
+		return "", lastErr
 	}
 	defer resp.Body.Close()
 
@@ -803,6 +828,20 @@ func extractTextWithTokenizer(raw []byte) string {
 
 func collapseWhitespace(s string) string {
 	return strings.Join(strings.Fields(s), " ")
+}
+
+// isFetchRetryable reports whether an HTTP client error is worth retrying
+// (timeout, connection reset, EOF — all common with slow government sites).
+func isFetchRetryable(err error) bool {
+	if err == nil {
+		return false
+	}
+	msg := err.Error()
+	return strings.Contains(msg, "timeout") ||
+		strings.Contains(msg, "deadline exceeded") ||
+		strings.Contains(msg, "EOF") ||
+		strings.Contains(msg, "connection reset") ||
+		strings.Contains(msg, "broken pipe")
 }
 
 func sanitizeLogURL(raw string) string {
