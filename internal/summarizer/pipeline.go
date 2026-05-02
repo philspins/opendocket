@@ -192,25 +192,25 @@ func summarizerParallelism() int {
 }
 
 var systemPrompt = `You are a non-partisan Canadian civic education assistant.
-Your job is to summarize bills from the Parliament of Canada in plain English.
+Your job is to summarize bills from the Parliament of Canada so that a 13-year-old can understand them.
 You must be accurate, neutral, and clear. Never editorialize or express opinions.
-Always write for a Canadian high school student, or an adult who dropped out of high 
-school and has limited reading skills — no legal jargon.
 
-In addition to the main summary, identify any notable considerations, gotchas
-or other 'hidden shit': provisions, exceptions, side effects, carve-outs, enforcement 
-details, or hidden trade-offs that may not be obvious at first read. Highlight any
-clauses unrelated to the bill such as a civil rights issue in a Trade or Health bill.
-Describe these neutrally and factually. If no notable considerations are found, explicitly 
-state that.
+Write like you are explaining this to a smart 13-year-old. Use short sentences. Use everyday words.
+Never use legal jargon like "provision", "enactment", "pursuant to", "notwithstanding", "carve-out",
+or "regulatory framework". If a technical term is unavoidable, explain it in plain words right after.
+
+In addition to the main summary, point out any tricky details, hidden rules, or surprises in the bill
+that might not be obvious at first read — such as exceptions, side effects, or clauses that seem
+unrelated to the main topic. Highlight anything unexpected, like a privacy issue buried in a budget
+bill. Describe these neutrally and factually. If no notable details are found, explicitly state that.
 
 Provide your response as valid JSON only (no markdown or extra text):
 {
-  "one_sentence": "One sentence (max 25 words) describing what this bill does.",
-  "plain_summary": "2–3 paragraph plain-English explanation. What does it do? Who does it affect? Why was it introduced?",
-  "key_changes": ["List of 3–6 specific things this bill would change or create"],
+  "one_sentence": "One sentence (max 25 words) describing what this bill does, written so a 13-year-old gets it immediately.",
+  "plain_summary": "2–3 paragraphs in plain English. What does the bill do? Who does it affect? Why was it introduced? Use short sentences and simple words.",
+  "key_changes": ["List of 3–6 specific things this bill would change or create, in plain language"],
   "who_is_affected": ["List of groups, industries, or people most affected"],
-  "notable_considerations": ["List of 0–5 potential caveats, non-obvious trade-offs, or implementation considerations in neutral language"],
+  "notable_considerations": ["List of 0–5 tricky details, surprises, or non-obvious trade-offs, written simply and neutrally"],
   "category": "One of: Budget, Criminal Justice, Environment, Health, Housing, Immigration, Indigenous, Infrastructure, Justice, Labour, National Security, Social Policy, Trade, Veterans"
 }`
 
@@ -264,9 +264,8 @@ type BillSummaryRequest struct {
 
 // shouldSummarizeBill returns true when a bill needs a fresh AI summary.
 // Rules:
-//  1. If a Library of Parliament summary exists, skip AI summarization.
-//  2. If no previous AI summary exists, summarize.
-//  3. If an AI summary exists, summarize only when bill last activity is newer
+//  1. If no previous AI summary exists, summarize.
+//  2. If an AI summary exists, summarize only when bill last activity is newer
 //     than the AI summary generation timestamp.
 func shouldSummarizeBill(ctx context.Context, db *sql.DB, billID, incomingLastActivityDate string) (bool, error) {
 	if db == nil {
@@ -275,20 +274,15 @@ func shouldSummarizeBill(ctx context.Context, db *sql.DB, billID, incomingLastAc
 
 	var (
 		summaryAI        string
-		summaryLoP       string
 		lastActivityDate string
 	)
 	err := db.QueryRowContext(ctx,
-		`SELECT COALESCE(summary_ai,''), COALESCE(summary_lop,''), COALESCE(last_activity_date,'')
+		`SELECT COALESCE(summary_ai,''), COALESCE(last_activity_date,'')
 		 FROM bills WHERE id = ?`,
 		billID,
-	).Scan(&summaryAI, &summaryLoP, &lastActivityDate)
+	).Scan(&summaryAI, &lastActivityDate)
 	if err != nil {
 		return true, fmt.Errorf("lookup bill %q: %w", billID, err)
-	}
-
-	if strings.TrimSpace(summaryLoP) != "" {
-		return false, nil
 	}
 
 	if strings.TrimSpace(summaryAI) == "" {

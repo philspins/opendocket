@@ -363,6 +363,9 @@ func TestParsePEIJournalDivisions_YeasAndNays(t *testing.T) {
 	if d.Division.Result != "Carried" {
 		t.Errorf("result=%q, want Carried", d.Division.Result)
 	}
+	if d.Division.Description == "Recorded division" {
+		t.Errorf("description should not be generic fallback %q; got motion context %q", "Recorded division", d.Division.Description)
+	}
 
 	var yeas, nays []string
 	for _, v := range d.Votes {
@@ -377,6 +380,28 @@ func TestParsePEIJournalDivisions_YeasAndNays(t *testing.T) {
 	}
 	if len(yeas) != 2 {
 		t.Errorf("yea voters=%v, want 2", yeas)
+	}
+}
+
+func TestParsePEIJournalDivisions_DescriptionFromMotion(t *testing.T) {
+	text := `Hon. Leader of the Opposition moved, seconded by Mr. McNeilly, ` +
+		`That Bill (No. 28) entitled An Act to Amend the Residential Tenancies Act be now read a Second time. ` +
+		`Hon. Mr. Speaker put the Question. ` +
+		`A Recorded Division being sought, the names were recorded by the Clerk as follows: ` +
+		`Yeas (19\ Hon. Bloyce Thompson (Agriculture\ ` +
+		`Nays (7\ Gordon McNeilly (Charlottetown - West Royalty\ ` +
+		`Motion resolved in the Affirmative.`
+
+	divs := ParsePEIJournalDivisionsForTest(text, "https://docs.assembly.pe.ca/test.pdf", 67, 3, 1, "2026-04-10")
+	if len(divs) != 1 {
+		t.Fatalf("len(divs)=%d, want 1", len(divs))
+	}
+	d := divs[0]
+	if d.Division.Description == "Recorded division" {
+		t.Errorf("description should not be generic fallback; got %q", d.Division.Description)
+	}
+	if !strings.Contains(d.Division.Description, "Residential Tenancies Act") {
+		t.Errorf("description should contain bill title; got %q", d.Division.Description)
 	}
 }
 

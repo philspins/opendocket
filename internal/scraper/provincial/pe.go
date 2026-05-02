@@ -601,16 +601,27 @@ func parsePEIJournalDivisions(rawText, pdfURL string, legislature, session, star
 		}
 
 		desc := "Recorded division"
-		descStart := trigger[0] - 250
+		descStart := trigger[0] - 500
 		if descStart < 0 {
 			descStart = 0
 		}
 		if ctx := strings.TrimSpace(text[descStart:trigger[0]]); ctx != "" {
-			if idx := strings.LastIndexAny(ctx, ".;"); idx >= 0 {
-				ctx = strings.TrimSpace(ctx[idx+1:])
+			// Strip the standard preamble that immediately precedes the trigger.
+			// Without this, LastIndexAny finds the period at the end of
+			// "Speaker put the Question." and leaves nothing after it.
+			for _, boilerplate := range []string{
+				"Hon. Mr. Speaker put the Question",
+				"Hon. Ms. Speaker put the Question",
+				"The Speaker put the Question",
+				"Mr. Speaker put the Question",
+			} {
+				if idx := strings.LastIndex(ctx, boilerplate); idx >= 0 {
+					ctx = strings.TrimRight(strings.TrimSpace(ctx[:idx]), "., ")
+				}
 			}
+			ctx = strings.TrimRight(strings.TrimSpace(ctx), ".,")
 			if len(ctx) > 200 {
-				ctx = ctx[:200]
+				ctx = ctx[len(ctx)-200:]
 			}
 			if ctx = strings.Join(strings.Fields(ctx), " "); ctx != "" {
 				desc = ctx

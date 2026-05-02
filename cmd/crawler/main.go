@@ -109,9 +109,8 @@ func main() {
 	// ── One-shot mode ────────────────────────────────────────────────────────
 	shouldRunAll := !(*billsFlag || *votesFlag || *senateFlag || *provincialFlag || *membersFlag || *calendarFlag)
 
-	// Run LoP batch download first so shouldSummarizeBill correctly skips
-	// bills that already have a Library of Parliament summary before the AI
-	// worker starts consuming from the channel.
+	// Download LoP summaries early so the summary_lop column is populated
+	// before bill detail pages are rendered.
 	if *billsFlag || shouldRunAll {
 		ctx := context.Background()
 		if n, err := summarizer.DownloadLoPSummaries(ctx, conn, nil); err != nil {

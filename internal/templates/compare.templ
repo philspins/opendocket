@@ -103,7 +103,13 @@ templ CompareMPs(ps store.ParliamentStatus, members []store.MemberRow, m1, m2 st
 												<a href={ templ.SafeURL("/bills/" + v.BillID) } class="hover:underline">{ v.BillNumber }</a>
 											}
 										</td>
-										<td class="px-4 py-2.5 col-description">{ v.Description }</td>
+										<td class="px-4 py-2.5 col-description">
+										if v.BillTitle != "" {
+											{ v.BillTitle }
+										} else {
+											{ v.Description }
+										}
+									</td>
 										<td class="px-4 py-2.5 col-meta">{ v.Result }</td>
 										<td class={ "px-4 py-2.5 col-vote1", VoteBadgeClass(v.Member1Vote) }>{ v.Member1Vote }</td>
 										<td class={ "px-4 py-2.5 col-vote2", VoteBadgeClass(v.Member2Vote) }>{ v.Member2Vote }</td>

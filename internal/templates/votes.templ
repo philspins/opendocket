@@ -37,7 +37,13 @@ templ VotesFeed(ps store.ParliamentStatus, divs []store.DivisionRow, total int, 
 								</td>
 								<td class="px-4 py-2.5 col-description text-xs">
 									if d.BillID != "" {
-										<a href={ templ.SafeURL("/bills/" + d.BillID) } class="hover:underline">{ d.Description }</a>
+										<a href={ templ.SafeURL("/bills/" + d.BillID) } class="hover:underline">
+											if d.BillTitle != "" {
+												{ d.BillTitle }
+											} else {
+												{ d.Description }
+											}
+										</a>
 									} else {
 										{ d.Description }
 									}

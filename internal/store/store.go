@@ -241,6 +241,7 @@ func (s *Store) GetBillDivisions(billID string) ([]DivisionRow, error) {
 	rows, err := s.db.Query(`
 		SELECT d.id, d.parliament, d.session, d.number, COALESCE(d.date,''),
 		       COALESCE(d.bill_id,''), COALESCE(b.number,''),
+		       COALESCE(b.short_title, b.title, ''),
 		       COALESCE(d.description,''), d.yeas, d.nays, d.paired,
 		       COALESCE(d.result,''), COALESCE(d.chamber,''), COALESCE(d.sitting_url,'')
 		FROM divisions d
@@ -274,6 +275,7 @@ func (s *Store) ListDivisions(page, perPage int) ([]DivisionRow, int, error) {
 	rows, err := s.db.Query(`
 		SELECT d.id, d.parliament, d.session, d.number, COALESCE(d.date,''),
 		       COALESCE(d.bill_id,''), COALESCE(b.number,''),
+		       COALESCE(b.short_title, b.title, ''),
 		       COALESCE(d.description,''), d.yeas, d.nays, d.paired,
 		       COALESCE(d.result,''), COALESCE(d.chamber,''), COALESCE(d.sitting_url,'')
 		FROM divisions d
@@ -294,7 +296,7 @@ func scanDivisionRows(rows *sql.Rows) ([]DivisionRow, error) {
 		var d DivisionRow
 		if err := rows.Scan(
 			&d.ID, &d.Parliament, &d.Session, &d.Number, &d.Date,
-			&d.BillID, &d.BillNumber,
+			&d.BillID, &d.BillNumber, &d.BillTitle,
 			&d.Description, &d.Yeas, &d.Nays, &d.Paired,
 			&d.Result, &d.Chamber, &d.SittingURL,
 		); err != nil {
@@ -560,8 +562,8 @@ func (s *Store) GetMemberVotes(id string, limit int) ([]VoteRow, error) {
 	}
 	rows, err := s.db.Query(`
 		SELECT mv.division_id, COALESCE(d.date,''), COALESCE(d.bill_id,''),
-		       COALESCE(b.number,''), COALESCE(d.description,''),
-		       mv.vote, COALESCE(d.result,'')
+		       COALESCE(b.number,''), COALESCE(b.short_title, b.title, ''),
+		       COALESCE(d.description,''), mv.vote, COALESCE(d.result,'')
 		FROM member_votes mv
 		JOIN divisions d ON d.id = mv.division_id
 		LEFT JOIN bills b ON b.id = d.bill_id
@@ -578,6 +580,7 @@ func (s *Store) GetMemberVotes(id string, limit int) ([]VoteRow, error) {
 		date        string
 		billID      string
 		billNumber  string
+		billTitle   string
 		description string
 		vote        string
 		result      string
@@ -586,7 +589,7 @@ func (s *Store) GetMemberVotes(id string, limit int) ([]VoteRow, error) {
 	for rows.Next() {
 		var rv rawVote
 		if err := rows.Scan(&rv.divisionID, &rv.date, &rv.billID, &rv.billNumber,
-			&rv.description, &rv.vote, &rv.result); err != nil {
+			&rv.billTitle, &rv.description, &rv.vote, &rv.result); err != nil {
 			return nil, err
 		}
 		rawVotes = append(rawVotes, rv)
@@ -622,6 +625,7 @@ func (s *Store) GetMemberVotes(id string, limit int) ([]VoteRow, error) {
 			Date:           rv.date,
 			BillID:         rv.billID,
 			BillNumber:     rv.billNumber,
+			BillTitle:      rv.billTitle,
 			Description:    rv.description,
 			Vote:           rv.vote,
 			Result:         rv.result,
@@ -816,6 +820,7 @@ func (s *Store) GetSharedMemberVotes(id1, id2 string, limit int) ([]SharedVoteRo
 			COALESCE(d.date, ''),
 			COALESCE(d.bill_id, ''),
 			COALESCE(b.number, ''),
+			COALESCE(b.short_title, b.title, ''),
 			COALESCE(d.description, ''),
 			COALESCE(d.result, ''),
 			COALESCE(mv1.vote, ''),
@@ -840,6 +845,7 @@ func (s *Store) GetSharedMemberVotes(id1, id2 string, limit int) ([]SharedVoteRo
 			&v.Date,
 			&v.BillID,
 			&v.BillNumber,
+			&v.BillTitle,
 			&v.Description,
 			&v.Result,
 			&v.Member1Vote,

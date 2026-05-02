@@ -158,10 +158,18 @@ func extractDateFromURL(rawURL string) string {
 		return ""
 	}
 	raw := m[1]
+	var result string
 	if len(raw) == 8 && raw[4] != '-' {
-		return fmt.Sprintf("%s-%s-%s", raw[:4], raw[4:6], raw[6:8])
+		result = fmt.Sprintf("%s-%s-%s", raw[:4], raw[4:6], raw[6:8])
+	} else {
+		result = raw
 	}
-	return raw
+	// Reject implausible years — opaque document IDs (e.g. "49240606") can
+	// match the \d{8} pattern and produce nonsense years like 4924.
+	if year, err := strconv.Atoi(result[:4]); err != nil || year < 1867 || year > 2200 {
+		return ""
+	}
+	return result
 }
 
 // ── parliamentOrdinal ─────────────────────────────────────────────────────────

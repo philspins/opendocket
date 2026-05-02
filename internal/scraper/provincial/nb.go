@@ -142,7 +142,17 @@ func crawlNewBrunswickJournalPDF(pdfURL string, legislature, session, startDivis
 		return nil, 0, err
 	}
 
-	date := extractDateFromURL(pdfURL)
+	// Prefer date found in the PDF header — NB journal PDF URLs often carry
+	// opaque 8-digit document IDs (e.g. "49240606") that the generic URL date
+	// extractor misreads as year 4924 instead of 2024.
+	snippet := text
+	if len(snippet) > 1000 {
+		snippet = snippet[:1000]
+	}
+	date := utils.FindDateInText(snippet)
+	if date == "" {
+		date = extractDateFromURL(pdfURL)
+	}
 	if date == "" {
 		date = utils.TodayISO()
 	}

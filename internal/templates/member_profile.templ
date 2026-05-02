@@ -117,7 +117,13 @@ templ MemberProfile(ps store.ParliamentStatus, member store.MemberRow, votes []s
 											<a href={ templ.SafeURL("/bills/" + v.BillID) } class="hover:underline">{ v.BillNumber }</a>
 										}
 									</td>
-									<td class="px-4 py-2.5 col-description">{ v.Description }</td>
+									<td class="px-4 py-2.5 col-description">
+										if v.BillTitle != "" {
+											{ v.BillTitle }
+										} else {
+											{ v.Description }
+										}
+									</td>
 									<td class={ "px-4 py-2.5 col-vote", VoteBadgeClass(v.Vote) }>{ v.Vote }</td>
 									<td class="px-4 py-2.5 col-alignment">
 										if v.VotedWithParty {

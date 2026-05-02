@@ -30,6 +30,7 @@ type DivisionRow struct {
 	Date        string
 	BillID      string
 	BillNumber  string
+	BillTitle   string
 	Description string
 	Yeas        int
 	Nays        int
@@ -59,6 +60,7 @@ type VoteRow struct {
 	Date           string
 	BillID         string
 	BillNumber     string
+	BillTitle      string
 	Description    string
 	Vote           string
 	Result         string
@@ -71,6 +73,7 @@ type SharedVoteRow struct {
 	Date        string
 	BillID      string
 	BillNumber  string
+	BillTitle   string
 	Description string
 	Result      string
 	Member1Vote string
