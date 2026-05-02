@@ -1044,6 +1044,28 @@ func TestHandleHome_ShowsFederalPlaceholderWhenOnlyProvincialRidingSet(t *testin
 	}
 }
 
+func TestHandleHome_UnauthenticatedNoAddressHidesRepSections(t *testing.T) {
+	srv, _ := newTestServer(t)
+
+	req := httptest.NewRequest(http.MethodGet, "/", nil)
+	rr := httptest.NewRecorder()
+	srv.ServeHTTP(rr, req)
+
+	if rr.Code != http.StatusOK {
+		t.Fatalf("status=%d want %d", rr.Code, http.StatusOK)
+	}
+	body := rr.Body.String()
+	if !strings.Contains(body, "Find Your Riding") {
+		t.Fatalf("expected hero section with Find Your Riding button for unauthenticated user with no address")
+	}
+	if strings.Contains(body, "representative not found") {
+		t.Fatalf("expected rep-grid to be hidden for unauthenticated user with no address")
+	}
+	if strings.Contains(body, "Recent provincial bill votes") {
+		t.Fatalf("expected Overall section to be hidden for unauthenticated user with no address")
+	}
+}
+
 func TestRecentBillVotes_DeduplicatesAndFallsBackToNonBillDivisions(t *testing.T) {
 	// Bill-linked votes come first and are deduplicated; non-bill votes fill remaining slots.
 	got := recentBillVotes([]store.VoteRow{
