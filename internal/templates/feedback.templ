@@ -30,7 +30,7 @@ templ FeedbackPage(ps store.ParliamentStatus, user *store.UserRow, successMsg st
 				</div>
 			}
 			if user == nil {
-				<div class="border border-[#4A6FA5] bg-[#4A6FA5] text-gray-900 dark:border-[#1E2A3A] dark:bg-[#1E2A3A] dark:text-white px-4 py-3 text-sm space-y-2">
+				<div class="border border-blue-200 bg-[#f4f7fb] text-gray-700 dark:border-[#1E2A3A] dark:bg-[#1E2A3A] dark:text-white px-4 py-3 text-sm space-y-2">
 					<p>You must be signed in and have a verified email address to submit feedback.</p>
 					<div class="flex gap-3">
 						<a href="/auth/login" class="btn btn-primary text-xs">Sign In</a>
@@ -38,7 +38,7 @@ templ FeedbackPage(ps store.ParliamentStatus, user *store.UserRow, successMsg st
 					</div>
 				</div>
 			} else if !user.EmailVerified {
-				<div class="border border-[#4A6FA5] bg-[#4A6FA5] text-gray-900 dark:border-[#1E2A3A] dark:bg-[#1E2A3A] dark:text-white px-4 py-3 text-sm space-y-2">
+				<div class="border border-blue-200 bg-[#f4f7fb] text-gray-700 dark:border-[#1E2A3A] dark:bg-[#1E2A3A] dark:text-white px-4 py-3 text-sm space-y-2">
 					<p>Please verify your email address before submitting feedback.</p>
 					<a href="/auth/verify" class="btn btn-primary text-xs">Verify Email</a>
 				</div>
