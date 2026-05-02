@@ -191,6 +191,53 @@ func summarizerParallelism() int {
 	return n
 }
 
+// claudeRateLimiter is a package-level token bucket shared across all worker
+// goroutines. It limits how many Anthropic API calls can be initiated per
+// minute, keeping token consumption well under the 450k/min org limit.
+// Default: 15 req/min (~1 call every 4 seconds). Set ANTHROPIC_REQUESTS_PER_MINUTE to override.
+var claudeRateLimiter = func() *tokenBucket {
+	rpm := 15
+	if v := strings.TrimSpace(os.Getenv("ANTHROPIC_REQUESTS_PER_MINUTE")); v != "" {
+		if n, err := strconv.Atoi(v); err == nil && n > 0 {
+			rpm = n
+		}
+	}
+	return newTokenBucket(rpm)
+}()
+
+// tokenBucket is a simple channel-based token bucket rate limiter.
+type tokenBucket struct {
+	tokens chan struct{}
+}
+
+func newTokenBucket(rpm int) *tokenBucket {
+	b := &tokenBucket{tokens: make(chan struct{}, rpm)}
+	interval := time.Minute / time.Duration(rpm)
+	// Pre-fill with one token so the first call is not delayed.
+	b.tokens <- struct{}{}
+	go func() {
+		t := time.NewTicker(interval)
+		defer t.Stop()
+		for range t.C {
+			select {
+			case b.tokens <- struct{}{}:
+			default: // bucket full; token discarded
+			}
+		}
+	}()
+	return b
+}
+
+// wait blocks until a token is available or ctx is cancelled.
+func (b *tokenBucket) wait(ctx context.Context) error {
+	select {
+	case <-b.tokens:
+		return nil
+	case <-ctx.Done():
+		return ctx.Err()
+	}
+}
+
 var systemPrompt = `You are a non-partisan Canadian civic education assistant.
 Your job is to summarize bills from the Parliament of Canada so that a 13-year-old can understand them.
 You must be accurate, neutral, and clear. Never editorialize or express opinions.
@@ -374,41 +421,73 @@ Respond with only valid JSON, no markdown or extra text.`, billID, billTitle, bi
 			return nil, fmt.Errorf("marshal request: %w", err)
 		}
 
-		httpReq, err := http.NewRequestWithContext(ctx, http.MethodPost, claudeURL, bytes.NewReader(body))
-		if err != nil {
-			return nil, fmt.Errorf("create request: %w", err)
-		}
+		httpClient := utils.NewHTTPClient()
+		httpClient.Timeout = 60 * time.Second
 
-		httpReq.Header.Set("x-api-key", apiKey)
-		httpReq.Header.Set("anthropic-version", "2023-06-01")
-		httpReq.Header.Set("content-type", "application/json")
-
-		client := utils.NewHTTPClient()
-		client.Timeout = 60 * time.Second
-		resp, err := client.Do(httpReq)
-		if err != nil {
-			return nil, fmt.Errorf("api call: %w", err)
-		}
-		defer resp.Body.Close()
-
-		respBody, err := io.ReadAll(resp.Body)
-		if err != nil {
-			return nil, fmt.Errorf("read response: %w", err)
-		}
-
-		if resp.StatusCode != http.StatusOK {
-			var apiErr claudeResponse
-			if json.Unmarshal(respBody, &apiErr) == nil && apiErr.Error != nil {
-				return nil, fmt.Errorf("api returned %d (%s): %s", resp.StatusCode, apiErr.Error.Type, apiErr.Error.Message)
+		const maxRetries = 5
+		backoff := 5 * time.Second
+		for attempt := 0; attempt <= maxRetries; attempt++ {
+			httpReq, err := http.NewRequestWithContext(ctx, http.MethodPost, claudeURL, bytes.NewReader(body))
+			if err != nil {
+				return nil, fmt.Errorf("create request: %w", err)
 			}
-			return nil, fmt.Errorf("api returned %d: %s", resp.StatusCode, string(respBody))
-		}
+			httpReq.Header.Set("x-api-key", apiKey)
+			httpReq.Header.Set("anthropic-version", "2023-06-01")
+			httpReq.Header.Set("content-type", "application/json")
 
-		var apiResp claudeResponse
-		if err := json.Unmarshal(respBody, &apiResp); err != nil {
-			return nil, fmt.Errorf("unmarshal response: %w", err)
+			resp, err := httpClient.Do(httpReq)
+			if err != nil {
+				return nil, fmt.Errorf("api call: %w", err)
+			}
+			respBody, err := io.ReadAll(resp.Body)
+			resp.Body.Close()
+			if err != nil {
+				return nil, fmt.Errorf("read response: %w", err)
+			}
+
+			if resp.StatusCode == http.StatusTooManyRequests {
+				if attempt == maxRetries {
+					return nil, fmt.Errorf("api rate-limited after %d retries", maxRetries)
+				}
+				wait := backoff
+				if ra := resp.Header.Get("retry-after"); ra != "" {
+					if secs, err := strconv.Atoi(ra); err == nil {
+						wait = time.Duration(secs) * time.Second
+					} else if t, err := http.ParseTime(ra); err == nil {
+						if d := time.Until(t); d > 0 {
+							wait = d
+						}
+					}
+				}
+				log.Printf("[summarizer] rate-limited (429); waiting %s (attempt %d/%d)", wait.Round(time.Second), attempt+1, maxRetries)
+				select {
+				case <-ctx.Done():
+					return nil, ctx.Err()
+				case <-time.After(wait):
+				}
+				backoff *= 2
+				continue
+			}
+
+			if resp.StatusCode != http.StatusOK {
+				var apiErr claudeResponse
+				if json.Unmarshal(respBody, &apiErr) == nil && apiErr.Error != nil {
+					return nil, fmt.Errorf("api returned %d (%s): %s", resp.StatusCode, apiErr.Error.Type, apiErr.Error.Message)
+				}
+				return nil, fmt.Errorf("api returned %d: %s", resp.StatusCode, string(respBody))
+			}
+
+			var apiResp claudeResponse
+			if err := json.Unmarshal(respBody, &apiResp); err != nil {
+				return nil, fmt.Errorf("unmarshal response: %w", err)
+			}
+			return &apiResp, nil
 		}
-		return &apiResp, nil
+		return nil, fmt.Errorf("api rate-limited after %d retries", maxRetries)
+	}
+
+	if err := claudeRateLimiter.wait(ctx); err != nil {
+		return nil, err
 	}
 
 	var (
