@@ -84,6 +84,8 @@ func New(st *store.Store) *Server {
 	s.mux.HandleFunc("GET /delete-data", s.handleDeleteDataPage)
 	s.mux.HandleFunc("POST /delete-data", s.handleDeleteDataCallback)
 	s.mux.HandleFunc("GET /riding", s.handleRiding)
+	s.mux.HandleFunc("GET /feedback", s.handleFeedback)
+	s.mux.HandleFunc("POST /feedback", s.handleFeedback)
 	s.mux.HandleFunc("POST /api/follow", s.handleFollow)
 	s.mux.HandleFunc("POST /api/react", s.handleReact)
 	s.mux.HandleFunc("POST /api/subscribe-bill", s.handleSubscribeBill)

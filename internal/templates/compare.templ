@@ -9,7 +9,6 @@ templ CompareMPs(ps store.ParliamentStatus, members []store.MemberRow, m1, m2 st
 	@Layout("Compare MPs", ps) {
 		<div class="space-y-6">
 			<h1 class="text-2xl font-bold text-gray-900">Compare MPs</h1>
-
 			<form id="compare-form" method="GET" action="/compare" class="filter-shell w-full">
 				<div class="grid grid-cols-2 sm:grid-cols-4 gap-2 w-full">
 					<div>
@@ -19,17 +18,15 @@ templ CompareMPs(ps store.ParliamentStatus, members []store.MemberRow, m1, m2 st
 							<option value="provincial" selected?={ level == "provincial" }>Provincial</option>
 						</select>
 					</div>
-					if level == "provincial" {
-						<div>
-							<label class="text-xs text-gray-500 block mb-1">Province</label>
-							<select name="province" class="input-field px-3 py-1.5 text-sm w-full" onchange="this.form.submit()">
-								<option value="" selected?={ province == "" }>All provinces</option>
-								for _, pv := range provinces {
-									<option value={ pv } selected?={ province == pv }>{ pv }</option>
-								}
-							</select>
-						</div>
-					}
+					<div>
+						<label class="text-xs text-gray-500 block mb-1">Province</label>
+						<select name="province" class="input-field px-3 py-1.5 text-sm w-full" onchange="this.form.submit()">
+							<option value="" selected?={ province == "" }>All provinces</option>
+							for _, pv := range provinces {
+								<option value={ pv } selected?={ province == pv }>{ pv }</option>
+							}
+						</select>
+					</div>
 					<div class="col-span-2">
 						<label class="text-xs text-gray-500 block mb-1">Party</label>
 						<select name="party" class="input-field px-3 py-1.5 text-sm w-full" onchange="this.form.submit()">
@@ -62,13 +59,11 @@ templ CompareMPs(ps store.ParliamentStatus, members []store.MemberRow, m1, m2 st
 					<a href="/compare" class="text-sm text-gray-500 hover:underline">Clear</a>
 				</div>
 			</form>
-
 			if m1.ID != "" && m2.ID != "" {
 				<div class="grid grid-cols-2 gap-6">
 					@memberCompactCard(m1)
 					@memberCompactCard(m2)
 				</div>
-
 				<div class="surface-card p-6 text-center">
 					if total > 0 {
 						<p class="text-4xl font-bold text-blue-700">{ fmt.Sprintf("%.0f%%", float64(overlap)/float64(total)*100) }</p>
@@ -78,7 +73,6 @@ templ CompareMPs(ps store.ParliamentStatus, members []store.MemberRow, m1, m2 st
 						<p class="text-gray-500">No shared votes found.</p>
 					}
 				</div>
-
 				<section id="compare-votes-section">
 					<h2 class="text-lg font-semibold text-gray-800 mb-3">Votes in Common</h2>
 					<div class="table-shell vote-table-shell">

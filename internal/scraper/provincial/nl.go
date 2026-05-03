@@ -106,7 +106,7 @@ var nlNegativedRe = regexp.MustCompile(`(?i)(?:motion|amendment|bill|resolution)
 // nlMotionDescRe captures the motion text for NL journal divisions.
 var nlMotionDescRe = regexp.MustCompile(`(?i)on\s+the\s+(?:motion|amendment|question)\s+(?:that\s+)?(.{0,180}?)(?:,\s+the\s+question\s+was\s+put|was\s+(?:agreed|carried|defeated|negatived))`)
 var nlAyesNaysHeadingRe = regexp.MustCompile(`(?i)(?:the\s+house\s+divided\.?\s*)?AYES?\s+NAYS?`)
-var nlDeclaredResultRe = regexp.MustCompile(`(?i)The\s+(?:Speaker|Chair)\s+declared\s+.{0,80}?(carried|defeated|negatived)`) 
+var nlDeclaredResultRe = regexp.MustCompile(`(?i)The\s+(?:Speaker|Chair)\s+declared\s+.{0,80}?(carried|defeated|negatived)`)
 var nlInitialNameRe = regexp.MustCompile(`(?:[A-Z]\.\s*)+[A-Z][A-Za-z']+(?:\s+[A-Z][A-Za-z']+){0,2}(?:\s*-\s*[A-Z][A-Za-z']+)?`)
 var nlSpacedInitialRe = regexp.MustCompile(`\b([A-Z])\s*\.\s*`)
 var newfoundlandVotesLinkRe = regexp.MustCompile(`(?i)(/business/votes|housebusiness|ga\d+session\d+|votes\.aspx|/votes(?:/|$))`)

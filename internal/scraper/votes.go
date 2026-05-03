@@ -25,7 +25,7 @@ import (
 var chamberMeetingDateClassRe = regexp.MustCompile(`\b\d{4}-\d{2}-\d{2}\b`)
 
 // seeListUnderRe matches journal text like "(SEE LIST UNDER DIVISION NO. 15)".
-var seeListUnderRe = regexp.MustCompile(`(?i)see\s+list\s+under\s+division\s+no\.?\s*(\d+)`)
+var seeListUnderRe = regexp.MustCompile(`(?i)see[\s\x{00a0}]+list[\s\x{00a0}]+under[\s\x{00a0}]+division[\s\x{00a0}]+no\.?[\s\x{00a0}]*(\d+)`)
 
 // ── constants ─────────────────────────────────────────────────────────────────
 
@@ -595,12 +595,20 @@ func sectionTextAfterAnchor(target *goquery.Selection) string {
 // DivisionType table to find text containing "Division No. X", stopping at the
 // previous DivisionType table boundary to avoid false matches.
 func findTableForDivisionNumber(doc *goquery.Document, divNum string) *goquery.Selection {
-	divNumRe := regexp.MustCompile(`(?i)division\s+no\.?\s*` + regexp.QuoteMeta(divNum) + `[^\d]`)
+	divNumRe := regexp.MustCompile(`(?i)division[\s\x{00a0}]+no\.?[\s\x{00a0}]*` + regexp.QuoteMeta(divNum) + `[^\d]`)
 	var result *goquery.Selection
 
 	doc.Find("table").EachWithBreak(func(_ int, t *goquery.Selection) bool {
 		if t.Find("td.DivisionType").Length() == 0 {
 			return true
+		}
+		// Check if the division number cell is inside this table (real
+		// ourcommons.ca format: td.DivisionNumber is the first row of the table).
+		if t.Find("td.DivisionNumber").FilterFunction(func(_ int, s *goquery.Selection) bool {
+			return divNumRe.MatchString(s.Text())
+		}).Length() > 0 {
+			result = t
+			return false
 		}
 		sibling := t.Prev()
 		for sibling.Length() > 0 {

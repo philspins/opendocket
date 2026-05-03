@@ -478,11 +478,40 @@ func HasSummary(b store.BillRow) bool {
 func ChamberLabel(chamber string) string {
 	switch chamber {
 	case "commons":
-		return "House"
+		return "House of Commons"
 	case "senate":
 		return "Senate"
+	case "alberta":
+		return "Alberta"
+	case "british_columbia":
+		return "British Columbia"
+	case "manitoba":
+		return "Manitoba"
+	case "new_brunswick":
+		return "New Brunswick"
+	case "newfoundland_labrador":
+		return "Newfoundland and Labrador"
+	case "nova_scotia":
+		return "Nova Scotia"
+	case "ontario":
+		return "Ontario"
+	case "pei":
+		return "Prince Edward Island"
+	case "quebec":
+		return "Quebec"
+	case "saskatchewan":
+		return "Saskatchewan"
+	case "":
+		return ""
 	}
-	return chamber
+	// Generic fallback: replace underscores with spaces and title-case each word.
+	words := strings.Split(chamber, "_")
+	for i, w := range words {
+		if len(w) > 0 {
+			words[i] = strings.ToUpper(w[:1]) + w[1:]
+		}
+	}
+	return strings.Join(words, " ")
 }
 
 func ReactionPercent(count, total int) int {
