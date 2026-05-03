@@ -40,7 +40,70 @@ const (
 	claudeModel              = "claude-sonnet-4-6"
 	claudeURL                = "https://api.anthropic.com/v1/messages"
 	maxBillTextResponseBytes = 8 * 1024 * 1024
+	defaultAnthropicRPM      = 15
+	claudeMaxAttempts        = 5
 )
+
+var (
+	anthropicMessagesURL = claudeURL
+	claudeInitialBackoff = 5 * time.Second
+	claudeHTTPClient     = func() *http.Client {
+		client := utils.NewHTTPClient()
+		client.Timeout = 60 * time.Second
+		return client
+	}
+	claudeRateLimiter = newTokenBucket(summarizerEnvInt("ANTHROPIC_REQUESTS_PER_MINUTE", defaultAnthropicRPM))
+)
+
+type tokenBucket struct {
+	tokens chan struct{}
+}
+
+func newTokenBucket(rate int) *tokenBucket {
+	if rate <= 0 {
+		return nil
+	}
+	bucket := &tokenBucket{tokens: make(chan struct{}, rate)}
+	for i := 0; i < rate; i++ {
+		bucket.tokens <- struct{}{}
+	}
+	interval := time.Minute / time.Duration(rate)
+	go func() {
+		ticker := time.NewTicker(interval)
+		defer ticker.Stop()
+		for range ticker.C {
+			select {
+			case bucket.tokens <- struct{}{}:
+			default:
+			}
+		}
+	}()
+	return bucket
+}
+
+func (bucket *tokenBucket) wait(ctx context.Context) error {
+	if bucket == nil {
+		return nil
+	}
+	select {
+	case <-ctx.Done():
+		return ctx.Err()
+	case <-bucket.tokens:
+		return nil
+	}
+}
+
+func summarizerEnvInt(name string, fallback int) int {
+	raw := strings.TrimSpace(os.Getenv(name))
+	if raw == "" {
+		return fallback
+	}
+	value, err := strconv.Atoi(raw)
+	if err != nil || value <= 0 {
+		return fallback
+	}
+	return value
+}
 
 var pdfParenTextRe = regexp.MustCompile(`\(([^()]*)\)`)
 
@@ -177,6 +240,37 @@ func parseSummaryJSON(raw string) (SummaryResult, error) {
 	}
 
 	return SummaryResult{}, fmt.Errorf("invalid summary payload")
+}
+
+func parseRetryAfter(header string, now time.Time) time.Duration {
+	header = strings.TrimSpace(header)
+	if header == "" {
+		return 0
+	}
+	if seconds, err := strconv.Atoi(header); err == nil && seconds > 0 {
+		return time.Duration(seconds) * time.Second
+	}
+	if retryTime, err := http.ParseTime(header); err == nil {
+		delay := retryTime.Sub(now)
+		if delay > 0 {
+			return delay
+		}
+	}
+	return 0
+}
+
+func waitForRetry(ctx context.Context, delay time.Duration) error {
+	if delay <= 0 {
+		return nil
+	}
+	timer := time.NewTimer(delay)
+	defer timer.Stop()
+	select {
+	case <-ctx.Done():
+		return ctx.Err()
+	case <-timer.C:
+		return nil
+	}
 }
 
 func summarizerParallelism() int {
@@ -370,46 +464,7 @@ Respond with only valid JSON, no markdown or extra text.`, billID, billTitle, bi
 
 	callClaude := func(model string) (*claudeResponse, error) {
 		req.Model = model
-		body, err := json.Marshal(req)
-		if err != nil {
-			return nil, fmt.Errorf("marshal request: %w", err)
-		}
-
-		httpReq, err := http.NewRequestWithContext(ctx, http.MethodPost, claudeURL, bytes.NewReader(body))
-		if err != nil {
-			return nil, fmt.Errorf("create request: %w", err)
-		}
-
-		httpReq.Header.Set("x-api-key", apiKey)
-		httpReq.Header.Set("anthropic-version", "2023-06-01")
-		httpReq.Header.Set("content-type", "application/json")
-
-		client := utils.NewHTTPClient()
-		client.Timeout = 60 * time.Second
-		resp, err := client.Do(httpReq)
-		if err != nil {
-			return nil, fmt.Errorf("api call: %w", err)
-		}
-		defer resp.Body.Close()
-
-		respBody, err := io.ReadAll(resp.Body)
-		if err != nil {
-			return nil, fmt.Errorf("read response: %w", err)
-		}
-
-		if resp.StatusCode != http.StatusOK {
-			var apiErr claudeResponse
-			if json.Unmarshal(respBody, &apiErr) == nil && apiErr.Error != nil {
-				return nil, fmt.Errorf("api returned %d (%s): %s", resp.StatusCode, apiErr.Error.Type, apiErr.Error.Message)
-			}
-			return nil, fmt.Errorf("api returned %d: %s", resp.StatusCode, string(respBody))
-		}
-
-		var apiResp claudeResponse
-		if err := json.Unmarshal(respBody, &apiResp); err != nil {
-			return nil, fmt.Errorf("unmarshal response: %w", err)
-		}
-		return &apiResp, nil
+		return callClaudeAPI(ctx, apiKey, req)
 	}
 
 	var (
@@ -452,6 +507,99 @@ Respond with only valid JSON, no markdown or extra text.`, billID, billTitle, bi
 	result.Model = model
 
 	return &result, nil
+}
+
+func callClaudeAPI(ctx context.Context, apiKey string, req claudeRequest) (*claudeResponse, error) {
+	body, err := json.Marshal(req)
+	if err != nil {
+		return nil, fmt.Errorf("marshal request: %w", err)
+	}
+
+	client := claudeHTTPClient()
+	backoff := claudeInitialBackoff
+	for attempt := 1; attempt <= claudeMaxAttempts; attempt++ {
+		if err := claudeRateLimiter.wait(ctx); err != nil {
+			return nil, fmt.Errorf("wait for rate limiter: %w", err)
+		}
+
+		httpReq, err := http.NewRequestWithContext(ctx, http.MethodPost, anthropicMessagesURL, bytes.NewReader(body))
+		if err != nil {
+			return nil, fmt.Errorf("create request: %w", err)
+		}
+		httpReq.Header.Set("x-api-key", apiKey)
+		httpReq.Header.Set("anthropic-version", "2023-06-01")
+		httpReq.Header.Set("content-type", "application/json")
+
+		resp, err := client.Do(httpReq)
+		if err != nil {
+			if attempt == claudeMaxAttempts {
+				return nil, fmt.Errorf("api call attempt %d: %w", attempt, err)
+			}
+			if waitErr := waitForRetry(ctx, backoff); waitErr != nil {
+				return nil, waitErr
+			}
+			backoff *= 2
+			continue
+		}
+
+		respBody, readErr := io.ReadAll(resp.Body)
+		resp.Body.Close()
+		if readErr != nil {
+			return nil, fmt.Errorf("read response: %w", readErr)
+		}
+
+		if resp.StatusCode == http.StatusOK {
+			var apiResp claudeResponse
+			if err := json.Unmarshal(respBody, &apiResp); err != nil {
+				return nil, fmt.Errorf("unmarshal response: %w", err)
+			}
+			return &apiResp, nil
+		}
+
+		var apiErr claudeResponse
+		if err := json.Unmarshal(respBody, &apiErr); err == nil && apiErr.Error != nil {
+			if resp.StatusCode == http.StatusTooManyRequests || resp.StatusCode >= http.StatusInternalServerError {
+				delay := parseRetryAfter(resp.Header.Get("Retry-After"), time.Now().UTC())
+				if delay <= 0 {
+					delay = backoff
+				}
+				if resp.StatusCode == http.StatusTooManyRequests {
+					log.Printf("[summarizer] claude rate limited; retrying in %s (attempt %d/%d)", delay, attempt, claudeMaxAttempts)
+				}
+				if attempt == claudeMaxAttempts {
+					return nil, fmt.Errorf("api returned %d (%s): %s", resp.StatusCode, apiErr.Error.Type, apiErr.Error.Message)
+				}
+				if waitErr := waitForRetry(ctx, delay); waitErr != nil {
+					return nil, waitErr
+				}
+				backoff *= 2
+				continue
+			}
+			return nil, fmt.Errorf("api returned %d (%s): %s", resp.StatusCode, apiErr.Error.Type, apiErr.Error.Message)
+		}
+
+		if resp.StatusCode == http.StatusTooManyRequests || resp.StatusCode >= http.StatusInternalServerError {
+			delay := parseRetryAfter(resp.Header.Get("Retry-After"), time.Now().UTC())
+			if delay <= 0 {
+				delay = backoff
+			}
+			if resp.StatusCode == http.StatusTooManyRequests {
+				log.Printf("[summarizer] claude rate limited; retrying in %s (attempt %d/%d)", delay, attempt, claudeMaxAttempts)
+			}
+			if attempt == claudeMaxAttempts {
+				return nil, fmt.Errorf("api returned %d: %s", resp.StatusCode, strings.TrimSpace(string(respBody)))
+			}
+			if waitErr := waitForRetry(ctx, delay); waitErr != nil {
+				return nil, waitErr
+			}
+			backoff *= 2
+			continue
+		}
+
+		return nil, fmt.Errorf("api returned %d: %s", resp.StatusCode, strings.TrimSpace(string(respBody)))
+	}
+
+	return nil, fmt.Errorf("claude api retry loop exhausted")
 }
 
 // SummarizeBillsFromChannel reads bill summary requests from a channel and

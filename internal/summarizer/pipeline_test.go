@@ -7,8 +7,10 @@ import (
 	"fmt"
 	"net/http"
 	"net/http/httptest"
+	"sync/atomic"
 	"strings"
 	"testing"
+	"time"
 
 	_ "github.com/mattn/go-sqlite3"
 )
@@ -259,5 +261,69 @@ func TestFetchBillText_FallsBackForDeeplyNestedHTML(t *testing.T) {
 	}
 	if strings.Contains(text, "ignored()") {
 		t.Fatalf("expected script content to be removed, got %q", text)
+	}
+}
+
+func TestParseRetryAfter(t *testing.T) {
+	now := time.Date(2026, time.May, 4, 12, 0, 0, 0, time.UTC)
+	if got := parseRetryAfter("7", now); got != 7*time.Second {
+		t.Fatalf("seconds retry-after = %s, want %s", got, 7*time.Second)
+	}
+	retryAt := now.Add(3 * time.Second).Format(http.TimeFormat)
+	if got := parseRetryAfter(retryAt, now); got < 2*time.Second || got > 3*time.Second {
+		t.Fatalf("date retry-after = %s, want about 3s", got)
+	}
+}
+
+func TestCallClaudeAPI_RetriesAfterRateLimit(t *testing.T) {
+	var requests atomic.Int32
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		if requests.Add(1) == 1 {
+			w.Header().Set("Content-Type", "application/json")
+			w.Header().Set("Retry-After", "1")
+			w.WriteHeader(http.StatusTooManyRequests)
+			_, _ = w.Write([]byte(`{"error":{"type":"rate_limit_error","message":"slow down"}}`))
+			return
+		}
+		w.Header().Set("Content-Type", "application/json")
+		_, _ = w.Write([]byte(`{"content":[{"type":"text","text":"{\"one_sentence\":\"One line\",\"plain_summary\":\"Two lines\",\"key_changes\":[\"a\"],\"who_is_affected\":[\"b\"],\"notable_considerations\":[],\"category\":\"Other\"}"}]}`))
+	}))
+	defer srv.Close()
+
+	origURL := anthropicMessagesURL
+	origClient := claudeHTTPClient
+	origLimiter := claudeRateLimiter
+	origBackoff := claudeInitialBackoff
+	anthropicMessagesURL = srv.URL
+	claudeHTTPClient = func() *http.Client { return srv.Client() }
+	claudeRateLimiter = nil
+	claudeInitialBackoff = 10 * time.Millisecond
+	t.Cleanup(func() {
+		anthropicMessagesURL = origURL
+		claudeHTTPClient = origClient
+		claudeRateLimiter = origLimiter
+		claudeInitialBackoff = origBackoff
+	})
+
+	ctx, cancel := context.WithTimeout(context.Background(), 1500*time.Millisecond)
+	defer cancel()
+
+	resp, err := callClaudeAPI(ctx, "test-key", claudeRequest{
+		Model:     claudeModel,
+		MaxTokens: 128,
+		System:    "system",
+		Messages:  []claudeMsg{{Role: "user", Content: "hello"}},
+	})
+	if err != nil {
+		t.Fatalf("callClaudeAPI returned error: %v", err)
+	}
+	if got := requests.Load(); got != 2 {
+		t.Fatalf("request count = %d, want 2", got)
+	}
+	if len(resp.Content) != 1 {
+		t.Fatalf("content length = %d, want 1", len(resp.Content))
+	}
+	if !strings.Contains(resp.Content[0].Text, "one_sentence") {
+		t.Fatalf("unexpected response text: %q", resp.Content[0].Text)
 	}
 }
