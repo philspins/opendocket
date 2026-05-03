@@ -410,6 +410,36 @@ func TestCrawlProvinceSource_FallsBackToPreviousSessionWhenDBEmpty(t *testing.T)
 	}
 }
 
+func TestExtractDateFromURL(t *testing.T) {
+	cases := []struct {
+		url  string
+		want string
+	}{
+		// Standard ISO date in URL path
+		{"https://example.com/journals/2024-06-06.pdf", "2024-06-06"},
+		// Compact 8-digit date YYYYMMDD
+		{"https://example.com/votes/20240606.htm", "2024-06-06"},
+		// NB opaque ID: PPYYMMDD — year 4924 is implausible; recover via last-6 YYMMDD
+		{"https://gnb.ca/legis/49240606.pdf", "2024-06-06"},
+		// Another opaque ID: PPYYMMDD with different parliament prefix
+		{"https://gnb.ca/legis/60230315.pdf", "2023-03-15"},
+		// Opaque ID where last-6 digits are invalid (MM=56) — cannot recover
+		{"https://example.com/doc/12345678.pdf", ""},
+		// No date at all
+		{"https://example.com/votes/index.html", ""},
+		// Year before Confederation is implausible
+		{"https://example.com/votes/18660101.pdf", ""},
+		// Valid 19th-century date
+		{"https://example.com/votes/1867-07-01.pdf", "1867-07-01"},
+	}
+	for _, c := range cases {
+		got := extractDateFromURL(c.url)
+		if got != c.want {
+			t.Errorf("extractDateFromURL(%q) = %q, want %q", c.url, got, c.want)
+		}
+	}
+}
+
 func TestParliamentOrdinal(t *testing.T) {
 	cases := []struct {
 		n    int
