@@ -4,6 +4,7 @@ import (
 	"database/sql"
 	"fmt"
 	"net/http"
+	"regexp"
 	"strings"
 	"sync"
 	"time"
@@ -11,8 +12,11 @@ import (
 	"github.com/PuerkitoBio/goquery"
 	"github.com/philspins/opendocket/internal/clog"
 	"github.com/philspins/opendocket/internal/store"
+	"github.com/philspins/opendocket/internal/utils"
 	"golang.org/x/sync/errgroup"
 )
+
+var nonAlnumForIDRe = regexp.MustCompile(`[^a-z0-9]+`)
 
 // ProvincialSource defines one province-specific crawl configuration.
 type ProvincialSource struct {
@@ -305,8 +309,27 @@ func executeSessionPlan(conn *sql.DB, client *http.Client, delay time.Duration, 
 		for _, mv := range res.Votes {
 			memberID := resolveProvincialMemberIDFromCandidates(memberCandidates, mv.MemberName)
 			if memberID == "" {
-				stats.MemberVotesUnmatched++
-				continue
+				if src.Code == "nl" {
+					fallbackID := provisionalProvincialMemberID(src.Code, mv.MemberName)
+					if fallbackID != "" {
+						if err := store.UpsertMember(conn, store.MemberRecord{
+							ID:              fallbackID,
+							Name:            mv.MemberName,
+							Province:        src.Province,
+							Chamber:         res.Division.Chamber,
+							Active:          false,
+							LastScraped:     utils.NowISO(),
+							GovernmentLevel: "provincial",
+						}); err == nil {
+							memberID = fallbackID
+						}
+					}
+				}
+				if memberID == "" {
+					stats.MemberVotesUnmatched++
+					clog.Debugf("[provincial][%s] unmatched vote name: %q", src.Code, mv.MemberName)
+					continue
+				}
 			}
 			if err := store.UpsertMemberVote(conn, res.Division.ID, memberID, mv.Vote); err != nil {
 				stats.Errors++
@@ -319,6 +342,21 @@ func executeSessionPlan(conn *sql.DB, client *http.Client, delay time.Duration, 
 	}
 
 	return nil
+}
+
+func provisionalProvincialMemberID(provinceCode, sourceName string) string {
+	base := strings.ToLower(strings.TrimSpace(sourceName))
+	if base == "" {
+		return ""
+	}
+	base = strings.ReplaceAll(base, "'", "")
+	base = strings.ReplaceAll(base, ".", "")
+	base = nonAlnumForIDRe.ReplaceAllString(base, "-")
+	base = strings.Trim(base, "-")
+	if base == "" {
+		return ""
+	}
+	return fmt.Sprintf("%s-historical-%s", provinceCode, base)
 }
 
 func billTitleForDivisionDescription(conn *sql.DB, billID string) string {

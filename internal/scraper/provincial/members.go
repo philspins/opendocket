@@ -96,18 +96,35 @@ func resolveProvincialMemberIDFromCandidates(list []provincialMemberCandidate, s
 	}
 
 	parts := strings.Fields(want)
-	if len(parts) == 2 && len(parts[0]) == 1 {
+	if len(parts) >= 2 && len(parts[0]) == 1 {
 		initial := parts[0]
-		last := parts[1]
+		tail := parts[1:]
+		for len(tail) > 1 && len(tail[0]) == 1 {
+			tail = tail[1:]
+		}
+
 		matchedID := ""
 		for _, c := range list {
 			nameParts := strings.Fields(normalisePersonName(c.Name))
 			if len(nameParts) < 2 {
 				continue
 			}
-			candidateLast := nameParts[len(nameParts)-1]
 			candidateFirst := nameParts[0]
-			if candidateLast != last || !strings.HasPrefix(candidateFirst, initial) {
+			if !strings.HasPrefix(candidateFirst, initial) {
+				continue
+			}
+			if len(tail) > len(nameParts)-1 {
+				continue
+			}
+			candidateTail := nameParts[len(nameParts)-len(tail):]
+			ok := true
+			for i := range tail {
+				if candidateTail[i] != tail[i] {
+					ok = false
+					break
+				}
+			}
+			if !ok {
 				continue
 			}
 			if matchedID != "" {
