@@ -140,12 +140,25 @@ func main() {
 		name string
 		fn   func() error
 	}
-	var tasks []task
+	runTasks := func(tasks []task) {
+		fns := make([]func(), len(tasks))
+		for i, task := range tasks {
+			task := task
+			fns[i] = func() {
+				if err := task.fn(); err != nil {
+					clog.Infof("[main] %s error: %v", task.name, err)
+				}
+			}
+		}
+		scraper.RunParallel(*parallelism, fns)
+	}
+
+	var phaseTwoTasks []task
 	if *calendarFlag || shouldRunAll {
-		tasks = append(tasks, task{"calendar", func() error { return scraper.CrawlCalendar(conn, client, delay, "") }})
+		phaseTwoTasks = append(phaseTwoTasks, task{"calendar", func() error { return scraper.CrawlCalendar(conn, client, delay, "") }})
 	}
 	if *billsFlag || shouldRunAll {
-		tasks = append(tasks, task{"bills", func() error {
+		phaseTwoTasks = append(phaseTwoTasks, task{"bills", func() error {
 			return scraper.CrawlBills(conn, client, delay, "", func(billID, billTitle, fullTextURL, lastActivityDate string) {
 				if summaryRequests == nil || strings.TrimSpace(fullTextURL) == "" {
 					return
@@ -159,18 +172,12 @@ func main() {
 			})
 		}})
 	}
-	if *votesFlag || shouldRunAll {
-		tasks = append(tasks, task{"votes", func() error { return scraper.CrawlVotes(conn, client, delay, "") }})
-	}
-	if *senateFlag || shouldRunAll {
-		tasks = append(tasks, task{"senate", func() error { return scraper.CrawlSenate(conn, client, delay, "") }})
-	}
 	if *provincialFlag || shouldRunAll {
 		filter := provinceFilter // nil when running all
 		if shouldRunAll {
 			filter = nil
 		}
-		tasks = append(tasks, task{"provincial", func() error {
+		phaseTwoTasks = append(phaseTwoTasks, task{"provincial", func() error {
 			return scraper.CrawlProvincial(conn, client, delay, *parallelism, filter, func(billID, billTitle, fullTextURL, lastActivityDate string) {
 				if summaryRequests == nil || strings.TrimSpace(fullTextURL) == "" {
 					return
@@ -184,16 +191,16 @@ func main() {
 			})
 		}})
 	}
+	runTasks(phaseTwoTasks)
 
-	// Wrap each task so errors are logged with the domain name.
-	fns := make([]func(), len(tasks))
-	for i, t := range tasks {
-		fns[i] = func() {
-			if err := t.fn(); err != nil {
-					clog.Infof("[main] %s error: %v", t.name, err)
-			}
-		}
+	var phaseThreeTasks []task
+	if *votesFlag || shouldRunAll {
+		phaseThreeTasks = append(phaseThreeTasks, task{"votes", func() error { return scraper.CrawlVotes(conn, client, delay, "") }})
 	}
+	if *senateFlag || shouldRunAll {
+		phaseThreeTasks = append(phaseThreeTasks, task{"senate", func() error { return scraper.CrawlSenate(conn, client, delay, "") }})
+	}
+	runTasks(phaseThreeTasks)
 
 	// Signal the summarizer worker that all bills have been submitted, then
 	// wait for it to finish and log the result.
@@ -228,8 +235,12 @@ func runAll(conn *sql.DB, client *http.Client, delay time.Duration, parallelism 
 	// linkage can resolve against freshly-stored member records.
 	scraper.CrawlMembers(conn, client, delay, "")
 
-	// Phase 2: crawl all remaining domains concurrently.
-	fns := []func(){
+	runTasks := func(tasks []func()) {
+		scraper.RunParallel(parallelism, tasks)
+	}
+
+	// Phase 2: crawl bill-producing domains before votes and senate.
+	phaseTwoTasks := []func(){
 		func() { scraper.CrawlCalendar(conn, client, delay, "") },
 		func() {
 			scraper.CrawlBills(conn, client, delay, "", func(billID, billTitle, fullTextURL, lastActivityDate string) {
@@ -244,8 +255,6 @@ func runAll(conn *sql.DB, client *http.Client, delay time.Duration, parallelism 
 				}
 			})
 		},
-		func() { scraper.CrawlVotes(conn, client, delay, "") },
-		func() { scraper.CrawlSenate(conn, client, delay, "") },
 		func() {
 			scraper.CrawlProvincial(conn, client, delay, parallelism, nil, func(billID, billTitle, fullTextURL, lastActivityDate string) {
 				if strings.TrimSpace(fullTextURL) == "" {
@@ -260,7 +269,14 @@ func runAll(conn *sql.DB, client *http.Client, delay time.Duration, parallelism 
 			})
 		},
 	}
-	scraper.RunParallel(parallelism, fns)
+	runTasks(phaseTwoTasks)
+
+	// Phase 3: crawl domains that may reference stored bill rows.
+	phaseThreeTasks := []func(){
+		func() { scraper.CrawlVotes(conn, client, delay, "") },
+		func() { scraper.CrawlSenate(conn, client, delay, "") },
+	}
+	runTasks(phaseThreeTasks)
 	close(summaryRequests)
 	res := <-summaryResultCh
 	if res.err != nil {
