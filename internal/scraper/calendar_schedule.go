@@ -20,8 +20,8 @@ import (
 	"time"
 
 	"github.com/philspins/opendocket/internal/clog"
-	"github.com/philspins/opendocket/internal/store"
 	"github.com/philspins/opendocket/internal/scraper/provincial"
+	"github.com/philspins/opendocket/internal/store"
 	"github.com/philspins/opendocket/internal/utils"
 )
 
@@ -61,7 +61,7 @@ func CrawlAndPersistLegislatureCalendars(conn *sql.DB, client *http.Client) erro
 			}
 			continue
 		}
-		clog.Debugf("[calendar] detected %d dates for %s", len(dates), jurisdiction)
+		clog.Infof("[calendar] detected %d dates for %s", len(dates), jurisdiction)
 		if len(dates) == 0 {
 			continue
 		}

@@ -617,6 +617,174 @@ templ Layout(title string, ps store.ParliamentStatus) {
 					border-color: var(--color-border);
 				}
 
+				/* Bills filter bar */
+				.bills-filter-bar {
+					display: flex;
+					flex-wrap: wrap;
+					align-items: center;
+					gap: 0.4rem;
+					position: relative;
+				}
+
+				.sort-segment {
+					display: flex;
+					align-items: center;
+					background: var(--color-bg);
+					border: 1px solid var(--color-border);
+					border-radius: 0.625rem;
+					padding: 3px;
+					gap: 1px;
+					flex-shrink: 0;
+				}
+
+				html.dark .sort-segment {
+					background: var(--color-surface-1);
+				}
+
+				.sort-tab {
+					padding: 0.3rem 0.7rem;
+					border-radius: 0.45rem;
+					font-size: 0.8125rem;
+					font-weight: 500;
+					color: var(--color-text-secondary);
+					text-decoration: none;
+					transition: background 0.12s, color 0.12s;
+					white-space: nowrap;
+					line-height: 1.4;
+				}
+
+				.sort-tab:hover {
+					color: var(--color-text-primary);
+				}
+
+				.sort-tab.active {
+					background: var(--color-surface-1);
+					color: var(--color-text-primary);
+					box-shadow: 0 1px 3px rgba(0,0,0,0.1);
+				}
+
+				html.dark .sort-tab.active {
+					background: var(--color-surface-2);
+					box-shadow: 0 1px 4px rgba(0,0,0,0.3);
+				}
+
+				.filter-sep {
+					width: 1px;
+					height: 1.4rem;
+					background: var(--color-border);
+					flex-shrink: 0;
+					margin: 0 0.1rem;
+				}
+
+				.filter-chip {
+					display: inline-flex;
+					align-items: center;
+					gap: 0.35rem;
+					padding: 0.3rem 0.65rem;
+					background: var(--color-bg);
+					border: 1px solid var(--color-border);
+					border-radius: 9999px;
+					font-size: 0.8125rem;
+					font-weight: 500;
+					color: var(--color-text-primary);
+					text-decoration: none;
+					transition: background 0.12s;
+					white-space: nowrap;
+				}
+
+				html.dark .filter-chip {
+					background: var(--color-surface-1);
+				}
+
+				.filter-chip:hover {
+					background: var(--color-border);
+				}
+
+				.filter-chip-x {
+					opacity: 0.45;
+					font-size: 0.7rem;
+					line-height: 1;
+				}
+
+				.filter-picker {
+					position: relative;
+				}
+
+				.filter-picker summary {
+					list-style: none;
+				}
+
+				.filter-picker summary::-webkit-details-marker {
+					display: none;
+				}
+
+				.filter-add-btn {
+					display: inline-flex;
+					align-items: center;
+					gap: 0.375rem;
+					padding: 0.3rem 0.75rem;
+					background: var(--color-bg);
+					border: 1px solid var(--color-border);
+					border-radius: 9999px;
+					font-size: 0.8125rem;
+					font-weight: 500;
+					color: var(--color-text-secondary);
+					cursor: pointer;
+					transition: background 0.12s, color 0.12s;
+					white-space: nowrap;
+					user-select: none;
+				}
+
+				html.dark .filter-add-btn {
+					background: var(--color-surface-1);
+				}
+
+				.filter-add-btn:hover {
+					color: var(--color-text-primary);
+					background: var(--color-border);
+				}
+
+				.filter-picker-panel {
+					position: absolute;
+					top: calc(100% + 6px);
+					right: 0;
+					z-index: 50;
+					width: 272px;
+					background: var(--color-surface-1);
+					border: 1px solid var(--color-border);
+					border-radius: 0.875rem;
+					padding: 1rem;
+					box-shadow: 0 8px 32px rgba(0,0,0,0.14);
+				}
+
+				html.dark .filter-picker-panel {
+					box-shadow: 0 8px 32px rgba(0,0,0,0.4);
+				}
+
+				@media (max-width: 640px) {
+					.filter-picker {
+						position: static;
+					}
+					.filter-picker-panel {
+						position: absolute;
+						top: calc(100% + 6px);
+						left: 0;
+						right: 0;
+						width: auto;
+						border-radius: 0.875rem;
+					}
+				}
+
+				.filter-picker-label {
+					display: block;
+					font-size: 0.7rem;
+					font-weight: 600;
+					text-transform: uppercase;
+					letter-spacing: 0.04em;
+					color: var(--color-text-secondary);
+					margin-bottom: 0.25rem;
+				}
+
 				.metric-grid {
 					display: grid;
 					grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
@@ -717,6 +885,24 @@ templ Layout(title string, ps store.ParliamentStatus) {
 					font-size: 0.78rem;
 					color: var(--color-text-secondary);
 					text-align: center;
+				}
+
+				.footer-links {
+					display: flex;
+					flex-wrap: wrap;
+					justify-content: center;
+					gap: 0.25rem 1.2rem;
+					margin-top: 0.75rem;
+				}
+
+				.footer-links a {
+					color: var(--color-text-secondary);
+					text-decoration: none;
+				}
+
+				.footer-links a:hover {
+					color: var(--color-primary-bright);
+					text-decoration: underline;
 				}
 
 				/* Dark mode overrides for Tailwind color utilities used across templates */
@@ -911,7 +1097,7 @@ templ Layout(title string, ps store.ParliamentStatus) {
 					.vote-table td.col-chamber     { display: none; }
 					.vote-table td.col-alignment   { display: none; }
 
-					/* Member profile votes: date | YEA/NAY | result — different columns from the feed */
+					/* Member profile votes: date | vote | alignment | result */
 					.member-vote-table tr {
 						grid-template-areas:
 							"date vote result"
@@ -966,8 +1152,14 @@ templ Layout(title string, ps store.ParliamentStatus) {
 							<button class="theme-toggle-btn" id="theme-dark-btn" aria-label="Dark mode" title="Dark mode">☾</button>
 						</div>
 						<form id="nav-search-form" method="GET" action="/riding" class="search-form">
-							<input type="text" id="nav-address-input" name="address" placeholder="Enter your address"
-								class="input-field w-52" autocomplete="off"/>
+							<input
+								type="text"
+								id="nav-address-input"
+								name="address"
+								placeholder="Enter your address"
+								class="input-field w-52"
+								autocomplete="off"
+							/>
 							<button type="submit" class="btn btn-primary">Find My MP</button>
 						</form>
 						<div id="auth-actions" class="auth-actions">
@@ -1000,6 +1192,13 @@ templ Layout(title string, ps store.ParliamentStatus) {
 			<footer class="footer-shell">
 				<p>Open Docket — The official record. Made open.</p>
 				<p>Data sourced from the Parliament of Canada Open Data portal and provincial legislatures. Non-partisan. Independent.</p>
+				<nav class="footer-links" aria-label="Footer links">
+					<a href="/privacy">Privacy Policy</a>
+					<a href="/tos">Terms of Service</a>
+					<a href="/feedback">Feedback</a>
+					<a href="https://buymeacoffee.com/opendocket" target="_blank" rel="noopener noreferrer">Donate ☕</a>
+					<a href="https://github.com/philspins/opendocket" target="_blank" rel="noopener noreferrer">GitHub</a>
+				</nav>
 			</footer>
 			<script>
 				// Auth check

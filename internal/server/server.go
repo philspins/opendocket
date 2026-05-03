@@ -384,7 +384,8 @@ func (s *Server) handleBillDetail(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	stages, _ := s.store.GetBillStages(id)
-	divs, _ := s.store.GetBillDivisions(id)
+	rawDivs, _ := s.store.GetBillDivisions(id)
+	divs := dedupeBillDetailDivisions(rawDivs)
 	reactions, _ := s.store.GetBillReactionCounts(id)
 	var isSubscribed bool
 	if isAuthenticated {
