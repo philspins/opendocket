@@ -1,7 +1,6 @@
 package provincial
 
 import (
-	"log"
 	"net/http"
 	"regexp"
 	"sort"
@@ -9,6 +8,7 @@ import (
 	"strings"
 
 	"github.com/PuerkitoBio/goquery"
+	"github.com/philspins/opendocket/internal/clog"
 	"github.com/philspins/opendocket/internal/utils"
 )
 
@@ -54,7 +54,7 @@ func crawlNewBrunswickVotesFromPDF(indexURL string, legislature, session int, cl
 	for _, sessionURL := range sessionLinks {
 		doc, derr := fetchDoc(sessionURL, client)
 		if derr != nil {
-			log.Printf("[nb-votes] skip session %s: %v", sessionURL, derr)
+			clog.Debugf("[nb-votes] skip session %s: %v", sessionURL, derr)
 			continue
 		}
 		for _, pdfURL := range discoverNewBrunswickJournalPDFLinks(doc, sessionURL) {
@@ -71,7 +71,7 @@ func crawlNewBrunswickVotesFromPDF(indexURL string, legislature, session int, cl
 		pdfLinks = pdfLinks[len(pdfLinks)-60:]
 	}
 	if len(pdfLinks) == 0 {
-		log.Printf("[nb-votes] no journal PDFs discovered; falling back to generic parser")
+		clog.Infof("[nb-votes] no journal PDFs discovered; falling back to generic parser")
 		return crawlGenericProvincialVotesWithMatcher(indexURL, "nb", "new_brunswick", legislature, session, client, newBrunswickVotesLinkRe)
 	}
 
@@ -80,18 +80,18 @@ func crawlNewBrunswickVotesFromPDF(indexURL string, legislature, session int, cl
 	for _, pdfURL := range pdfLinks {
 		divs, consumed, derr := crawlNewBrunswickJournalPDF(pdfURL, legislature, session, nextDivNum, client)
 		if derr != nil {
-			log.Printf("[nb-votes] skip pdf %s: %v", pdfURL, derr)
+			clog.Debugf("[nb-votes] skip pdf %s: %v", pdfURL, derr)
 			continue
 		}
 		results = append(results, divs...)
 		nextDivNum += consumed
 	}
 	if len(results) == 0 {
-		log.Printf("[nb-votes] no divisions parsed from PDFs; falling back to generic parser")
+		clog.Infof("[nb-votes] no divisions parsed from PDFs; falling back to generic parser")
 		return crawlGenericProvincialVotesWithMatcher(indexURL, "nb", "new_brunswick", legislature, session, client, newBrunswickVotesLinkRe)
 	}
 
-	log.Printf("[nb-votes] parsed %d divisions from %d PDFs", len(results), len(pdfLinks))
+	clog.Infof("[nb-votes] parsed %d divisions from %d PDFs", len(results), len(pdfLinks))
 	return results, nil
 }
 

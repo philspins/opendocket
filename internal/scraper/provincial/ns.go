@@ -2,7 +2,6 @@ package provincial
 
 import (
 	"fmt"
-	"log"
 	"net/http"
 	"regexp"
 	"sort"
@@ -10,6 +9,7 @@ import (
 	"time"
 
 	"github.com/PuerkitoBio/goquery"
+	"github.com/philspins/opendocket/internal/clog"
 	"github.com/philspins/opendocket/internal/utils"
 )
 
@@ -72,7 +72,7 @@ func nsDateFromHansardURL(rawURL string) string {
 // It returns the results and the number of day pages found (0 means the
 // session page has no individual Hansard pages, likely an older session).
 func crawlNovaScotiaVotesFromHTML(sessionURL string, legislature, session int, client *http.Client) ([]ProvincialDivisionResult, int, error) {
-	log.Printf("[ns-votes] fetching hansard session index for html: %s", sessionURL)
+	clog.Infof("[ns-votes] fetching hansard session index for html: %s", sessionURL)
 	indexDoc, err := fetchDoc(sessionURL, client)
 	if err != nil {
 		return nil, 0, fmt.Errorf("ns html session index: %w", err)
@@ -102,7 +102,7 @@ func crawlNovaScotiaVotesFromHTML(sessionURL string, legislature, session int, c
 	for _, pageURL := range dayURLs {
 		dayDoc, derr := fetchDoc(pageURL, client)
 		if derr != nil {
-			log.Printf("[ns-votes] skip day page %s: %v", pageURL, derr)
+			clog.Debugf("[ns-votes] skip day page %s: %v", pageURL, derr)
 			continue
 		}
 		divs := parseNSHansardHTMLPage(dayDoc, pageURL, legislature, session, divNum)
@@ -112,7 +112,7 @@ func crawlNovaScotiaVotesFromHTML(sessionURL string, legislature, session int, c
 			divNum++
 		}
 	}
-	log.Printf("[ns-votes] parsed %d divisions from %d html day pages", len(results), len(dayURLs))
+	clog.Infof("[ns-votes] parsed %d divisions from %d html day pages", len(results), len(dayURLs))
 	return results, len(dayURLs), nil
 }
 
@@ -264,11 +264,11 @@ func discoverNovaScotiaVotePDFLinks(doc *goquery.Document, baseURL string, legis
 
 func crawlNovaScotiaVotesFromPDF(indexURL string, legislature, session int, client *http.Client) ([]ProvincialDivisionResult, error) {
 	sessionURL := novaScotiaHansardSessionURL(indexURL, legislature, session)
-	log.Printf("[ns-votes] fetching hansard session index for pdf: %s", sessionURL)
+	clog.Infof("[ns-votes] fetching hansard session index for pdf: %s", sessionURL)
 	indexDoc, err := fetchDoc(sessionURL, client)
 	if err != nil {
 		if indexURL != "" && indexURL != sessionURL {
-			log.Printf("[ns-votes] hansard session index unavailable, falling back to %s: %v", indexURL, err)
+			clog.Infof("[ns-votes] hansard session index unavailable, falling back to %s: %v", indexURL, err)
 			indexDoc, err = fetchDoc(indexURL, client)
 			if err != nil {
 				return nil, fmt.Errorf("ns votes index: %w", err)
@@ -282,7 +282,7 @@ func crawlNovaScotiaVotesFromPDF(indexURL string, legislature, session int, clie
 	pdfLinks := discoverNovaScotiaVotePDFLinks(indexDoc, sessionURL, legislature, session)
 	if len(pdfLinks) == 0 {
 		if indexURL != "" && indexURL != sessionURL {
-			log.Printf("[ns-votes] no hansard PDFs discovered at %s; falling back to %s", sessionURL, indexURL)
+			clog.Infof("[ns-votes] no hansard PDFs discovered at %s; falling back to %s", sessionURL, indexURL)
 			fallbackDoc, ferr := fetchDoc(indexURL, client)
 			if ferr != nil {
 				return nil, fmt.Errorf("ns votes fallback index: %w", ferr)
@@ -291,7 +291,7 @@ func crawlNovaScotiaVotesFromPDF(indexURL string, legislature, session int, clie
 			sessionURL = indexURL
 		}
 		if len(pdfLinks) == 0 {
-			log.Printf("[ns-votes] no vote PDFs discovered for legislature=%d session=%d", legislature, session)
+			clog.Infof("[ns-votes] no vote PDFs discovered for legislature=%d session=%d", legislature, session)
 			return nil, nil
 		}
 	}
@@ -301,7 +301,7 @@ func crawlNovaScotiaVotesFromPDF(indexURL string, legislature, session int, clie
 	for _, pdfURL := range pdfLinks {
 		text, terr := downloadAndExtractPDFText(pdfURL, "ns", client)
 		if terr != nil {
-			log.Printf("[ns-votes] skip pdf %s: %v", pdfURL, terr)
+			clog.Debugf("[ns-votes] skip pdf %s: %v", pdfURL, terr)
 			continue
 		}
 		date := extractDateFromURL(pdfURL)
@@ -318,7 +318,7 @@ func crawlNovaScotiaVotesFromPDF(indexURL string, legislature, session int, clie
 			nextDivNum++
 		}
 	}
-	log.Printf("[ns-votes] parsed %d divisions from %d PDFs", len(results), len(pdfLinks))
+	clog.Infof("[ns-votes] parsed %d divisions from %d PDFs", len(results), len(pdfLinks))
 	return results, nil
 }
 
@@ -338,13 +338,13 @@ func crawlNovaScotiaVotes(indexURL string, legislature, session int, client *htt
 	sessionURL := novaScotiaHansardSessionURL(indexURL, legislature, session)
 	results, dayPages, err := crawlNovaScotiaVotesFromHTML(sessionURL, legislature, session, client)
 	if err != nil {
-		log.Printf("[ns-votes] html approach failed: %v; falling back to pdf", err)
+		clog.Infof("[ns-votes] html approach failed: %v; falling back to pdf", err)
 	}
 	if dayPages > 0 {
 		return results, nil
 	}
 
-	log.Printf("[ns-votes] no html day pages found; falling back to pdf approach")
+	clog.Infof("[ns-votes] no html day pages found; falling back to pdf approach")
 	return crawlNovaScotiaVotesFromPDF(indexURL, legislature, session, client)
 }
 

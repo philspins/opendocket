@@ -8,9 +8,10 @@ package scraper
 import (
 	"fmt"
 	"io"
-	"log"
 	"net/http"
 	"strings"
+
+	"github.com/philspins/opendocket/internal/clog"
 
 	"github.com/PuerkitoBio/goquery"
 	"github.com/mmcdole/gofeed"
@@ -90,7 +91,7 @@ func CrawlBillsRSS(rssURL string, client *http.Client) ([]BillStub, error) {
 		client = utils.NewHTTPClient()
 	}
 
-	log.Printf("[bills] fetching RSS: %s", rssURL)
+	clog.Debugf("[bills] fetching RSS: %s", rssURL)
 
 	fp := gofeed.NewParser()
 	fp.Client = client
@@ -103,7 +104,7 @@ func CrawlBillsRSS(rssURL string, client *http.Client) ([]BillStub, error) {
 	for _, item := range feed.Items {
 		billID := utils.ExtractBillID(item.Link)
 		if billID == "" {
-			log.Printf("[bills] skipping RSS entry with unparseable link: %s", item.Link)
+			clog.Debugf("[bills] skipping RSS entry with unparseable link: %s", item.Link)
 			continue
 		}
 		var lastActivity string
@@ -119,7 +120,7 @@ func CrawlBillsRSS(rssURL string, client *http.Client) ([]BillStub, error) {
 			LastActivityDate: lastActivity,
 		})
 	}
-	log.Printf("[bills] RSS contained %d bills", len(stubs))
+	clog.Infof("[bills] RSS contained %d bills", len(stubs))
 	return stubs, nil
 }
 
@@ -130,7 +131,7 @@ func CrawlBillDetail(billID, url string, client *http.Client) (BillDetail, error
 	if client == nil {
 		client = utils.NewHTTPClient()
 	}
-	log.Printf("[bills] scraping detail: %s", url)
+	clog.Debugf("[bills] scraping detail: %s", url)
 
 	resp, err := client.Get(url)
 	if err != nil {

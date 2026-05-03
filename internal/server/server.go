@@ -196,7 +196,8 @@ func (s *Server) handleHome(w http.ResponseWriter, r *http.Request) {
 			}
 		}
 	}
-	_ = templates.Home(ps, provincialVotes, federalVotes, savedAddress, federalRep, provincialRep, provStatus, federalStatus).Render(r.Context(), w)
+	_, isLoggedIn := s.auth.SessionUser(r)
+	_ = templates.Home(ps, provincialVotes, federalVotes, savedAddress, federalRep, provincialRep, provStatus, federalStatus, isLoggedIn).Render(r.Context(), w)
 }
 
 func provinceJurisdictionKey(province string) string {
@@ -367,7 +368,8 @@ func (s *Server) handleBills(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, "internal error", http.StatusInternalServerError)
 		return
 	}
-	_ = templates.BillsFeed(ps, bills, total, f, subscribedIDs).Render(r.Context(), w)
+	provinces, _ := s.store.ListDistinctProvinces()
+	_ = templates.BillsFeed(ps, bills, total, f, subscribedIDs, provinces).Render(r.Context(), w)
 }
 
 func (s *Server) handleBillDetail(w http.ResponseWriter, r *http.Request) {

@@ -471,9 +471,18 @@ func truncate(s string, n int) string {
 	return s[:n] + "…"
 }
 
-// HasSummary checks if a bill has either LoP or AI summary.
 func HasSummary(b store.BillRow) bool {
-	return strings.TrimSpace(b.SummaryLoP) != "" || strings.TrimSpace(b.SummaryAI) != ""
+	return strings.TrimSpace(b.SummaryAI) != ""
+}
+
+func ChamberLabel(chamber string) string {
+	switch chamber {
+	case "commons":
+		return "House"
+	case "senate":
+		return "Senate"
+	}
+	return chamber
 }
 
 func ReactionPercent(count, total int) int {

@@ -2,7 +2,6 @@ package provincial
 
 import (
 	"fmt"
-	"log"
 	"net/http"
 	"regexp"
 	"sort"
@@ -11,6 +10,7 @@ import (
 	"time"
 
 	"github.com/PuerkitoBio/goquery"
+	"github.com/philspins/opendocket/internal/clog"
 	"github.com/philspins/opendocket/internal/utils"
 )
 
@@ -60,7 +60,7 @@ func crawlOntarioVPSittingDates(indexURL string, parliament, session int, client
 	if client == nil {
 		client = utils.NewHTTPClient()
 	}
-	log.Printf("[ontario-votes] fetching session index: %s", indexURL)
+	clog.Infof("[ontario-votes] fetching session index: %s", indexURL)
 
 	doc, err := fetchDoc(indexURL, client)
 	if err != nil {
@@ -103,7 +103,7 @@ func crawlOntarioVPSittingDates(indexURL string, parliament, session int, client
 	}
 	sort.Strings(dates)
 
-	log.Printf("[ontario-votes] found %d sitting dates with V&P", len(dates))
+	clog.Infof("[ontario-votes] found %d sitting dates with V&P", len(dates))
 	return dates, nil
 }
 
@@ -131,7 +131,7 @@ func crawlOntarioVPDay(vpURL string, parliament, session int, date string, clien
 	if client == nil {
 		client = utils.NewHTTPClient()
 	}
-	log.Printf("[ontario-votes] scraping V&P: %s", vpURL)
+	clog.Debugf("[ontario-votes] scraping V&P: %s", vpURL)
 
 	doc, err := fetchDoc(vpURL, client)
 	if err != nil {
@@ -385,6 +385,6 @@ func parseOntarioVPDoc(doc *goquery.Document, parliament, session int, date stri
 		})
 	})
 
-	log.Printf("[ontario-votes] %s: parsed %d divisions", date, len(results))
+	clog.Debugf("[ontario-votes] %s: parsed %d divisions", date, len(results))
 	return results
 }

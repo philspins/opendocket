@@ -5,7 +5,6 @@ import (
 	"encoding/json"
 	"fmt"
 	"io"
-	"log"
 	"net/http"
 	"net/url"
 	"regexp"
@@ -13,6 +12,7 @@ import (
 	"strings"
 
 	"github.com/PuerkitoBio/goquery"
+	"github.com/philspins/opendocket/internal/clog"
 	"github.com/philspins/opendocket/internal/scraper/provincial"
 	"github.com/philspins/opendocket/internal/utils"
 )
@@ -261,7 +261,7 @@ func fetchRepresentPages(apiURL, governmentLevel, setSlug string, client *http.C
 	var profiles []MemberProfile
 	pageURL := apiURL
 	for pageURL != "" {
-		log.Printf("[members] fetching API page: %s", pageURL)
+		clog.Debugf("[members] fetching API page: %s", pageURL)
 
 		resp, err := client.Get(pageURL)
 		if err != nil {
@@ -283,7 +283,7 @@ func fetchRepresentPages(apiURL, governmentLevel, setSlug string, client *http.C
 				memberID = extractProvincialMemberID(setSlug, item)
 			}
 			if memberID == "" {
-				log.Printf("[members] skipping item with no extractable ID: url=%q", item.URL)
+				clog.Debugf("[members] skipping item with no extractable ID: url=%q", item.URL)
 				continue
 			}
 
@@ -343,7 +343,7 @@ func fetchRepresentPages(apiURL, governmentLevel, setSlug string, client *http.C
 		}
 	}
 
-	log.Printf("[members] fetched %d %s members from Represent API", len(profiles), governmentLevel)
+	clog.Infof("[members] fetched %d %s members from Represent API (set: %s)", len(profiles), governmentLevel, setSlug)
 	return profiles, nil
 }
 
@@ -549,7 +549,7 @@ func CrawlNewBrunswickMembersFromWebsite(indexURL string, client *http.Client) (
 		})
 	})
 
-	log.Printf("[members] fetched %d NB members from website", len(profiles))
+	clog.Infof("[members] fetched %d NB members from website", len(profiles))
 	return profiles, nil
 }
 
@@ -602,13 +602,13 @@ func enrichNLMemberPhotos(profiles []MemberProfile, client *http.Client) []Membe
 
 	resp, err := client.Get(jsURL)
 	if err != nil {
-		log.Printf("[members] NL photo enrichment: GET %s: %v", jsURL, err)
+		clog.Debugf("[members] NL photo enrichment: GET %s: %v", jsURL, err)
 		return profiles
 	}
 	defer resp.Body.Close()
 	body, err := io.ReadAll(resp.Body)
 	if err != nil {
-		log.Printf("[members] NL photo enrichment: read body: %v", err)
+		clog.Debugf("[members] NL photo enrichment: read body: %v", err)
 		return profiles
 	}
 	content := string(body)
@@ -639,7 +639,7 @@ func enrichNLMemberPhotos(profiles []MemberProfile, client *http.Client) []Membe
 	}
 
 	if len(photoMap) == 0 {
-		log.Printf("[members] NL photo enrichment: no entries parsed from %s", jsURL)
+		clog.Debugf("[members] NL photo enrichment: no entries parsed from %s", jsURL)
 		return profiles
 	}
 
@@ -654,7 +654,7 @@ func enrichNLMemberPhotos(profiles []MemberProfile, client *http.Client) []Membe
 			enriched++
 		}
 	}
-	log.Printf("[members] NL photo enrichment: matched %d/%d members", enriched, len(profiles))
+	clog.Infof("[members] NL photo enrichment: matched %d/%d members", enriched, len(profiles))
 	return profiles
 }
 
@@ -668,7 +668,7 @@ func CrawlMembersList(url string, client *http.Client) ([]MemberStub, error) {
 	if client == nil {
 		client = utils.NewHTTPClient()
 	}
-	log.Printf("[members] fetching list: %s", url)
+	clog.Infof("[members] fetching list: %s", url)
 
 	doc, err := fetchDoc(url, client)
 	if err != nil {
@@ -707,7 +707,7 @@ func CrawlMembersList(url string, client *http.Client) ([]MemberStub, error) {
 			})
 		})
 
-	log.Printf("[members] found %d member stubs", len(stubs))
+	clog.Infof("[members] found %d member stubs", len(stubs))
 	return stubs, nil
 }
 
@@ -722,13 +722,13 @@ func CrawlMemberProfile(memberID string, profileURL string, client *http.Client)
 	if profileURL == "" {
 		profileURL = fmt.Sprintf(MemberProfileBase, memberID)
 	}
-	log.Printf("[members] scraping profile: %s", profileURL)
+	clog.Debugf("[members] scraping profile: %s", profileURL)
 
 	doc, err := fetchDoc(profileURL, client)
 	if err != nil {
 		// Return a minimal stub rather than a hard failure so we can continue
 		// crawling the rest of the MP list.
-		log.Printf("[members] failed to fetch profile %s: %v", memberID, err)
+		clog.Debugf("[members] failed to fetch profile %s: %v", memberID, err)
 		return MemberProfile{ID: memberID, LastScraped: utils.NowISO()}, nil
 	}
 
@@ -805,7 +805,7 @@ func CrawlMemberVoteHistory(memberID string, parliament, session int, client *ht
 	}
 
 	url := fmt.Sprintf(MemberVotesBase, memberID)
-	log.Printf("[members] scraping vote history: %s", url)
+	clog.Debugf("[members] scraping vote history: %s", url)
 
 	doc, err := fetchDoc(url, client)
 	if err != nil {
@@ -814,7 +814,7 @@ func CrawlMemberVoteHistory(memberID string, parliament, session int, client *ht
 
 	table := doc.Find("table.table, table#vote-history").First()
 	if table.Length() == 0 {
-		log.Printf("[members] vote history table not found for %s — page may require JS", memberID)
+		clog.Debugf("[members] vote history table not found for %s — page may require JS", memberID)
 		return nil, nil
 	}
 
@@ -848,7 +848,7 @@ func CrawlMemberVoteHistory(memberID string, parliament, session int, client *ht
 		})
 	})
 
-	log.Printf("[members] member %s: %d historical votes", memberID, len(records))
+	clog.Debugf("[members] member %s: %d historical votes", memberID, len(records))
 	return records, nil
 }
 

@@ -3,13 +3,13 @@ package provincial
 import (
 	"database/sql"
 	"fmt"
-	"log"
 	"net/http"
 	"strings"
 	"sync"
 	"time"
 
 	"github.com/PuerkitoBio/goquery"
+	"github.com/philspins/opendocket/internal/clog"
 	"github.com/philspins/opendocket/internal/store"
 	"golang.org/x/sync/errgroup"
 )
@@ -126,15 +126,15 @@ func BuildCrawlPlan(conn *sql.DB, client *http.Client, delay time.Duration, src 
 	legislature, currentSession := resolveProvincialLegislatureSession(conn, src, client)
 	sessions := sessionsToCrawlForSource(src, currentSession)
 	if len(sessions) == 1 {
-		log.Printf("[provincial][%s] detected legislature/session: %d/%d", src.Code, legislature, currentSession)
+		clog.Infof("[provincial][%s] detected legislature/session: %d/%d", src.Code, legislature, currentSession)
 	} else {
-		log.Printf("[provincial][%s] detected legislature/current session: %d/%d; crawling sessions %v", src.Code, legislature, currentSession, sessions)
+		clog.Infof("[provincial][%s] detected legislature/current session: %d/%d; crawling sessions %v", src.Code, legislature, currentSession, sessions)
 	}
 
 	plan := CrawlPlan{Source: src}
 	allowPreviousSessionFallback := len(sessions) == 1
 	for _, session := range sessions {
-		log.Printf("[provincial][%s] crawling legislature/session: %d/%d", src.Code, legislature, session)
+		clog.Infof("[provincial][%s] crawling legislature/session: %d/%d", src.Code, legislature, session)
 		sp, err := buildSessionPlan(conn, client, delay, src, legislature, session, allowPreviousSessionFallback)
 		if err != nil {
 			return plan, err
@@ -151,7 +151,7 @@ func buildSessionPlan(conn *sql.DB, client *http.Client, delay time.Duration, sr
 
 	bills, berr := crawlBillsForSource(src, legislature, session, client)
 	if allowPreviousSessionFallback && berr == nil && len(bills) == 0 && session > 1 && provinceBillCountInDB(conn, src.Code) == 0 {
-		log.Printf("[provincial][%s] 0 bills for session %d; retrying with previous session %d to seed DB", src.Code, session, session-1)
+		clog.Infof("[provincial][%s] 0 bills for session %d; retrying with previous session %d to seed DB", src.Code, session, session-1)
 		prevBills, prevErr := crawlBillsForSource(src, legislature, session-1, client)
 		if prevErr == nil && len(prevBills) > 0 {
 			bills = prevBills
@@ -160,7 +160,7 @@ func buildSessionPlan(conn *sql.DB, client *http.Client, delay time.Duration, sr
 		}
 	}
 	if berr != nil {
-		log.Printf("[provincial] %s bills error: %v", src.Code, berr)
+		clog.Infof("[provincial] %s bills error: %v", src.Code, berr)
 	}
 	sp.Bills = bills
 
@@ -176,7 +176,7 @@ func buildSessionPlan(conn *sql.DB, client *http.Client, delay time.Duration, sr
 	case "sk":
 		links, err := CrawlSaskatchewanMinutesLinks(src.VotesURL, client)
 		if err != nil {
-			log.Printf("[provincial] sk: cannot discover minutes links (archive URL may have changed): %v", err)
+			clog.Infof("[provincial] sk: cannot discover minutes links (archive URL may have changed): %v", err)
 		} else {
 			skDivs, _ := crawlSaskatchewanMinutesConcurrently(links, legislature, session, client, delay)
 			divs = skDivs
@@ -187,7 +187,7 @@ func buildSessionPlan(conn *sql.DB, client *http.Client, delay time.Duration, sr
 			return sp, err
 		}
 		if allowPreviousSessionFallback && len(parsed) == 0 && session > 1 && provinceDivisionCountInDB(conn, src.Code) == 0 {
-			log.Printf("[provincial][%s] 0 divisions for session %d; retrying with previous session %d to seed DB", src.Code, session, session-1)
+			clog.Infof("[provincial][%s] 0 divisions for session %d; retrying with previous session %d to seed DB", src.Code, session, session-1)
 			prevParsed, prevErr := crawlDivisionsForSource(src, legislature, session-1, client)
 			if prevErr == nil && len(prevParsed) > 0 {
 				parsed = prevParsed
@@ -213,10 +213,10 @@ func ExecuteCrawlPlan(conn *sql.DB, client *http.Client, delay time.Duration, pl
 				`SELECT COUNT(1) FROM members WHERE government_level='provincial' AND lower(province)=lower(?)`,
 				src.Province).Scan(&memberCount)
 			if memberCount == 0 {
-				log.Printf("[provincial][%s] hint: 0 provincial members in DB for %q — run --members first to enable vote matching", src.Code, src.Province)
+				clog.Infof("[provincial][%s] hint: 0 provincial members in DB for %q — run --members first to enable vote matching", src.Code, src.Province)
 			}
 		}
-		log.Printf("[provincial][%s] summary bills=%d/%d divisions=%d/%d votes=%d/%d unmatched=%d errors=%d",
+		clog.Infof("[provincial][%s] summary bills=%d/%d divisions=%d/%d votes=%d/%d unmatched=%d errors=%d",
 			src.Code,
 			stats.BillsUpserted, stats.BillsSeen,
 			stats.DivisionsUpserted, stats.DivisionsSeen,
@@ -251,7 +251,7 @@ func executeSessionPlan(conn *sql.DB, client *http.Client, delay time.Duration, 
 			LastScraped:      b.LastScraped,
 		}); err != nil {
 			stats.Errors++
-			log.Printf("[provincial] %s bill upsert %s: %v", src.Code, b.ID, err)
+			clog.Debugf("[provincial] %s bill upsert %s: %v", src.Code, b.ID, err)
 		} else {
 			stats.BillsUpserted++
 			if enqueueSummary != nil && strings.TrimSpace(b.DetailURL) != "" {
@@ -296,7 +296,7 @@ func executeSessionPlan(conn *sql.DB, client *http.Client, delay time.Duration, 
 			LastScraped: res.Division.LastScraped,
 		}); err != nil {
 			stats.Errors++
-			log.Printf("[provincial] %s division upsert %s: %v", src.Code, res.Division.ID, err)
+			clog.Debugf("[provincial] %s division upsert %s: %v", src.Code, res.Division.ID, err)
 		} else {
 			stats.DivisionsUpserted++
 		}
@@ -310,7 +310,7 @@ func executeSessionPlan(conn *sql.DB, client *http.Client, delay time.Duration, 
 			}
 			if err := store.UpsertMemberVote(conn, res.Division.ID, memberID, mv.Vote); err != nil {
 				stats.Errors++
-				log.Printf("[provincial] %s member vote upsert: %v", src.Code, err)
+				clog.Debugf("[provincial] %s member vote upsert: %v", src.Code, err)
 			} else {
 				stats.MemberVotesUpserted++
 			}
@@ -340,7 +340,7 @@ func billTitleForDivisionDescription(conn *sql.DB, billID string) string {
 // seedMembers is called when fewer than 10 provincial members exist in the DB;
 // pass nil to skip member seeding (e.g. in tests).
 func CrawlProvinceSource(conn *sql.DB, client *http.Client, delay time.Duration, src ProvincialSource, enqueueSummary BillSummaryEnqueue, seedMembers MemberSeeder) error {
-	log.Printf("[provincial] crawling %s", src.Province)
+	clog.Infof("[provincial] crawling %s", src.Province)
 	plan, err := BuildCrawlPlan(conn, client, delay, src)
 	if err != nil {
 		return err
@@ -378,13 +378,13 @@ func crawlOntarioDaysConcurrently(dates []string, legislature, session int, clie
 			dayDivs, err := CrawlOntarioVPDay(dayURL, legislature, session, date, client)
 			if err != nil {
 				if strings.Contains(err.Error(), "status 404") {
-					log.Printf("[provincial] on day %s: no votes-proceedings page; skipping", date)
+					clog.Debugf("[provincial] on day %s: no votes-proceedings page; skipping", date)
 					return nil
 				}
 				mu.Lock()
 				errCount++
 				mu.Unlock()
-				log.Printf("[provincial] on day %s: %v", date, err)
+				clog.Debugf("[provincial] on day %s: %v", date, err)
 				return nil
 			}
 			mu.Lock()
@@ -418,7 +418,7 @@ func crawlSaskatchewanMinutesConcurrently(links []string, legislature, session i
 				mu.Lock()
 				errCount++
 				mu.Unlock()
-				log.Printf("[provincial] sk minutes %s: %v", link, err)
+				clog.Debugf("[provincial] sk minutes %s: %v", link, err)
 				return nil
 			}
 			mu.Lock()
@@ -504,7 +504,7 @@ func resolveProvincialLegislatureSession(conn *sql.DB, src ProvincialSource, cli
 
 	if src.Code == "pe" {
 		if l, s, ok := FetchPEICurrentAssemblySession(client); ok {
-			log.Printf("[pe] auto-detected assembly=%d session=%d from WDF API", l, s)
+			clog.Infof("[pe] auto-detected assembly=%d session=%d from WDF API", l, s)
 			return l, s
 		}
 		return PEIFallbackAssembly(), PEIFallbackSession()

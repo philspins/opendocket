@@ -517,6 +517,93 @@ func TestCrawlDivisionDetail_SeeListUnderDivision(t *testing.T) {
 	}
 }
 
+// TestCrawlDivisionDetail_SeeListUnder_RealFormat tests the real ourcommons.ca
+// journal HTML format where the division number is inside td.DivisionNumber
+// within the same table, and non-breaking spaces (\xa0) separate "No." from
+// the number. Division 16 references "See list under Division No.\xa015".
+func TestCrawlDivisionDetail_SeeListUnder_RealFormat(t *testing.T) {
+	divisionHTML := `<html><body>
+<p>See the published vote in the <a href="/DocumentViewer/en/sitting17#DOC--13567744">Journals of Tuesday, June 17, 2025</a></p>
+<table class="table ce-mip-table-mobile"><tbody></tbody></table>
+</body></html>`
+
+	// Mirrors the actual structure on ourcommons.ca: DivisionNumber cell is
+	// inside the same table as DivisionType cells; nbsp between "No." and "15".
+	journalHTML := "<html><body>\n" +
+		`<a name="DOC--13567738"></a>` + "\n" +
+		"<table>\n" +
+		"  <tr><td class=\"DivisionNumber\">(Division No. 15 -- Vote nº 15)</td></tr>\n" +
+		"  <tr><td class=\"DivisionHeader\">YEAS: 194, NAYS: 141</td></tr>\n" +
+		"  <tr><td class=\"DivisionType\"><p class=\"DivisionType\">YEAS -- POUR</p>\n" +
+		"    <span class=\"DivisionItem\">Smith</span>\n" +
+		"    <span class=\"DivisionItem\">Brown</span></td></tr>\n" +
+		"  <tr><td class=\"DivisionType\"><p class=\"DivisionType\">NAYS -- CONTRE</p>\n" +
+		"    <span class=\"DivisionItem\">Jones</span></td></tr>\n" +
+		"</table>\n" +
+		`<a name="DOC--13567744"></a>` + "\n" +
+		"<table>\n" +
+		"  <tr><td class=\"DivisionNumber\">(Division No. 16 -- Vote nº 16)</td></tr>\n" +
+		"  <tr><td class=\"DivisionHeader\">YEAS: 194, NAYS: 141<br>(<i>See list under Division No. 15</i>)</td></tr>\n" +
+		"  <tr><td class=\"DivisionPara\">Accordingly, Bill C-6 was read the second time.</td></tr>\n" +
+		"</table>\n" +
+		"</body></html>"
+
+	memberTilesHTML := `<html><body>
+<div id="mp-tile-person-id-2001">
+  <a class="ce-mip-mp-tile-link" href="/Members/en/alice-smith(2001)"></a>
+  <div class="ce-mip-mp-constituency">Smith Riding</div>
+</div>
+<div id="mp-tile-person-id-2002">
+  <a class="ce-mip-mp-tile-link" href="/Members/en/carol-brown(2002)"></a>
+  <div class="ce-mip-mp-constituency">Brown Riding</div>
+</div>
+<div id="mp-tile-person-id-2003">
+  <a class="ce-mip-mp-tile-link" href="/Members/en/bob-jones(2003)"></a>
+  <div class="ce-mip-mp-constituency">Jones Riding</div>
+</div>
+</body></html>`
+
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		switch r.URL.Path {
+		case "/division":
+			w.Write([]byte(divisionHTML))
+		case "/DocumentViewer/en/sitting17":
+			w.Write([]byte(journalHTML))
+		case "/Members/en/search":
+			w.Write([]byte(memberTilesHTML))
+		default:
+			http.NotFound(w, r)
+		}
+	}))
+	defer srv.Close()
+
+	srvURL, _ := neturl.Parse(srv.URL)
+	client := &http.Client{Transport: &redirectTransport{host: srvURL.Host}}
+
+	votes, err := scraper.CrawlDivisionDetail("45-1-16", srv.URL+"/division", client)
+	if err != nil {
+		t.Fatalf("CrawlDivisionDetail: %v", err)
+	}
+	if len(votes) != 3 {
+		t.Fatalf("len(votes)=%d want 3 (Smith+Brown yea, Jones nay)", len(votes))
+	}
+	byID := map[string]string{}
+	for _, v := range votes {
+		if v.MemberID != "" {
+			byID[v.MemberID] = v.Vote
+		}
+	}
+	if byID["2001"] != "Yea" {
+		t.Errorf("Smith (2001) vote=%q want Yea", byID["2001"])
+	}
+	if byID["2002"] != "Yea" {
+		t.Errorf("Brown (2002) vote=%q want Yea", byID["2002"])
+	}
+	if byID["2003"] != "Nay" {
+		t.Errorf("Jones (2003) vote=%q want Nay", byID["2003"])
+	}
+}
+
 // redirectTransport is an http.RoundTripper that routes all requests to the
 // specified host, regardless of the original URL. Used in tests to intercept
 // calls to external hosts (e.g. ourcommons.ca) and serve them from a local

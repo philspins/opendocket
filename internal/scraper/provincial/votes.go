@@ -5,7 +5,6 @@ import (
 	"bufio"
 	"fmt"
 	"io"
-	"log"
 	"net/http"
 	"os"
 	"path/filepath"
@@ -16,6 +15,7 @@ import (
 
 	"github.com/PuerkitoBio/goquery"
 	"github.com/pdfcpu/pdfcpu/pkg/api"
+	"github.com/philspins/opendocket/internal/clog"
 	"github.com/philspins/opendocket/internal/utils"
 )
 
@@ -520,7 +520,7 @@ func crawlGenericProvincialVotesWithMatcher(indexURL, provinceCode, chamber stri
 	if client == nil {
 		client = utils.NewHTTPClient()
 	}
-	log.Printf("[%s-votes] fetching index: %s", provinceCode, indexURL)
+	clog.Infof("[%s-votes] fetching index: %s", provinceCode, indexURL)
 
 	doc, err := fetchDoc(indexURL, client)
 	if err != nil {
@@ -536,7 +536,7 @@ func crawlGenericProvincialVotesWithMatcher(indexURL, provinceCode, chamber stri
 	for _, link := range links {
 		dayDoc, derr := fetchDoc(link, client)
 		if derr != nil {
-			log.Printf("[%s-votes] skip day link %s: %v", provinceCode, link, derr)
+			clog.Debugf("[%s-votes] skip day link %s: %v", provinceCode, link, derr)
 			continue
 		}
 		date := extractDateFromURL(link)
@@ -544,7 +544,7 @@ func crawlGenericProvincialVotesWithMatcher(indexURL, provinceCode, chamber stri
 		results = append(results, parsed...)
 	}
 
-	log.Printf("[%s-votes] parsed %d divisions", provinceCode, len(results))
+	clog.Infof("[%s-votes] parsed %d divisions", provinceCode, len(results))
 	return results, nil
 }
 
