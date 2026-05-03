@@ -1,12 +1,12 @@
 package server
 
 import (
-	"log"
 	"net/http"
 	"net/url"
 	"strings"
 	"time"
 
+	"github.com/philspins/opendocket/internal/clog"
 	"github.com/philspins/opendocket/internal/opennorth"
 	"github.com/philspins/opendocket/internal/riding"
 	"github.com/philspins/opendocket/internal/store"
@@ -139,7 +139,7 @@ func (s *Server) handleRiding(w http.ResponseWriter, r *http.Request) {
 	if address != "" {
 		result, err := s.riding.Lookup(r.Context(), address)
 		if err != nil {
-			log.Printf("handleRiding lookup failed for %q: %v", address, err)
+			clog.Infof("handleRiding lookup failed for %q: %v", address, err)
 			switch {
 			case strings.Contains(err.Error(), "missing GOOGLE_MAPS_API_KEY"):
 				lookupErr = "Address lookup is not configured (missing GOOGLE_MAPS_API_KEY)."
@@ -153,7 +153,7 @@ func (s *Server) handleRiding(w http.ResponseWriter, r *http.Request) {
 			s.setLocalRidingCookies(w, result.FederalRidingID, result.ProvincialRidingID)
 			if user, ok := s.auth.SessionUser(r); ok {
 				if _, saveErr := s.store.UpdateUserLocation(user.ID, result.FederalRidingID, result.ProvincialRidingID); saveErr != nil {
-					log.Printf("handleRiding save failed for user=%q: %v", user.ID, saveErr)
+					clog.Infof("handleRiding save failed for user=%q: %v", user.ID, saveErr)
 				}
 			}
 		}
@@ -234,7 +234,7 @@ func (s *Server) renderProfile(w http.ResponseWriter, r *http.Request, user stor
 		if err == nil {
 			result = lookup
 		} else if lookupErr == "" {
-			log.Printf("renderProfile lookup failed for %q: %v", address, err)
+			clog.Infof("renderProfile lookup failed for %q: %v", address, err)
 			result = fallbackLookupResult(user.FederalRidingID, user.ProvincialRidingID, s.store)
 		}
 	} else {

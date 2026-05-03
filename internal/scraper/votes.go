@@ -6,7 +6,6 @@ import (
 	"encoding/csv"
 	"fmt"
 	"io"
-	"log"
 	"net/http"
 	neturl "net/url"
 	"regexp"
@@ -19,6 +18,7 @@ import (
 	"golang.org/x/text/transform"
 	"golang.org/x/text/unicode/norm"
 
+	"github.com/philspins/opendocket/internal/clog"
 	"github.com/philspins/opendocket/internal/utils"
 )
 
@@ -80,7 +80,7 @@ func CrawlVotesIndex(
 	if client == nil {
 		client = utils.NewHTTPClient()
 	}
-	log.Printf("[votes] fetching index: %s", url)
+	clog.Infof("[votes] fetching index: %s", url)
 
 	doc, err := fetchDoc(url, client)
 	if err != nil {
@@ -172,7 +172,7 @@ func CrawlVotesIndex(
 		})
 	})
 
-	log.Printf("[votes] found %d divisions", len(divs))
+	clog.Infof("[votes] found %d divisions", len(divs))
 	return divs, nil
 }
 
@@ -289,7 +289,7 @@ func CrawlDivisionDetail(divisionID, url string, client *http.Client) ([]MemberV
 	if client == nil {
 		client = utils.NewHTTPClient()
 	}
-	log.Printf("[votes] scraping division detail: %s", url)
+	clog.Debugf("[votes] scraping division detail: %s", url)
 
 	// ── CSV export (primary) ──────────────────────────────────────────────────
 	// ourcommons.ca serves a machine-readable CSV at {url}/csv. The table on
@@ -297,11 +297,11 @@ func CrawlDivisionDetail(divisionID, url string, client *http.Client) ([]MemberV
 	// is empty when fetched with a plain HTTP client.
 	csvVotes, csvErr := crawlDivisionDetailFromCSV(divisionID, url, client)
 	if csvErr == nil && len(csvVotes) > 0 {
-		log.Printf("[votes] division %s: %d member votes (csv)", divisionID, len(csvVotes))
+		clog.Debugf("[votes] division %s: %d member votes (csv)", divisionID, len(csvVotes))
 		return csvVotes, nil
 	}
 	if csvErr != nil {
-		log.Printf("[votes] csv fetch error for %s: %v; falling back to HTML", divisionID, csvErr)
+		clog.Debugf("[votes] csv fetch error for %s: %v; falling back to HTML", divisionID, csvErr)
 	}
 
 	doc, err := fetchDoc(url, client)
@@ -374,14 +374,14 @@ func CrawlDivisionDetail(divisionID, url string, client *http.Client) ([]MemberV
 			membersSearchURL := membersSearchURLForDivision(divisionID)
 			journalVotes, err := crawlDivisionVotesFromJournal(divisionID, journalURL, membersSearchURL, client)
 			if err != nil {
-				log.Printf("[votes] journals fallback error for %s: %v", divisionID, err)
+				clog.Debugf("[votes] journals fallback error for %s: %v", divisionID, err)
 			} else {
 				votes = journalVotes
 			}
 		}
 	}
 
-	log.Printf("[votes] division %s: %d member votes", divisionID, len(votes))
+	clog.Debugf("[votes] division %s: %d member votes", divisionID, len(votes))
 	return votes, nil
 }
 
@@ -481,7 +481,7 @@ func buildSurnameIndex(membersSearchURL string, client *http.Client) surnameInde
 	}
 	doc, err := fetchDoc(membersSearchURL, client)
 	if err != nil {
-		log.Printf("[votes] surname index: fetch error %v", err)
+		clog.Infof("[votes] surname index: fetch error %v", err)
 		return idx
 	}
 
@@ -520,7 +520,7 @@ func buildSurnameIndex(membersSearchURL string, client *http.Client) surnameInde
 		idx[key] = append(idx[key], surnameEntry{MemberID: memberID, Riding: riding})
 	})
 
-	log.Printf("[votes] surname index: %d unique surname keys from %s", len(idx), membersSearchURL)
+	clog.Infof("[votes] surname index: %d unique surname keys from %s", len(idx), membersSearchURL)
 	return idx
 }
 
@@ -657,7 +657,7 @@ func crawlDivisionVotesFromJournal(divisionID, journalURL, membersSearchURL stri
 		}
 		if m := seeListUnderRe.FindStringSubmatch(sectionText); m != nil {
 			refDivNum := m[1]
-			log.Printf("[votes] division %s: journal says SEE LIST UNDER DIVISION NO. %s", divisionID, refDivNum)
+			clog.Debugf("[votes] division %s: journal says SEE LIST UNDER DIVISION NO. %s", divisionID, refDivNum)
 			if refTable := findTableForDivisionNumber(journalDoc, refDivNum); refTable != nil {
 				table = refTable
 			}
@@ -721,7 +721,7 @@ func CrawlSittingCalendar(url string, client *http.Client) ([]string, error) {
 	if client == nil {
 		client = utils.NewHTTPClient()
 	}
-	log.Printf("[votes] fetching sitting calendar: %s", url)
+	clog.Infof("[votes] fetching sitting calendar: %s", url)
 
 	doc, err := fetchDoc(url, client)
 	if err != nil {
@@ -767,7 +767,7 @@ func CrawlSittingCalendar(url string, client *http.Client) ([]string, error) {
 		}
 	}
 
-	log.Printf("[votes] found %d sitting dates", len(dates))
+	clog.Infof("[votes] found %d sitting dates", len(dates))
 	return dates, nil
 }
 

@@ -6,12 +6,12 @@ import (
 	"encoding/json"
 	"fmt"
 	"io"
-	"log"
 	"net/http"
 	"net/url"
 	"os"
 	"strings"
 
+	"github.com/philspins/opendocket/internal/clog"
 	"github.com/philspins/opendocket/internal/store"
 	"github.com/philspins/opendocket/internal/templates"
 )
@@ -71,7 +71,7 @@ func (s *Server) handleFeedback(w http.ResponseWriter, r *http.Request) {
 
 		token := strings.TrimSpace(os.Getenv("GITHUB_FEEDBACK_TOKEN"))
 		if token == "" {
-			log.Printf("feedback: GITHUB_FEEDBACK_TOKEN not configured; issue not created for user %s", u.Email)
+			clog.Infof("feedback: GITHUB_FEEDBACK_TOKEN not configured; issue not created for user %s", u.Email)
 			// Acknowledge silently so users are not blocked when the token is absent.
 			http.Redirect(w, r, "/feedback?submitted=1", http.StatusSeeOther)
 			return
@@ -82,7 +82,7 @@ func (s *Server) handleFeedback(w http.ResponseWriter, r *http.Request) {
 
 		issueURL, err := createGitHubIssue(r.Context(), token, subject, body, labels)
 		if err != nil {
-			log.Printf("feedback: GitHub issue creation failed for user %s: %v", u.Email, err)
+			clog.Infof("feedback: GitHub issue creation failed for user %s: %v", u.Email, err)
 			_ = templates.FeedbackPage(ps, &u, "", "", "Failed to submit feedback. Please try again later.", feedbackMaxSubjectLen, feedbackMaxDescriptionLen).Render(r.Context(), w)
 			return
 		}

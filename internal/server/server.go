@@ -3,7 +3,6 @@ package server
 
 import (
 	"encoding/json"
-	"log"
 	"net/http"
 	"net/url"
 	"os"
@@ -12,6 +11,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/philspins/opendocket/internal/clog"
 	"github.com/philspins/opendocket/internal/auth"
 	"github.com/philspins/opendocket/internal/opennorth"
 	"github.com/philspins/opendocket/internal/riding"
@@ -52,7 +52,7 @@ func New(st *store.Store) *Server {
 	parsed, err := url.Parse(baseURL)
 	baseHost := ""
 	if err != nil {
-		log.Printf("warning: could not parse OAUTH_BASE_URL %q: %v; HTTP→HTTPS redirect disabled", baseURL, err)
+		clog.Infof("warning: could not parse OAUTH_BASE_URL %q: %v; HTTP→HTTPS redirect disabled", baseURL, err)
 	} else if parsed != nil {
 		baseHost = parsed.Host
 	}
@@ -169,7 +169,7 @@ func (s *Server) handleHome(w http.ResponseWriter, r *http.Request) {
 	if memberID := s.resolveRepresentativeMemberID(federalRep, true); memberID != "" {
 		votes, err := s.store.GetMemberVotes(memberID, 100)
 		if err != nil {
-			log.Printf("home: failed loading federal member votes for %q: %v", memberID, err)
+			clog.Infof("home: failed loading federal member votes for %q: %v", memberID, err)
 		} else {
 			federalVotes = recentBillVotes(votes, 5)
 		}
@@ -178,7 +178,7 @@ func (s *Server) handleHome(w http.ResponseWriter, r *http.Request) {
 	if memberID := s.resolveRepresentativeMemberID(provincialRep, false); memberID != "" {
 		votes, err := s.store.GetMemberVotes(memberID, 100)
 		if err != nil {
-			log.Printf("home: failed loading provincial member votes for %q: %v", memberID, err)
+			clog.Infof("home: failed loading provincial member votes for %q: %v", memberID, err)
 		} else {
 			provincialVotes = recentBillVotes(votes, 5)
 		}
@@ -347,6 +347,7 @@ func (s *Server) handleBills(w http.ResponseWriter, r *http.Request) {
 		Category: q.Get("category"),
 		Chamber:  q.Get("chamber"),
 		Level:    q.Get("level"),
+		Province: q.Get("province"),
 		Sort:     sortParam,
 		Page:     page,
 		PerPage:  perPage,
@@ -370,7 +371,7 @@ func (s *Server) handleBills(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, "internal error", http.StatusInternalServerError)
 		return
 	}
-	provinces, _ := s.store.ListDistinctProvinces()
+	provinces, _ := s.store.ListDistinctBillProvinces()
 	_ = templates.BillsFeed(ps, bills, total, f, subscribedIDs, provinces).Render(r.Context(), w)
 }
 
@@ -451,7 +452,7 @@ func (s *Server) handleCompare(w http.ResponseWriter, r *http.Request) {
 
 	provincialMembers, err := s.store.ListMembers("", "", "", "", "provincial")
 	if err != nil {
-		log.Printf("handleCompare: list provincial members: %v", err)
+		clog.Infof("handleCompare: list provincial members: %v", err)
 	}
 	provinces := uniqueSortedMemberFields(provincialMembers, func(m store.MemberRow) string { return m.Province })
 	province := q.Get("province")
@@ -461,7 +462,7 @@ func (s *Server) handleCompare(w http.ResponseWriter, r *http.Request) {
 
 	partyBaseMembers, err := s.store.ListMembers("", "", province, "", level)
 	if err != nil {
-		log.Printf("handleCompare: list party base members: %v", err)
+		clog.Infof("handleCompare: list party base members: %v", err)
 	}
 	parties := uniqueSortedMemberFields(partyBaseMembers, func(m store.MemberRow) string { return m.Party })
 	party := q.Get("party")
@@ -471,7 +472,7 @@ func (s *Server) handleCompare(w http.ResponseWriter, r *http.Request) {
 
 	members, err := s.store.ListMembers("", party, province, "", level)
 	if err != nil {
-		log.Printf("handleCompare: list filtered members: %v", err)
+		clog.Infof("handleCompare: list filtered members: %v", err)
 	}
 	memberIDs := make(map[string]struct{}, len(members))
 	for _, m := range members {
@@ -482,27 +483,27 @@ func (s *Server) handleCompare(w http.ResponseWriter, r *http.Request) {
 	if _, ok := memberIDs[idA]; idA != "" && ok {
 		m1, err = s.store.GetMember(idA)
 		if err != nil {
-			log.Printf("handleCompare: get member a %q: %v", idA, err)
+			clog.Infof("handleCompare: get member a %q: %v", idA, err)
 		}
 	}
 	if _, ok := memberIDs[idB]; idB != "" && ok {
 		m2, err = s.store.GetMember(idB)
 		if err != nil {
-			log.Printf("handleCompare: get member b %q: %v", idB, err)
+			clog.Infof("handleCompare: get member b %q: %v", idB, err)
 		}
 	}
 	if m1.ID != "" && m2.ID != "" {
 		overlap, total, err = s.store.CompareMemberVotes(m1.ID, m2.ID)
 		if err != nil {
-			log.Printf("handleCompare: compare votes %q vs %q: %v", m1.ID, m2.ID, err)
+			clog.Infof("handleCompare: compare votes %q vs %q: %v", m1.ID, m2.ID, err)
 		}
 		sharedVotes, err = s.store.GetSharedMemberVotes(m1.ID, m2.ID, 100)
 		if err != nil {
-			log.Printf("handleCompare: shared votes %q vs %q: %v", m1.ID, m2.ID, err)
+			clog.Infof("handleCompare: shared votes %q vs %q: %v", m1.ID, m2.ID, err)
 		}
 	}
 	if err := templates.CompareMPs(ps, members, m1, m2, level, province, party, provinces, parties, overlap, total, sharedVotes).Render(r.Context(), w); err != nil {
-		log.Printf("handleCompare: render: %v", err)
+		clog.Infof("handleCompare: render: %v", err)
 	}
 }
 
