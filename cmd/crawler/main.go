@@ -18,7 +18,7 @@
 //	--db PATH            Path to SQLite database file (default: opendocket.db)
 //	--delay MS           Milliseconds between HTTP requests (default: 500)
 //	--parallelism N      Max domain crawlers to run concurrently (default: 5, env: CRAWLER_PARALLELISM)
-//	-v                   Verbose logging
+//	--log-level LEVEL    Log verbosity: info (default) or debug
 //
 // If no specific domain flag is provided, all crawlers run once.
 package main
@@ -33,6 +33,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/philspins/opendocket/internal/clog"
 	"github.com/philspins/opendocket/internal/db"
 	"github.com/philspins/opendocket/internal/scheduler"
 	"github.com/philspins/opendocket/internal/scraper"
@@ -43,7 +44,7 @@ import (
 
 func main() {
 	if err := utils.LoadDotEnv(".env"); err != nil {
-		log.Printf("warning: could not load .env: %v", err)
+		clog.Debugf("warning: could not load .env: %v", err)
 	}
 
 	billsFlag := flag.Bool("bills", false, "Crawl bills only")
@@ -57,8 +58,13 @@ func main() {
 	dbPath := flag.String("db", db.DefaultPath, "Path to SQLite database file")
 	delayMS := flag.Int("delay", 500, "Milliseconds between HTTP requests")
 	parallelism := flag.Int("parallelism", scraper.DefaultParallelism(), "Max domain crawlers to run concurrently (env: CRAWLER_PARALLELISM)")
-	verbose := flag.Bool("v", false, "Verbose logging")
+	logLevel := flag.String("log-level", "info", "Log verbosity: info or debug")
 	flag.Parse()
+
+	if strings.ToLower(*logLevel) == "debug" {
+		clog.SetLevel(clog.LevelDebug)
+	}
+	log.SetFlags(log.LstdFlags)
 
 	if *provinceCodes != "" {
 		*provincialFlag = true
@@ -70,10 +76,6 @@ func main() {
 				provinceFilter = append(provinceFilter, c)
 			}
 		}
-	}
-
-	if !*verbose {
-		log.SetFlags(log.LstdFlags)
 	}
 
 	conn, err := db.Open(*dbPath)
@@ -144,7 +146,7 @@ func main() {
 	// linkage can resolve against freshly-stored member records.
 	if *membersFlag || shouldRunAll {
 		if err := scraper.CrawlMembers(conn, client, delay, ""); err != nil {
-			log.Printf("[main] members error: %v", err)
+			clog.Infof("[main] members error: %v", err)
 		}
 	}
 
@@ -203,12 +205,10 @@ func main() {
 	for i, t := range tasks {
 		fns[i] = func() {
 			if err := t.fn(); err != nil {
-				log.Printf("[main] %s error: %v", t.name, err)
+					clog.Infof("[main] %s error: %v", t.name, err)
 			}
 		}
 	}
-
-	scraper.RunParallel(*parallelism, fns)
 
 	// Signal the summarizer worker that all bills have been submitted, then
 	// wait for it to finish and log the result.
@@ -216,13 +216,13 @@ func main() {
 		close(summaryRequests)
 		res := <-summaryResultCh
 		if res.err != nil {
-			log.Printf("[main] ai summarization pipeline error: %v", res.err)
+			clog.Infof("[main] ai summarization pipeline error: %v", res.err)
 		} else {
-			log.Printf("[main] ai summaries generated: %d", res.processed)
+			clog.Infof("[main] ai summaries generated: %d", res.processed)
 		}
 	}
 
-	log.Println("[main] done")
+	clog.Infof("[main] done")
 }
 
 // ── scheduled helpers ─────────────────────────────────────────────────────────
@@ -281,7 +281,7 @@ func runAll(conn *sql.DB, client *http.Client, delay time.Duration, parallelism 
 	if res.err != nil {
 		return fmt.Errorf("summarization pipeline: %w", res.err)
 	}
-	log.Printf("[scheduler] ai summaries generated: %d", res.processed)
+	clog.Infof("[scheduler] ai summaries generated: %d", res.processed)
 	return nil
 }
 
@@ -291,7 +291,7 @@ func runFrequentVoteCheck(conn *sql.DB, client *http.Client, delay time.Duration
 		return err
 	}
 	if !scraper.ParliamentIsSitting(dates, "") {
-		log.Println("[scheduler] parliament not sitting today — skipping frequent vote check")
+		clog.Infof("[scheduler] parliament not sitting today — skipping frequent vote check")
 		return nil
 	}
 	return scraper.CrawlVotes(conn, client, delay, votesURL)
