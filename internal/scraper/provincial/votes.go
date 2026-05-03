@@ -13,6 +13,7 @@ import (
 	"sort"
 	"strconv"
 	"strings"
+	"time"
 
 	"github.com/PuerkitoBio/goquery"
 	"github.com/pdfcpu/pdfcpu/pkg/api"
@@ -159,9 +160,17 @@ func extractDateFromURL(rawURL string) string {
 	}
 	raw := m[1]
 	if len(raw) == 8 && raw[4] != '-' {
-		return fmt.Sprintf("%s-%s-%s", raw[:4], raw[4:6], raw[6:8])
+		raw = fmt.Sprintf("%s-%s-%s", raw[:4], raw[4:6], raw[6:8])
 	}
-	return raw
+	parsed, err := time.Parse("2006-01-02", raw)
+	if err != nil {
+		return ""
+	}
+	year := parsed.Year()
+	if year < 1900 || year > time.Now().UTC().Year()+1 {
+		return ""
+	}
+	return parsed.Format("2006-01-02")
 }
 
 // ── parliamentOrdinal ─────────────────────────────────────────────────────────

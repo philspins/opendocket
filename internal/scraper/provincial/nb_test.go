@@ -2,6 +2,16 @@ package provincial
 
 import "testing"
 
+func TestNewBrunswickJournalDate_PrefersPDFTextDate(t *testing.T) {
+	pdfURL := "https://example.com/journals/34000015.pdf"
+	text := "Journal of Debates March 27, 2025 RECORDED DIVISION YEAS - 14"
+
+	got := newBrunswickJournalDate(pdfURL, text)
+	if got != "2025-03-27" {
+		t.Fatalf("newBrunswickJournalDate()=%q, want %q", got, "2025-03-27")
+	}
+}
+
 func TestParseNewBrunswickPDFDivisions_ParsesMemberNamesFromVoteBlock(t *testing.T) {
 	text := `RECORDED DIVISION YEAS - 14 Mr. Hogan Mr. Monahan Ms. S. Wilson Ms. M. Johnson Mr. Ames Mr. Cullins Mr. Savoie Mr. Weir Ms. Bockus Ms. Scott - Wallace Ms. Conroy Mr. Lee Mr. Austin Mr. Oliver NAYS - 25 Hon. Mr. Gauvin Hon. Mr. C. Chiasson Mr. J. LeBlanc Mr. M. LeBlanc Hon. Ms. Holt And the question being put`
 
@@ -14,6 +24,27 @@ func TestParseNewBrunswickPDFDivisions_ParsesMemberNamesFromVoteBlock(t *testing
 	}
 	if len(divs[0].Votes) < 18 {
 		t.Fatalf("len(votes)=%d, want >=18", len(divs[0].Votes))
+	}
+}
+
+func TestExtractDateFromURL_RejectsImplausibleOrInvalidDates(t *testing.T) {
+	tests := []struct {
+		name string
+		url  string
+		want string
+	}{
+		{name: "valid iso date", url: "https://example.com/journals/2025-03-27.pdf", want: "2025-03-27"},
+		{name: "valid compact date", url: "https://example.com/journals/20250327.pdf", want: "2025-03-27"},
+		{name: "invalid opaque id", url: "https://example.com/journals/34000015.pdf", want: ""},
+		{name: "invalid month/day", url: "https://example.com/journals/20251340.pdf", want: ""},
+	}
+
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			if got := extractDateFromURL(tc.url); got != tc.want {
+				t.Fatalf("extractDateFromURL(%q)=%q, want %q", tc.url, got, tc.want)
+			}
+		})
 	}
 }
 

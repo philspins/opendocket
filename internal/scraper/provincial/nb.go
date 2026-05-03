@@ -142,12 +142,19 @@ func crawlNewBrunswickJournalPDF(pdfURL string, legislature, session, startDivis
 		return nil, 0, err
 	}
 
-	date := extractDateFromURL(pdfURL)
-	if date == "" {
-		date = utils.TodayISO()
-	}
+	date := newBrunswickJournalDate(pdfURL, text)
 	parsed := parseNewBrunswickPDFDivisions(text, pdfURL, legislature, session, startDivisionNumber, date)
 	return parsed, len(parsed), nil
+}
+
+func newBrunswickJournalDate(pdfURL, text string) string {
+	if date := utils.FindDateInText(text); date != "" {
+		return date
+	}
+	if date := extractDateFromURL(pdfURL); date != "" {
+		return date
+	}
+	return utils.TodayISO()
 }
 
 func parseNewBrunswickPDFDivisions(text, detailURL string, legislature, session, startDivisionNumber int, date string) []ProvincialDivisionResult {
