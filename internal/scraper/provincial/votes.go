@@ -12,6 +12,7 @@ import (
 	"sort"
 	"strconv"
 	"strings"
+	"time"
 
 	"github.com/PuerkitoBio/goquery"
 	"github.com/pdfcpu/pdfcpu/pkg/api"
@@ -164,12 +165,37 @@ func extractDateFromURL(rawURL string) string {
 	} else {
 		result = raw
 	}
-	// Reject implausible years — opaque document IDs (e.g. "49240606") can
-	// match the \d{8} pattern and produce nonsense years like 4924.
-	if year, err := strconv.Atoi(result[:4]); err != nil || year < 1867 || year > 2200 {
+	year, err := strconv.Atoi(result[:4])
+	if err != nil {
 		return ""
 	}
-	return result
+	if year >= 1867 && year <= 2200 {
+		return result
+	}
+	// Year is implausibly large — opaque document IDs (e.g. "49240606") can
+	// match the \d{8} pattern and produce nonsense years like 4924. Try to
+	// recover by treating the last 6 digits as YYMMDD (common pattern:
+	// PPYYMMDD where PP is a parliament/session prefix). Only attempt
+	// recovery for future-year misreads (year > 2200); pre-Confederation
+	// dates (year < 1867) are left as empty to avoid misinterpreting them.
+	if year > 2200 && len(raw) == 8 && raw[4] != '-' {
+		yy, e1 := strconv.Atoi(raw[2:4])
+		mm, e2 := strconv.Atoi(raw[4:6])
+		dd, e3 := strconv.Atoi(raw[6:8])
+		if e1 == nil && e2 == nil && e3 == nil {
+			// Expand 2-digit year: 00–69 → 2000–2069, 70–99 → 1970–1999.
+			fullYear := 2000 + yy
+			if yy >= 70 {
+				fullYear = 1900 + yy
+			}
+			// Validate via time.Date to reject impossible dates (e.g. Feb 31).
+			t := time.Date(fullYear, time.Month(mm), dd, 0, 0, 0, 0, time.UTC)
+			if t.Year() == fullYear && int(t.Month()) == mm && t.Day() == dd {
+				return fmt.Sprintf("%04d-%02d-%02d", fullYear, mm, dd)
+			}
+		}
+	}
+	return ""
 }
 
 // ── parliamentOrdinal ─────────────────────────────────────────────────────────
