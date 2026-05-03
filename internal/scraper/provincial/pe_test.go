@@ -428,6 +428,22 @@ func TestParsePEIJournalDivisions_CountsWithoutParentheses(t *testing.T) {
 	}
 }
 
+func TestParsePEIJournalDivisions_PrefersMeaningfulContextOverBoilerplate(t *testing.T) {
+	meaningful := `Bill 8, An Act Respecting Health Services, after extended debate and detailed clause-by-clause review and further amendment and further debate and additional remarks from members across the chamber, was read the second time`
+	text := strings.Join(strings.Fields(meaningful+`. And the question being put on the motion. A Recorded Division being sought, the names were recorded by the Clerk as follows: Yeas 14 \ Member One \ Nays 6 \ Member Two \ Motion resolved in the Negative.`), " ")
+
+	divs := ParsePEIJournalDivisionsForTest(text, "https://docs.assembly.pe.ca/test.pdf", 67, 3, 1, "2026-04-07")
+	if len(divs) != 1 {
+		t.Fatalf("len(divs)=%d, want 1", len(divs))
+	}
+	if !strings.Contains(divs[0].Division.Description, "Bill 8") {
+		t.Fatalf("expected bill context in description, got %q", divs[0].Division.Description)
+	}
+	if strings.Contains(strings.ToLower(divs[0].Division.Description), "question being put") {
+		t.Fatalf("expected boilerplate to be stripped, got %q", divs[0].Division.Description)
+	}
+}
+
 func TestIsPEICaptchaBody_CaseInsensitive(t *testing.T) {
 	if !isPEICaptchaBody([]byte(`<html><head><link href="HTTPS://CAPTCHA.PERFDRIVE.COM/challenge.css"></head></html>`)) {
 		t.Fatal("expected captcha signature to be detected case-insensitively")

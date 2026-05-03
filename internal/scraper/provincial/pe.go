@@ -513,6 +513,7 @@ var peiDivOutcomeRe = regexp.MustCompile(`(?i)(?:Motion\s+(?:was\s+)?(?:CARRIED|
 var peiJournalPageHeaderRe = regexp.MustCompile(`JOURNAL OF THE LEGISLATIVE ASSEMBLY`)
 var peiOctalEscapeRe = regexp.MustCompile(`\\(\d{3})`)
 var peiPremierRe = regexp.MustCompile(`(?i)Hon\.\s+Premier`)
+var peiDivisionBoilerplateRe = regexp.MustCompile(`(?i)^(?:and\s+the\s+question\s+being\s+put.*|the\s+question\s+being\s+put.*|hon\.\s+mr\.\s+speaker\s+put\s+the\s+question.*|motion\s+resolved.*|the\s+motion\s+was.*)$`)
 
 var peiTitlePrefixes = []string{
 	"Hon. Leader of the Opposition",
@@ -600,22 +601,7 @@ func parsePEIJournalDivisions(rawText, pdfURL string, legislature, session, star
 			continue
 		}
 
-		desc := "Recorded division"
-		descStart := trigger[0] - 250
-		if descStart < 0 {
-			descStart = 0
-		}
-		if ctx := strings.TrimSpace(text[descStart:trigger[0]]); ctx != "" {
-			if idx := strings.LastIndexAny(ctx, ".;"); idx >= 0 {
-				ctx = strings.TrimSpace(ctx[idx+1:])
-			}
-			if len(ctx) > 200 {
-				ctx = ctx[:200]
-			}
-			if ctx = strings.Join(strings.Fields(ctx), " "); ctx != "" {
-				desc = ctx
-			}
-		}
+		desc := extractPEIDivisionDescription(text, trigger[0])
 
 		divID := ProvincialDivisionID("pe", legislature, session, divNum, date)
 		result := "Carried"
@@ -643,6 +629,38 @@ func parsePEIJournalDivisions(rawText, pdfURL string, legislature, session, star
 		divNum++
 	}
 	return results
+}
+
+func extractPEIDivisionDescription(text string, triggerStart int) string {
+	const contextWindow = 500
+	const maxDescriptionLen = 240
+
+	start := triggerStart - contextWindow
+	if start < 0 {
+		start = 0
+	}
+	ctx := strings.TrimSpace(strings.Join(strings.Fields(text[start:triggerStart]), " "))
+	if ctx == "" {
+		return "Recorded division"
+	}
+
+	parts := strings.FieldsFunc(ctx, func(r rune) bool {
+		return r == '.' || r == ';'
+	})
+	for i := len(parts) - 1; i >= 0; i-- {
+		candidate := strings.TrimSpace(strings.Trim(parts[i], " ,:-"))
+		if candidate == "" || peiDivisionBoilerplateRe.MatchString(candidate) {
+			continue
+		}
+		if len(candidate) > maxDescriptionLen {
+			candidate = strings.TrimSpace(candidate[:maxDescriptionLen])
+		}
+		if candidate != "" {
+			return candidate
+		}
+	}
+
+	return "Recorded division"
 }
 
 func parsePEIJournalMembers(block string) []string {
