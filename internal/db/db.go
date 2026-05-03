@@ -60,7 +60,6 @@ func Migrate(db *sql.DB) error {
 			current_status     TEXT,
 			category           TEXT,
 			summary_ai         TEXT,
-			summary_lop        TEXT,
 			full_text_url      TEXT,
 			legisinfo_url      TEXT,
 			introduced_date    TEXT,

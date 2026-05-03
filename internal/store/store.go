@@ -129,7 +129,7 @@ func (s *Store) ListBills(f BillFilter) ([]BillRow, int, error) {
 		       COALESCE(b.short_title,''), COALESCE(b.bill_type,''), COALESCE(b.chamber,''),
 		       COALESCE(b.sponsor_id,''), COALESCE(m.name,''),
 		       COALESCE(b.current_stage,''), COALESCE(b.current_status,''),
-		       COALESCE(b.category,''), COALESCE(b.summary_ai,''), COALESCE(b.summary_lop,''),
+		       COALESCE(b.category,''), COALESCE(b.summary_ai,''),
 		       COALESCE(b.full_text_url,''), COALESCE(b.legisinfo_url,''),
 		       COALESCE(b.introduced_date,''), COALESCE(b.last_activity_date,'')
 		FROM bills b
@@ -153,8 +153,8 @@ func (s *Store) ListBills(f BillFilter) ([]BillRow, int, error) {
 			&b.ShortTitle, &b.BillType, &b.Chamber,
 			&b.SponsorID, &b.SponsorName,
 			&b.CurrentStage, &b.CurrentStatus,
-			&b.Category, &b.SummaryAI, &b.SummaryLoP,
-			&b.FullTextURL, &b.LegisInfoURL,
+			&b.Category, &b.SummaryAI,
+						&b.FullTextURL, &b.LegisInfoURL,
 			&b.IntroducedDate, &b.LastActivityDate,
 		); err != nil {
 			return nil, 0, fmt.Errorf("ListBills scan: %w", err)
@@ -194,7 +194,7 @@ func (s *Store) GetBill(id string) (BillRow, error) {
 		       COALESCE(b.short_title,''), COALESCE(b.bill_type,''), COALESCE(b.chamber,''),
 		       COALESCE(b.sponsor_id,''), COALESCE(m.name,''),
 		       COALESCE(b.current_stage,''), COALESCE(b.current_status,''),
-		       COALESCE(b.category,''), COALESCE(b.summary_ai,''), COALESCE(b.summary_lop,''),
+		       COALESCE(b.category,''), COALESCE(b.summary_ai,''),
 		       COALESCE(b.full_text_url,''), COALESCE(b.legisinfo_url,''),
 		       COALESCE(b.introduced_date,''), COALESCE(b.last_activity_date,'')
 		FROM bills b
@@ -206,8 +206,8 @@ func (s *Store) GetBill(id string) (BillRow, error) {
 		&b.ShortTitle, &b.BillType, &b.Chamber,
 		&b.SponsorID, &b.SponsorName,
 		&b.CurrentStage, &b.CurrentStatus,
-		&b.Category, &b.SummaryAI, &b.SummaryLoP,
-		&b.FullTextURL, &b.LegisInfoURL,
+		&b.Category, &b.SummaryAI,
+					&b.FullTextURL, &b.LegisInfoURL,
 		&b.IntroducedDate, &b.LastActivityDate,
 	)
 	if errors.Is(err, sql.ErrNoRows) {

@@ -73,12 +73,6 @@ templ BillDetail(ps store.ParliamentStatus, bill store.BillRow, stages []store.B
 					<p class="font-medium">{ aiSummary.OneSentence }</p>
 				</div>
 			}
-			if bill.SummaryLoP != "" {
-				<div class="callout-info">
-					<p class="text-xs font-semibold uppercase tracking-wide mb-1" style="color:var(--ink-500)">Library of Parliament</p>
-					<p class="text-sm">{ bill.SummaryLoP }</p>
-				</div>
-			}
 
 			<!-- Content panels + Summary -->
 			<!-- Desktop (≥900px): two independent flex-col stacks side-by-side — no shared row heights, no checkerboard stagger -->
@@ -169,14 +163,8 @@ templ BillDetail(ps store.ParliamentStatus, bill store.BillRow, stages []store.B
 				<div class="panel">
 					<p class="text-xs font-semibold uppercase tracking-wide mb-2" style="color:var(--ink-500)">Summary</p>
 					<p class="text-sm">{ aiSummary.PlainSummary }</p>
-					if bill.SummaryAI != "" || bill.SummaryLoP != "" {
-						<p class="text-xs text-gray-400 dark:text-gray-500 mt-2">
-							if bill.SummaryLoP != "" {
-								Source: Library of Parliament
-							} else {
-								Automatically generated from bill text using Claude
-							}
-						</p>
+					if bill.SummaryAI != "" {
+						<p class="text-xs text-gray-400 dark:text-gray-500 mt-2">Automatically generated from bill text using Claude</p>
 					}
 				</div>
 			}

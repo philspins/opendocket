@@ -275,20 +275,15 @@ func shouldSummarizeBill(ctx context.Context, db *sql.DB, billID, incomingLastAc
 
 	var (
 		summaryAI        string
-		summaryLoP       string
 		lastActivityDate string
 	)
 	err := db.QueryRowContext(ctx,
-		`SELECT COALESCE(summary_ai,''), COALESCE(summary_lop,''), COALESCE(last_activity_date,'')
+		`SELECT COALESCE(summary_ai,''), COALESCE(last_activity_date,'')
 		 FROM bills WHERE id = ?`,
 		billID,
-	).Scan(&summaryAI, &summaryLoP, &lastActivityDate)
+	).Scan(&summaryAI, &lastActivityDate)
 	if err != nil {
 		return true, fmt.Errorf("lookup bill %q: %w", billID, err)
-	}
-
-	if strings.TrimSpace(summaryLoP) != "" {
-		return false, nil
 	}
 
 	if strings.TrimSpace(summaryAI) == "" {
@@ -555,16 +550,14 @@ func SummarizeBillsFromChannel(ctx context.Context, db *sql.DB, requests <-chan 
 	return int(atomic.LoadInt64(&processed)), nil
 }
 
-// SummarizeNewBills processes all bills that still lack summaries.
-// Priority: LoP > AI fallback.
+// SummarizeNewBills processes all bills that still lack AI summaries.
 // This is meant to be called by a robfig/cron scheduler job.
 func SummarizeNewBills(ctx context.Context, db *sql.DB, onlyMissing bool) (int, error) {
-	// Find bills without summaries (neither LoP nor AI).
+	// Find bills without AI summaries.
 	query := `
 		SELECT id, number, title, full_text_url
 		FROM bills
-		WHERE (summary_lop IS NULL OR summary_lop = '')
-		  AND (summary_ai IS NULL OR summary_ai = '')
+		WHERE (summary_ai IS NULL OR summary_ai = '')
 		ORDER BY introduced_date DESC
 		LIMIT 50  -- Batch size to avoid API overload
 	`

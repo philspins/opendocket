@@ -148,18 +148,18 @@ func TestUpsertBill(t *testing.T) {
 func TestUpsertBill_PreservesSummaries(t *testing.T) {
 	d := tempDB(t)
 
-	// Insert with LoP summary
-	b := store.BillRecord{ID: "45-1-c-47", Title: "Budget", SummaryLoP: "A bill.", LastScraped: "2024-04-03"}
+	// Insert with AI summary
+	b := store.BillRecord{ID: "45-1-c-47", Title: "Budget", SummaryAI: `{"one_sentence":"A bill."}`, LastScraped: "2024-04-03"}
 	store.UpsertBill(d, b)
 
-	// Update without summary — existing summary should be preserved
-	b2 := store.BillRecord{ID: "45-1-c-47", Title: "Budget (amended)", SummaryLoP: "", LastScraped: "2024-04-04"}
+	// Update without summary — existing AI summary should be preserved
+	b2 := store.BillRecord{ID: "45-1-c-47", Title: "Budget (amended)", SummaryAI: "", LastScraped: "2024-04-04"}
 	store.UpsertBill(d, b2)
 
 	var summary string
-	d.QueryRow(`SELECT summary_lop FROM bills WHERE id='45-1-c-47'`).Scan(&summary)
-	if summary != "A bill." {
-		t.Errorf("expected summary_lop preserved, got %q", summary)
+	d.QueryRow(`SELECT summary_ai FROM bills WHERE id='45-1-c-47'`).Scan(&summary)
+	if summary != `{"one_sentence":"A bill."}` {
+		t.Errorf("expected summary_ai preserved, got %q", summary)
 	}
 }
 

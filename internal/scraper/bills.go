@@ -3,14 +3,12 @@
 // Bills:
 //   - LEGISinfo RSS feed   → bill stubs
 //   - LEGISinfo detail page → stage timeline, sponsor, status
-//   - Library of Parliament → plain-English summaries
 package scraper
 
 import (
 	"fmt"
 	"io"
 	"net/http"
-	"regexp"
 	"strings"
 
 	"github.com/philspins/opendocket/internal/clog"
@@ -26,9 +24,6 @@ const (
 	RSSUrl         = "https://www.parl.ca/legisinfo/en/bills/rss"
 	LegisInfoBase  = "https://www.parl.ca/legisinfo/en/bill"
 	DocumentViewer = "https://www.parl.ca/DocumentViewer/en/%d-%d/bill/%s/first-reading"
-	// LibraryOfParliamentBase is the base URL for professional researcher summaries.
-	// Use these instead of AI-generated summaries where available.
-	LibraryOfParliamentBase = "https://lop.parl.ca/sites/PublicWebsite/default/en_CA/ResearchPublications/LegislativeSummaries"
 )
 
 // StageOrder defines the canonical reading order.
@@ -262,48 +257,6 @@ func sortStages(in []StageRecord) []StageRecord {
 	return out
 }
 
-// ── Library of Parliament summary ─────────────────────────────────────────────
-
-// CrawlLibraryOfParliamentSummary attempts to fetch a plain-English bill
-// summary from the Library of Parliament website. Returns an empty string when
-// not available.
-func CrawlLibraryOfParliamentSummary(billNumber string, parliament, session int, client *http.Client) string {
-	if client == nil {
-		client = utils.NewHTTPClient()
-	}
-
-	// URL structure: /LegislativeSummaries?ls=C47&Parl=45&Ses=1
-	slug := regexp.MustCompile(`[^A-Za-z0-9]`).ReplaceAllString(billNumber, "")
-	url := fmt.Sprintf("%s?ls=%s&Parl=%d&Ses=%d", LibraryOfParliamentBase, slug, parliament, session)
-	clog.Debugf("[bills] fetching Library of Parliament summary: %s", url)
-
-	resp, err := client.Get(url)
-	if err != nil {
-		clog.Debugf("[bills] Library of Parliament unavailable for %s: %v", billNumber, err)
-		return ""
-	}
-	defer resp.Body.Close()
-
-	if resp.StatusCode != http.StatusOK {
-		return ""
-	}
-
-	doc, err := goquery.NewDocumentFromReader(resp.Body)
-	if err != nil {
-		return ""
-	}
-
-	var paragraphs []string
-	doc.Find(
-		".views-field-body .field-content p, .field-item p, article .field--type-text-with-summary p",
-	).Each(func(i int, s *goquery.Selection) {
-		if i < 3 {
-			paragraphs = append(paragraphs, strings.TrimSpace(s.Text()))
-		}
-	})
-
-	return strings.Join(paragraphs, " ")
-}
 
 // ── Fetching raw HTML (shared helper) ─────────────────────────────────────────
 
