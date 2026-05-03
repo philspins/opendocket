@@ -474,8 +474,8 @@ func TestGetSharedMemberVotes(t *testing.T) {
 		t.Fatalf("insert members: %v", err)
 	}
 
-	_, err = conn.Exec(`INSERT INTO bills (id, parliament, session, number, title, chamber)
-		VALUES ('b1', 45, 1, 'C-1', 'Bill One', 'commons')`)
+	_, err = conn.Exec(`INSERT INTO bills (id, parliament, session, number, title, short_title, chamber)
+		VALUES ('b1', 45, 1, 'C-1', 'Bill One', 'Short Bill One', 'commons')`)
 	if err != nil {
 		t.Fatalf("insert bill: %v", err)
 	}
@@ -514,6 +514,9 @@ func TestGetSharedMemberVotes(t *testing.T) {
 	}
 	if shared[1].BillNumber != "C-1" {
 		t.Fatalf("expected bill number on d1, got %q", shared[1].BillNumber)
+	}
+	if shared[1].BillTitle != "Short Bill One" {
+		t.Fatalf("expected bill title on d1, got %q", shared[1].BillTitle)
 	}
 	if shared[1].Member1Vote != "Yea" || shared[1].Member2Vote != "Nay" {
 		t.Fatalf("unexpected shared vote values: %+v", shared[1])
