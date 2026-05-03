@@ -11,8 +11,8 @@ import (
 	"strings"
 	"time"
 
-	"github.com/philspins/opendocket/internal/clog"
 	"github.com/philspins/opendocket/internal/auth"
+	"github.com/philspins/opendocket/internal/clog"
 	"github.com/philspins/opendocket/internal/opennorth"
 	"github.com/philspins/opendocket/internal/riding"
 	"github.com/philspins/opendocket/internal/scraper"
@@ -81,11 +81,11 @@ func New(st *store.Store) *Server {
 	s.mux.HandleFunc("POST /profile", s.handleProfile)
 	s.mux.HandleFunc("GET /privacy", s.handlePrivacy)
 	s.mux.HandleFunc("GET /tos", s.handleTerms)
+	s.mux.HandleFunc("GET /feedback", s.handleFeedback)
+	s.mux.HandleFunc("POST /feedback", s.handleFeedback)
 	s.mux.HandleFunc("GET /delete-data", s.handleDeleteDataPage)
 	s.mux.HandleFunc("POST /delete-data", s.handleDeleteDataCallback)
 	s.mux.HandleFunc("GET /riding", s.handleRiding)
-	s.mux.HandleFunc("GET /feedback", s.handleFeedback)
-	s.mux.HandleFunc("POST /feedback", s.handleFeedback)
 	s.mux.HandleFunc("POST /api/follow", s.handleFollow)
 	s.mux.HandleFunc("POST /api/react", s.handleReact)
 	s.mux.HandleFunc("POST /api/subscribe-bill", s.handleSubscribeBill)
@@ -198,8 +198,7 @@ func (s *Server) handleHome(w http.ResponseWriter, r *http.Request) {
 			}
 		}
 	}
-	_, isLoggedIn := s.auth.SessionUser(r)
-	_ = templates.Home(ps, provincialVotes, federalVotes, savedAddress, federalRep, provincialRep, provStatus, federalStatus, isLoggedIn).Render(r.Context(), w)
+	_ = templates.Home(ps, provincialVotes, federalVotes, savedAddress, federalRep, provincialRep, provStatus, federalStatus, v.IsAuthenticated()).Render(r.Context(), w)
 }
 
 func provinceJurisdictionKey(province string) string {
@@ -450,13 +449,13 @@ func (s *Server) handleCompare(w http.ResponseWriter, r *http.Request) {
 		level = "federal"
 	}
 
-	provincialMembers, err := s.store.ListMembers("", "", "", "", "provincial")
+	allMembers, err := s.store.ListMembers("", "", "", "", level)
 	if err != nil {
 		clog.Infof("handleCompare: list provincial members: %v", err)
 	}
-	provinces := uniqueSortedMemberFields(provincialMembers, func(m store.MemberRow) string { return m.Province })
+	provinces := uniqueSortedMemberFields(allMembers, func(m store.MemberRow) string { return m.Province })
 	province := q.Get("province")
-	if level != "provincial" || !isValidSelection(provinces, province) {
+	if !isValidSelection(provinces, province) {
 		province = ""
 	}
 

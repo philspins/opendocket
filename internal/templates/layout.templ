@@ -1100,12 +1100,13 @@ templ Layout(title string, ps store.ParliamentStatus) {
 					/* Member profile votes: date | vote | alignment | result */
 					.member-vote-table tr {
 						grid-template-areas:
-							"date vote result"
-							"desc desc desc";
-						grid-template-columns: 1fr auto auto;
+							"date vote align result"
+							"desc desc desc  desc";
+						grid-template-columns: 1fr auto auto auto;
 					}
-					.member-vote-table td.col-vote { grid-area: vote; width: auto !important; }
-					.member-vote-table td.col-meta { grid-area: result; text-align: right; width: auto !important; }
+					.member-vote-table td.col-vote      { grid-area: vote; width: auto !important; }
+					.member-vote-table td.col-alignment { grid-area: align; width: auto !important; display: block !important; }
+					.member-vote-table td.col-meta      { grid-area: result; text-align: right; width: auto !important; }
 
 					/* Compare page votes: date | vote1 | vote2 | result */
 					.compare-vote-table tr.hidden { display: none; }
