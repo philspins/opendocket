@@ -81,8 +81,6 @@ func New(st *store.Store) *Server {
 	s.mux.HandleFunc("POST /profile", s.handleProfile)
 	s.mux.HandleFunc("GET /privacy", s.handlePrivacy)
 	s.mux.HandleFunc("GET /tos", s.handleTerms)
-	s.mux.HandleFunc("GET /feedback", s.handleFeedback)
-	s.mux.HandleFunc("POST /feedback", s.handleFeedback)
 	s.mux.HandleFunc("GET /delete-data", s.handleDeleteDataPage)
 	s.mux.HandleFunc("POST /delete-data", s.handleDeleteDataCallback)
 	s.mux.HandleFunc("GET /riding", s.handleRiding)
@@ -198,7 +196,7 @@ func (s *Server) handleHome(w http.ResponseWriter, r *http.Request) {
 			}
 		}
 	}
-	_ = templates.Home(ps, provincialVotes, federalVotes, savedAddress, federalRep, provincialRep, provStatus, federalStatus, v.IsAuthenticated()).Render(r.Context(), w)
+	_ = templates.Home(ps, provincialVotes, federalVotes, savedAddress, federalRep, provincialRep, provStatus, federalStatus).Render(r.Context(), w)
 }
 
 func provinceJurisdictionKey(province string) string {
@@ -346,7 +344,6 @@ func (s *Server) handleBills(w http.ResponseWriter, r *http.Request) {
 		Category: q.Get("category"),
 		Chamber:  q.Get("chamber"),
 		Level:    q.Get("level"),
-		Province: q.Get("province"),
 		Sort:     sortParam,
 		Page:     page,
 		PerPage:  perPage,
@@ -370,8 +367,7 @@ func (s *Server) handleBills(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, "internal error", http.StatusInternalServerError)
 		return
 	}
-	provinces, _ := s.store.ListDistinctBillProvinces()
-	_ = templates.BillsFeed(ps, bills, total, f, subscribedIDs, provinces).Render(r.Context(), w)
+	_ = templates.BillsFeed(ps, bills, total, f, subscribedIDs).Render(r.Context(), w)
 }
 
 func (s *Server) handleBillDetail(w http.ResponseWriter, r *http.Request) {
@@ -385,30 +381,12 @@ func (s *Server) handleBillDetail(w http.ResponseWriter, r *http.Request) {
 	}
 	stages, _ := s.store.GetBillStages(id)
 	divs, _ := s.store.GetBillDivisions(id)
-	divs = dedupeBillDetailDivisions(divs)
 	reactions, _ := s.store.GetBillReactionCounts(id)
 	var isSubscribed bool
 	if isAuthenticated {
 		isSubscribed, _ = s.store.IsUserSubscribedToBill(user.ID, id)
 	}
 	_ = templates.BillDetail(ps, bill, stages, divs, reactions, isAuthenticated, isSubscribed).Render(r.Context(), w)
-}
-
-func dedupeBillDetailDivisions(divs []store.DivisionRow) []store.DivisionRow {
-	if len(divs) < 2 {
-		return divs
-	}
-	seen := make(map[string]struct{}, len(divs))
-	out := make([]store.DivisionRow, 0, len(divs))
-	for _, d := range divs {
-		key := strings.TrimSpace(d.Date) + "|" + strings.ToLower(strings.Join(strings.Fields(d.Description), " "))
-		if _, ok := seen[key]; ok {
-			continue
-		}
-		seen[key] = struct{}{}
-		out = append(out, d)
-	}
-	return out
 }
 
 func (s *Server) handleVotes(w http.ResponseWriter, r *http.Request) {
@@ -466,13 +444,13 @@ func (s *Server) handleCompare(w http.ResponseWriter, r *http.Request) {
 		level = "federal"
 	}
 
-	allMembers, err := s.store.ListMembers("", "", "", "", level)
+	provincialMembers, err := s.store.ListMembers("", "", "", "", "provincial")
 	if err != nil {
-		log.Printf("handleCompare: list members for provinces: %v", err)
+		log.Printf("handleCompare: list provincial members: %v", err)
 	}
-	provinces := uniqueSortedMemberFields(allMembers, func(m store.MemberRow) string { return m.Province })
+	provinces := uniqueSortedMemberFields(provincialMembers, func(m store.MemberRow) string { return m.Province })
 	province := q.Get("province")
-	if !isValidSelection(provinces, province) {
+	if level != "provincial" || !isValidSelection(provinces, province) {
 		province = ""
 	}
 

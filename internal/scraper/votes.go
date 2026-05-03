@@ -2,19 +2,30 @@
 package scraper
 
 import (
+	"bytes"
+	"encoding/csv"
 	"fmt"
+	"io"
 	"log"
 	"net/http"
 	neturl "net/url"
 	"regexp"
 	"strconv"
 	"strings"
+	"unicode"
 
 	"github.com/PuerkitoBio/goquery"
+	"golang.org/x/text/runes"
+	"golang.org/x/text/transform"
+	"golang.org/x/text/unicode/norm"
+
 	"github.com/philspins/opendocket/internal/utils"
 )
 
 var chamberMeetingDateClassRe = regexp.MustCompile(`\b\d{4}-\d{2}-\d{2}\b`)
+
+// seeListUnderRe matches journal text like "(SEE LIST UNDER DIVISION NO. 15)".
+var seeListUnderRe = regexp.MustCompile(`(?i)see\s+list\s+under\s+division\s+no\.?\s*(\d+)`)
 
 // ── constants ─────────────────────────────────────────────────────────────────
 
@@ -189,6 +200,82 @@ var voteSelectors = map[string][]string{
 	},
 }
 
+// crawlDivisionDetailFromCSV fetches the CSV export at {url}/csv and returns
+// member votes. The CSV columns are:
+//
+//	0: Person ID  (numeric member ID)
+//	1: Member of Parliament
+//	2: Political Affiliation
+//	3: Member Voted  ("Yea", "Nay", or "")
+//	4: Paired       (non-empty when the member is paired)
+//
+// Returns nil,nil when the CSV response contains only a header row (e.g. an
+// older unanimous vote where ourcommons.ca serves an empty body).
+func crawlDivisionDetailFromCSV(divisionID, pageURL string, client *http.Client) ([]MemberVote, error) {
+	csvURL := strings.TrimRight(pageURL, "/") + "/csv"
+	resp, err := client.Get(csvURL)
+	if err != nil {
+		return nil, fmt.Errorf("csv GET %q: %w", csvURL, err)
+	}
+	defer resp.Body.Close()
+	if resp.StatusCode != http.StatusOK {
+		return nil, fmt.Errorf("csv GET %q: status %d", csvURL, resp.StatusCode)
+	}
+	body, err := io.ReadAll(resp.Body)
+	if err != nil {
+		return nil, fmt.Errorf("csv read %q: %w", csvURL, err)
+	}
+
+	r := csv.NewReader(bytes.NewReader(body))
+	// Skip header row.
+	if _, err := r.Read(); err != nil {
+		return nil, fmt.Errorf("csv header %q: %w", csvURL, err)
+	}
+
+	var votes []MemberVote
+	for {
+		record, err := r.Read()
+		if err == io.EOF {
+			break
+		}
+		if err != nil {
+			return nil, fmt.Errorf("csv parse %q: %w", csvURL, err)
+		}
+		if len(record) < 4 {
+			continue
+		}
+		personID := strings.TrimSpace(record[0])
+		if personID == "" {
+			continue
+		}
+		memberVoted := strings.TrimSpace(record[3])
+		paired := ""
+		if len(record) >= 5 {
+			paired = strings.TrimSpace(record[4])
+		}
+
+		var vote string
+		switch strings.ToLower(memberVoted) {
+		case "yea":
+			vote = "Yea"
+		case "nay":
+			vote = "Nay"
+		default:
+			if paired != "" {
+				vote = "Paired"
+			} else {
+				continue // not present / abstain
+			}
+		}
+		votes = append(votes, MemberVote{
+			DivisionID: divisionID,
+			MemberID:   personID,
+			Vote:       vote,
+		})
+	}
+	return votes, nil
+}
+
 // normaliseVoteText maps the free-form vote text from the current
 // ourcommons.ca table layout to a canonical vote value.
 var normaliseVoteText = map[string]string{
@@ -203,6 +290,19 @@ func CrawlDivisionDetail(divisionID, url string, client *http.Client) ([]MemberV
 		client = utils.NewHTTPClient()
 	}
 	log.Printf("[votes] scraping division detail: %s", url)
+
+	// ── CSV export (primary) ──────────────────────────────────────────────────
+	// ourcommons.ca serves a machine-readable CSV at {url}/csv. The table on
+	// the HTML page is populated via JavaScript (DataTables AJAX), so the tbody
+	// is empty when fetched with a plain HTTP client.
+	csvVotes, csvErr := crawlDivisionDetailFromCSV(divisionID, url, client)
+	if csvErr == nil && len(csvVotes) > 0 {
+		log.Printf("[votes] division %s: %d member votes (csv)", divisionID, len(csvVotes))
+		return csvVotes, nil
+	}
+	if csvErr != nil {
+		log.Printf("[votes] csv fetch error for %s: %v; falling back to HTML", divisionID, csvErr)
+	}
 
 	doc, err := fetchDoc(url, client)
 	if err != nil {
@@ -271,7 +371,8 @@ func CrawlDivisionDetail(divisionID, url string, client *http.Client) ([]MemberV
 	// in Motion Text (DocumentViewer link). Parse that section for vote names.
 	if len(votes) == 0 {
 		if journalURL := findDivisionJournalURL(doc, url); journalURL != "" {
-			journalVotes, err := crawlDivisionVotesFromJournal(divisionID, journalURL, client)
+			membersSearchURL := membersSearchURLForDivision(divisionID)
+			journalVotes, err := crawlDivisionVotesFromJournal(divisionID, journalURL, membersSearchURL, client)
 			if err != nil {
 				log.Printf("[votes] journals fallback error for %s: %v", divisionID, err)
 			} else {
@@ -286,6 +387,7 @@ func CrawlDivisionDetail(divisionID, url string, client *http.Client) ([]MemberV
 
 func findDivisionJournalURL(doc *goquery.Document, pageURL string) string {
 	journalURL := ""
+	anchoredJournalURL := ""
 	doc.Find("a[href]").EachWithBreak(func(_ int, a *goquery.Selection) bool {
 		href, ok := a.Attr("href")
 		if !ok {
@@ -295,32 +397,265 @@ func findDivisionJournalURL(doc *goquery.Document, pageURL string) string {
 		if href == "" {
 			return true
 		}
-		text := strings.ToLower(strings.TrimSpace(a.Text()))
-		hrefLower := strings.ToLower(href)
-		if !strings.Contains(text, "journals of") && !strings.Contains(hrefLower, "/documentviewer/") {
+
+		resolved := resolveRelativeURL(pageURL, href)
+		resolvedLower := strings.ToLower(resolved)
+		if !strings.Contains(resolvedLower, "/documentviewer/") {
 			return true
 		}
-		journalURL = resolveRelativeURL(pageURL, href)
-		return false
+
+		text := strings.ToLower(strings.TrimSpace(a.Text()))
+		isJournalText := strings.Contains(text, "journals") || strings.Contains(text, "journal")
+		hasDocAnchor := strings.Contains(strings.ToUpper(resolved), "#DOC--")
+
+		// Ignore generic documentviewer links from page chrome (e.g. "House
+		// Publications") and only keep likely journals targets.
+		if !isJournalText && !hasDocAnchor {
+			return true
+		}
+
+		if hasDocAnchor {
+			anchoredJournalURL = resolved
+			return false
+		}
+		if journalURL == "" {
+			journalURL = resolved
+		}
+		return true
 	})
+	if anchoredJournalURL != "" {
+		return anchoredJournalURL
+	}
 	return journalURL
 }
 
-func crawlDivisionVotesFromJournal(divisionID, journalURL string, client *http.Client) ([]MemberVote, error) {
+// ── Surname index for journals fallback ──────────────────────────────────────
+
+// surnameEntry is one member record in the surname lookup index.
+type surnameEntry struct {
+	MemberID string
+	Riding   string // decoded riding name, used for disambiguation
+}
+
+// surnameIndex maps a normalised surname string to one or more members.
+// Collisions (e.g. two MPs named "Belanger") are resolved by riding.
+type surnameIndex map[string][]surnameEntry
+
+// accentStripper removes combining diacritical marks so that "Bélanger" and
+// "Belanger" compare equal after normalisation.
+var accentStripper = transform.Chain(norm.NFD, runes.Remove(runes.In(unicode.Mn)), norm.NFC)
+
+// normSurname folds a surname to a canonical comparison key:
+//   - Unicode NFC/NFD decomposition to strip diacritics
+//   - lowercase
+//   - apostrophes removed (d'Entremont → dentremont)
+//   - hyphens replaced with spaces (Ste-Marie → ste marie)
+//   - leading/trailing whitespace trimmed
+func normSurname(s string) string {
+	s, _, _ = transform.String(accentStripper, s)
+	s = strings.ToLower(s)
+	s = strings.ReplaceAll(s, "'", "")      // ASCII apostrophe
+	s = strings.ReplaceAll(s, "\u2019", "") // Unicode right single quotation mark
+	s = strings.ReplaceAll(s, "-", " ")
+	return strings.TrimSpace(s)
+}
+
+// buildSurnameIndex fetches the ourcommons.ca member search page for the given
+// URL (e.g. https://www.ourcommons.ca/Members/en/search?parliament=45&session=1)
+// and builds a surname→[{memberID, riding}] lookup map.
+//
+// The last name is derived from the member's href slug by discarding everything
+// up to and including the first hyphen (the first name), e.g.:
+//
+//	/Members/en/ziad-aboultaif(89156)   → surname slug "aboultaif"
+//	/Members/en/fares-al-soud(123033)   → surname slug "al-soud" → "al soud"
+//	/Members/en/michelle-rempel-garner  → surname slug "rempel-garner" → "rempel garner"
+//	/Members/en/chris-dentremont        → surname slug "dentremont"
+//
+// Returns an empty (non-nil) index on fetch failure so callers can continue
+// without member IDs.
+func buildSurnameIndex(membersSearchURL string, client *http.Client) surnameIndex {
+	idx := surnameIndex{}
+	if membersSearchURL == "" {
+		return idx
+	}
+	doc, err := fetchDoc(membersSearchURL, client)
+	if err != nil {
+		log.Printf("[votes] surname index: fetch error %v", err)
+		return idx
+	}
+
+	memberIDRe := regexp.MustCompile(`\((\d+)\)$`)
+
+	doc.Find("[id^='mp-tile-person-id-']").Each(func(_ int, tile *goquery.Selection) {
+		link := tile.Find("a.ce-mip-mp-tile-link").First()
+		href, _ := link.Attr("href")
+		if href == "" {
+			return
+		}
+		// Extract numeric member ID from href like /Members/en/ziad-aboultaif(89156)
+		m := memberIDRe.FindStringSubmatch(href)
+		if m == nil {
+			return
+		}
+		memberID := m[1]
+
+		// Extract slug: strip the /Members/en/ prefix and the (ID) suffix
+		slug := href
+		if i := strings.LastIndex(slug, "/"); i >= 0 {
+			slug = slug[i+1:]
+		}
+		slug = memberIDRe.ReplaceAllString(slug, "")
+
+		// Last name = everything after the first hyphen
+		dashIdx := strings.Index(slug, "-")
+		if dashIdx < 0 || dashIdx == len(slug)-1 {
+			return
+		}
+		surnamePart := slug[dashIdx+1:]
+
+		riding := strings.TrimSpace(tile.Find(".ce-mip-mp-constituency").First().Text())
+
+		key := normSurname(surnamePart)
+		idx[key] = append(idx[key], surnameEntry{MemberID: memberID, Riding: riding})
+	})
+
+	log.Printf("[votes] surname index: %d unique surname keys from %s", len(idx), membersSearchURL)
+	return idx
+}
+
+// lookupMemberID resolves a journal DivisionItem text (e.g. "Belanger" or
+// "Belanger (Desnethé—Missinippi—Churchill River)") to a member ID using the
+// provided surnameIndex. Returns "" if the member cannot be resolved.
+func lookupMemberID(idx surnameIndex, journalText string) string {
+	if len(idx) == 0 {
+		return ""
+	}
+	// Split riding disambiguation from the surname
+	surname := journalText
+	ridingHint := ""
+	if open := strings.Index(journalText, "("); open >= 0 {
+		surname = strings.TrimSpace(journalText[:open])
+		if close := strings.LastIndex(journalText, ")"); close > open {
+			ridingHint = strings.TrimSpace(journalText[open+1 : close])
+		}
+	}
+
+	key := normSurname(surname)
+	candidates := idx[key]
+	if len(candidates) == 0 {
+		return ""
+	}
+	if len(candidates) == 1 {
+		return candidates[0].MemberID
+	}
+	// Multiple candidates: use riding hint for disambiguation.
+	if ridingHint != "" {
+		normHint := normSurname(ridingHint)
+		for _, c := range candidates {
+			if normSurname(c.Riding) == normHint {
+				return c.MemberID
+			}
+		}
+	}
+	// Can't disambiguate; return empty.
+	return ""
+}
+
+// membersSearchURLForDivision returns the ourcommons.ca member search URL
+// scoped to the parliament and session encoded in the divisionID ("45-1-100").
+func membersSearchURLForDivision(divisionID string) string {
+	parts := strings.SplitN(divisionID, "-", 3)
+	if len(parts) < 2 {
+		return MembersListURL
+	}
+	return fmt.Sprintf("%s?parliament=%s&session=%s", MembersListURL, parts[0], parts[1])
+}
+
+// sectionTextAfterAnchor returns the concatenated text of all DOM siblings that
+// follow the anchor element until the next named anchor is encountered. This
+// gives us the text content of a specific journal division section without
+// reading into the next section.
+func sectionTextAfterAnchor(target *goquery.Selection) string {
+	if target == nil || target.Length() == 0 {
+		return ""
+	}
+	var sb strings.Builder
+	for s := target.Next(); s.Length() > 0; s = s.Next() {
+		if _, hasName := s.Attr("name"); hasName {
+			break
+		}
+		sb.WriteString(s.Text())
+	}
+	return sb.String()
+}
+
+// findTableForDivisionNumber locates the DivisionType vote table for divNum on
+// a journal page. It walks backwards through the siblings preceding each
+// DivisionType table to find text containing "Division No. X", stopping at the
+// previous DivisionType table boundary to avoid false matches.
+func findTableForDivisionNumber(doc *goquery.Document, divNum string) *goquery.Selection {
+	divNumRe := regexp.MustCompile(`(?i)division\s+no\.?\s*` + regexp.QuoteMeta(divNum) + `[^\d]`)
+	var result *goquery.Selection
+
+	doc.Find("table").EachWithBreak(func(_ int, t *goquery.Selection) bool {
+		if t.Find("td.DivisionType").Length() == 0 {
+			return true
+		}
+		sibling := t.Prev()
+		for sibling.Length() > 0 {
+			if sibling.Is("table") && sibling.Find("td.DivisionType").Length() > 0 {
+				break // don't look past the previous vote table
+			}
+			if divNumRe.MatchString(sibling.Text()) {
+				result = t
+				return false
+			}
+			sibling = sibling.Prev()
+		}
+		return true
+	})
+	return result
+}
+
+func crawlDivisionVotesFromJournal(divisionID, journalURL, membersSearchURL string, client *http.Client) ([]MemberVote, error) {
+	// Build surname→memberID index from the member search page for this
+	// parliament/session so we can resolve journal surnames to member IDs.
+	idx := buildSurnameIndex(membersSearchURL, client)
+
 	journalDoc, err := fetchDoc(journalURL, client)
 	if err != nil {
 		return nil, fmt.Errorf("journals page %q: %w", journalURL, err)
 	}
 
 	var table *goquery.Selection
+	var target *goquery.Selection
 	if parsed, err := neturl.Parse(journalURL); err == nil {
 		anchor := strings.TrimSpace(parsed.Fragment)
 		if anchor != "" {
-			if target := journalDoc.Find(fmt.Sprintf("a[name='%s']", anchor)).First(); target.Length() > 0 {
-				table = target.NextAllFiltered("table").First()
+			if t := journalDoc.Find(fmt.Sprintf("a[name='%s']", anchor)).First(); t.Length() > 0 {
+				target = t
+				table = t.NextAllFiltered("table").First()
 			}
 		}
 	}
+
+	// If the section has no DivisionType vote data, check whether it contains
+	// a "(SEE LIST UNDER DIVISION NO. X)" reference and redirect to that table.
+	if table == nil || table.Find("td.DivisionType").Length() == 0 {
+		sectionText := sectionTextAfterAnchor(target)
+		if sectionText == "" {
+			sectionText = journalDoc.Text()
+		}
+		if m := seeListUnderRe.FindStringSubmatch(sectionText); m != nil {
+			refDivNum := m[1]
+			log.Printf("[votes] division %s: journal says SEE LIST UNDER DIVISION NO. %s", divisionID, refDivNum)
+			if refTable := findTableForDivisionNumber(journalDoc, refDivNum); refTable != nil {
+				table = refTable
+			}
+		}
+	}
+
 	if table == nil || table.Length() == 0 {
 		table = journalDoc.Find("table").FilterFunction(func(_ int, s *goquery.Selection) bool {
 			text := strings.ToUpper(s.Text())
@@ -347,13 +682,18 @@ func crawlDivisionVotesFromJournal(divisionID, journalURL string, client *http.C
 		}
 
 		td.Find("span.DivisionItem").Each(func(_ int, span *goquery.Selection) {
-			name := strings.TrimSpace(span.Text())
-			if name == "" {
+			// The span text contains only a surname (possibly with riding
+			// disambiguation in parentheses) and a trailing <br>. Strip the <br>
+			// text node artefact.
+			raw := strings.TrimSpace(span.Text())
+			if raw == "" {
 				return
 			}
+			memberID := lookupMemberID(idx, raw)
 			votes = append(votes, MemberVote{
 				DivisionID: divisionID,
-				MemberName: name,
+				MemberID:   memberID,
+				MemberName: raw,
 				Vote:       voteType,
 			})
 		})

@@ -3,6 +3,7 @@ package scraper_test
 import (
 	"net/http"
 	"net/http/httptest"
+	neturl "net/url"
 	"testing"
 
 	"github.com/philspins/opendocket/internal/scraper"
@@ -257,23 +258,122 @@ func TestCrawlDivisionDetail_LegacyFallback(t *testing.T) {
 	}
 }
 
+func TestCrawlDivisionDetail_UsesCSVEndpoint(t *testing.T) {
+	// CSV uses Person ID (numeric) in col 0 — not a URL.
+	const divCSV = `Person ID,Member of Parliament,Political Affiliation,Member Voted,Paired
+10001,Alice Smith (Foo),Liberal,Yea,
+10002,Bob Jones (Bar),Conservative,Nay,
+10003,Carol Brown (Baz),NDP,Yea,
+10004,David White (Qux),Bloc,,paired
+`
+	emptyHTML := `<html><body>
+  <table class="table table-striped ce-mip-table-mobile"><tbody></tbody></table>
+</body></html>`
+
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		switch r.URL.Path {
+		case "/division/csv":
+			w.Header().Set("Content-Type", "text/csv")
+			w.WriteHeader(http.StatusOK)
+			w.Write([]byte(divCSV))
+		default:
+			w.Header().Set("Content-Type", "text/html")
+			w.WriteHeader(http.StatusOK)
+			w.Write([]byte(emptyHTML))
+		}
+	}))
+	defer srv.Close()
+
+	votes, err := scraper.CrawlDivisionDetail("45-1-200", srv.URL+"/division", srv.Client())
+	if err != nil {
+		t.Fatalf("CrawlDivisionDetail: %v", err)
+	}
+	if len(votes) != 4 {
+		t.Fatalf("len(votes)=%d want 4", len(votes))
+	}
+	byID := map[string]string{}
+	for _, v := range votes {
+		byID[v.MemberID] = v.Vote
+		if v.DivisionID != "45-1-200" {
+			t.Errorf("DivisionID=%q want 45-1-200", v.DivisionID)
+		}
+	}
+	if byID["10001"] != "Yea" {
+		t.Errorf("10001 vote=%q want Yea", byID["10001"])
+	}
+	if byID["10002"] != "Nay" {
+		t.Errorf("10002 vote=%q want Nay", byID["10002"])
+	}
+	if byID["10003"] != "Yea" {
+		t.Errorf("10003 vote=%q want Yea", byID["10003"])
+	}
+	if byID["10004"] != "Paired" {
+		t.Errorf("10004 vote=%q want Paired", byID["10004"])
+	}
+}
+
 func TestCrawlDivisionDetail_FollowsMotionTextJournalsLink(t *testing.T) {
 	divisionHTML := `<html><body>
+<a href="/documentviewer/en/house/latest-sitting">House Publications</a>
 <h2>Motion Text</h2>
 <p>See the published vote in the <a href="/DocumentViewer/en/14032878#DOC--14035119">Journals of Wednesday, April 22, 2026</a></p>
 <table class="table table-striped ce-mip-table-mobile"><tbody></tbody></table>
 </body></html>`
 
+	// Real-style journal HTML: only surnames, with riding disambiguation for duplicates.
+	// Two MPs with surname "Jones": Jones (Riding A) and Jones (Riding B).
 	journalHTML := `<html><body>
 <a name="DOC--14035119"></a>
 <table>
   <tr><td class="DivisionType"><p class="DivisionType">YEAS -- POUR</p>
-    <span class="DivisionItem">Alice Smith</span><span class="DivisionItem">Bob Jones</span></td></tr>
+    <span class="DivisionItem">Smith</span>
+    <span class="DivisionItem">Jones (Riding A)</span></td></tr>
   <tr><td class="DivisionType"><p class="DivisionType">NAYS -- CONTRE</p>
-    <span class="DivisionItem">Carol Brown</span></td></tr>
+    <span class="DivisionItem">Brown</span>
+    <span class="DivisionItem">Jones (Riding B)</span></td></tr>
   <tr><td class="DivisionType"><p class="DivisionType">PAIRED -- PAIRES</p>
-    <span class="DivisionItem">David White</span></td></tr>
+    <span class="DivisionItem">White</span></td></tr>
 </table>
+</body></html>`
+
+	// Member tiles HTML served at /Members/en/search.  Two MPs named "Jones"
+	// with different riding constituencies to test disambiguation.
+	memberTilesHTML := `<html><body>
+<div id="mp-tile-person-id-1001">
+  <a class="ce-mip-mp-tile-link" href="/Members/en/alice-smith(1001)"></a>
+  <div class="ce-mip-mp-tile">
+    <div class="ce-mip-mp-name">Alice Smith</div>
+    <div class="ce-mip-mp-constituency">Smith Riding</div>
+  </div>
+</div>
+<div id="mp-tile-person-id-1002">
+  <a class="ce-mip-mp-tile-link" href="/Members/en/bob-jones(1002)"></a>
+  <div class="ce-mip-mp-tile">
+    <div class="ce-mip-mp-name">Bob Jones</div>
+    <div class="ce-mip-mp-constituency">Riding A</div>
+  </div>
+</div>
+<div id="mp-tile-person-id-1003">
+  <a class="ce-mip-mp-tile-link" href="/Members/en/carol-brown(1003)"></a>
+  <div class="ce-mip-mp-tile">
+    <div class="ce-mip-mp-name">Carol Brown</div>
+    <div class="ce-mip-mp-constituency">Brown Riding</div>
+  </div>
+</div>
+<div id="mp-tile-person-id-1004">
+  <a class="ce-mip-mp-tile-link" href="/Members/en/david-white(1004)"></a>
+  <div class="ce-mip-mp-tile">
+    <div class="ce-mip-mp-name">David White</div>
+    <div class="ce-mip-mp-constituency">White Riding</div>
+  </div>
+</div>
+<div id="mp-tile-person-id-1005">
+  <a class="ce-mip-mp-tile-link" href="/Members/en/eve-jones(1005)"></a>
+  <div class="ce-mip-mp-tile">
+    <div class="ce-mip-mp-name">Eve Jones</div>
+    <div class="ce-mip-mp-constituency">Riding B</div>
+  </div>
+</div>
 </body></html>`
 
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
@@ -284,32 +384,150 @@ func TestCrawlDivisionDetail_FollowsMotionTextJournalsLink(t *testing.T) {
 		case "/DocumentViewer/en/14032878":
 			w.WriteHeader(http.StatusOK)
 			_, _ = w.Write([]byte(journalHTML))
+		case "/Members/en/search":
+			w.WriteHeader(http.StatusOK)
+			_, _ = w.Write([]byte(memberTilesHTML))
 		default:
 			http.NotFound(w, r)
 		}
 	}))
 	defer srv.Close()
 
-	votes, err := scraper.CrawlDivisionDetail("45-1-100", srv.URL+"/division", srv.Client())
+	// Use a custom transport that routes ALL requests (including to ourcommons.ca)
+	// to the test server, so the member-index fetch is intercepted.
+	srvURL, _ := neturl.Parse(srv.URL)
+	client := &http.Client{
+		Transport: &redirectTransport{host: srvURL.Host},
+	}
+
+	votes, err := scraper.CrawlDivisionDetail("45-1-100", srv.URL+"/division", client)
 	if err != nil {
 		t.Fatalf("CrawlDivisionDetail: %v", err)
 	}
-	if len(votes) != 4 {
-		t.Fatalf("len(votes)=%d want 4", len(votes))
+	if len(votes) != 5 {
+		t.Fatalf("len(votes)=%d want 5", len(votes))
 	}
 
-	counts := map[string]int{}
-	names := map[string]bool{}
+	byID := map[string]string{}   // memberID → vote
+	byName := map[string]string{} // memberName → vote
 	for _, v := range votes {
-		counts[v.Vote]++
-		names[v.MemberName] = true
+		if v.MemberID != "" {
+			byID[v.MemberID] = v.Vote
+		}
+		byName[v.MemberName] = v.Vote
 	}
-	if counts["Yea"] != 2 || counts["Nay"] != 1 || counts["Paired"] != 1 {
-		t.Fatalf("unexpected vote counts: %+v", counts)
+	if byID["1001"] != "Yea" {
+		t.Errorf("Smith (1001) vote=%q want Yea", byID["1001"])
 	}
-	if !names["Alice Smith"] || !names["Bob Jones"] || !names["Carol Brown"] || !names["David White"] {
-		t.Fatalf("expected journal names in fallback votes, got %+v", names)
+	if byID["1002"] != "Yea" {
+		t.Errorf("Jones/Riding A (1002) vote=%q want Yea", byID["1002"])
 	}
+	if byID["1003"] != "Nay" {
+		t.Errorf("Brown (1003) vote=%q want Nay", byID["1003"])
+	}
+	if byID["1005"] != "Nay" {
+		t.Errorf("Jones/Riding B (1005) vote=%q want Nay", byID["1005"])
+	}
+	if byID["1004"] != "Paired" {
+		t.Errorf("White (1004) vote=%q want Paired", byID["1004"])
+	}
+}
+
+func TestCrawlDivisionDetail_SeeListUnderDivision(t *testing.T) {
+	// Division 19 has no own member list; its journal section says
+	// "(SEE LIST UNDER DIVISION NO. 15)". The scraper must locate Division 15's
+	// vote table earlier on the same journal page.
+	divisionHTML := `<html><body>
+<h2>Motion Text</h2>
+<p>See the published vote in the <a href="/DocumentViewer/en/sitting17#DOC--99919">Journals of Tuesday, June 17, 2025</a></p>
+<table class="table table-striped ce-mip-table-mobile"><tbody></tbody></table>
+</body></html>`
+
+	journalHTML := `<html><body>
+<p>(Division No. 15 -- Vote no 15)</p>
+<table>
+  <tr><td class="DivisionType"><p class="DivisionType">YEAS -- POUR</p>
+    <span class="DivisionItem">Smith</span>
+    <span class="DivisionItem">Brown</span></td></tr>
+  <tr><td class="DivisionType"><p class="DivisionType">NAYS -- CONTRE</p>
+    <span class="DivisionItem">Jones</span></td></tr>
+</table>
+<a name="DOC--99919"></a>
+<p>(Division No. 19 -- Vote no 19)</p>
+<p>YEAS: 2, NAYS: 1</p>
+<p>(SEE LIST UNDER DIVISION NO. 15)</p>
+</body></html>`
+
+	memberTilesHTML := `<html><body>
+<div id="mp-tile-person-id-2001">
+  <a class="ce-mip-mp-tile-link" href="/Members/en/alice-smith(2001)"></a>
+  <div class="ce-mip-mp-constituency">Smith Riding</div>
+</div>
+<div id="mp-tile-person-id-2002">
+  <a class="ce-mip-mp-tile-link" href="/Members/en/carol-brown(2002)"></a>
+  <div class="ce-mip-mp-constituency">Brown Riding</div>
+</div>
+<div id="mp-tile-person-id-2003">
+  <a class="ce-mip-mp-tile-link" href="/Members/en/bob-jones(2003)"></a>
+  <div class="ce-mip-mp-constituency">Jones Riding</div>
+</div>
+</body></html>`
+
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		switch r.URL.Path {
+		case "/division":
+			w.WriteHeader(http.StatusOK)
+			_, _ = w.Write([]byte(divisionHTML))
+		case "/DocumentViewer/en/sitting17":
+			w.WriteHeader(http.StatusOK)
+			_, _ = w.Write([]byte(journalHTML))
+		case "/Members/en/search":
+			w.WriteHeader(http.StatusOK)
+			_, _ = w.Write([]byte(memberTilesHTML))
+		default:
+			http.NotFound(w, r)
+		}
+	}))
+	defer srv.Close()
+
+	srvURL, _ := neturl.Parse(srv.URL)
+	client := &http.Client{Transport: &redirectTransport{host: srvURL.Host}}
+
+	votes, err := scraper.CrawlDivisionDetail("45-1-19", srv.URL+"/division", client)
+	if err != nil {
+		t.Fatalf("CrawlDivisionDetail: %v", err)
+	}
+	if len(votes) != 3 {
+		t.Fatalf("len(votes)=%d want 3 (Smith+Brown yea, Jones nay)", len(votes))
+	}
+	byID := map[string]string{}
+	for _, v := range votes {
+		if v.MemberID != "" {
+			byID[v.MemberID] = v.Vote
+		}
+	}
+	if byID["2001"] != "Yea" {
+		t.Errorf("Smith (2001) vote=%q want Yea", byID["2001"])
+	}
+	if byID["2002"] != "Yea" {
+		t.Errorf("Brown (2002) vote=%q want Yea", byID["2002"])
+	}
+	if byID["2003"] != "Nay" {
+		t.Errorf("Jones (2003) vote=%q want Nay", byID["2003"])
+	}
+}
+
+// redirectTransport is an http.RoundTripper that routes all requests to the
+// specified host, regardless of the original URL. Used in tests to intercept
+// calls to external hosts (e.g. ourcommons.ca) and serve them from a local
+// httptest.Server.
+type redirectTransport struct{ host string }
+
+func (rt *redirectTransport) RoundTrip(req *http.Request) (*http.Response, error) {
+	r2 := req.Clone(req.Context())
+	r2.URL.Host = rt.host
+	r2.URL.Scheme = "http"
+	return http.DefaultTransport.RoundTrip(r2)
 }
 
 // ── CrawlSittingCalendar ──────────────────────────────────────────────────────

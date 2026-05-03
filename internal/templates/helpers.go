@@ -262,37 +262,6 @@ func BillLevelLabel(b store.BillRow) string {
 	return "Federal"
 }
 
-// chamberDisplayNames maps raw chamber values (as stored in the DB) to human-readable names.
-// Multi-word provincial chambers are stored as snake_case, which CSS capitalize cannot fix.
-var chamberDisplayNames = map[string]string{
-	"commons":                 "House of Commons",
-	"senate":                  "Senate",
-	"alberta":                 "Alberta",
-	"british_columbia":        "British Columbia",
-	"manitoba":                "Manitoba",
-	"new_brunswick":           "New Brunswick",
-	"newfoundland_labrador":   "Newfoundland and Labrador",
-	"nova_scotia":             "Nova Scotia",
-	"ontario":                 "Ontario",
-	"pei":                     "Prince Edward Island",
-	"quebec":                  "Quebec",
-	"saskatchewan":            "Saskatchewan",
-}
-
-// ChamberLabel converts a raw chamber value to a display name.
-func ChamberLabel(chamber string) string {
-	if name, ok := chamberDisplayNames[chamber]; ok {
-		return name
-	}
-	words := strings.Fields(strings.ReplaceAll(chamber, "_", " "))
-	for i, w := range words {
-		if len(w) > 0 {
-			words[i] = strings.ToUpper(w[:1]) + w[1:]
-		}
-	}
-	return strings.Join(words, " ")
-}
-
 // BillLevelBadgeClass returns structural/background Tailwind classes for bill badges.
 func BillLevelBadgeClass(b store.BillRow) string {
 	if IsProvincialBill(b) {
@@ -502,9 +471,9 @@ func truncate(s string, n int) string {
 	return s[:n] + "…"
 }
 
-// HasSummary checks if a bill has an AI summary.
+// HasSummary checks if a bill has either LoP or AI summary.
 func HasSummary(b store.BillRow) bool {
-	return strings.TrimSpace(b.SummaryAI) != ""
+	return strings.TrimSpace(b.SummaryLoP) != "" || strings.TrimSpace(b.SummaryAI) != ""
 }
 
 func ReactionPercent(count, total int) int {

@@ -155,6 +155,33 @@ var senateVoteSelectors = map[string][]string{
 	},
 }
 
+var senateSenatorIDRe = regexp.MustCompile(`/votes/senator/(\d+)`)
+
+func senateVoteCellMarked(cell *goquery.Selection) bool {
+	if cell == nil || cell.Length() == 0 {
+		return false
+	}
+	if cell.Find("i.fa-times, i[class*='fa-times']").Length() > 0 {
+		return true
+	}
+	if dataOrder, ok := cell.Attr("data-order"); ok && strings.EqualFold(strings.TrimSpace(dataOrder), "aaa") {
+		return true
+	}
+	text := strings.ToLower(strings.TrimSpace(cell.Text()))
+	return text == "x"
+}
+
+func senateMemberIDFromHref(href string) string {
+	href = strings.TrimSpace(href)
+	if href == "" {
+		return ""
+	}
+	if m := senateSenatorIDRe.FindStringSubmatch(href); len(m) > 1 {
+		return m[1]
+	}
+	return utils.ExtractMemberID(href)
+}
+
 // CrawlSenateDivisionDetail scrapes how each senator voted on a single division.
 func CrawlSenateDivisionDetail(divisionID, url string, client *http.Client) ([]MemberVote, error) {
 	if client == nil {
@@ -167,6 +194,54 @@ func CrawlSenateDivisionDetail(divisionID, url string, client *http.Client) ([]M
 		return nil, fmt.Errorf("senate division detail %q: %w", url, err)
 	}
 
+	// Current sencanada.ca vote detail layout: table#sc-vote-details-table with
+	// columns [Senator, Affiliation, Province/Territory, Yea, Nay, Abstention]
+	// and a mark icon (fa-times) in exactly one of the last three columns.
+	modernVotes := make([]MemberVote, 0)
+	doc.Find("#sc-vote-details-table tbody tr").Each(func(_ int, row *goquery.Selection) {
+		cols := row.Find("td")
+		if cols.Length() < 6 {
+			return
+		}
+
+		senatorCell := cols.Eq(0)
+		a := senatorCell.Find("a").First()
+		href, _ := a.Attr("href")
+		memberID := senateMemberIDFromHref(href)
+		memberName := strings.TrimSpace(a.Text())
+		if memberName == "" {
+			memberName = strings.TrimSpace(senatorCell.Text())
+		}
+
+		voteType := ""
+		switch {
+		case senateVoteCellMarked(cols.Eq(3)):
+			voteType = "Yea"
+		case senateVoteCellMarked(cols.Eq(4)):
+			voteType = "Nay"
+		case senateVoteCellMarked(cols.Eq(5)):
+			voteType = "Abstain"
+		default:
+			return
+		}
+
+		if memberID == "" && memberName == "" {
+			return
+		}
+		modernVotes = append(modernVotes, MemberVote{
+			DivisionID: divisionID,
+			MemberID:   memberID,
+			MemberName: memberName,
+			Vote:       voteType,
+		})
+	})
+
+	if len(modernVotes) > 0 {
+		log.Printf("[senate] division %s: %d votes", divisionID, len(modernVotes))
+		return modernVotes, nil
+	}
+
+	// Legacy fallback layout retained for older snapshots/tests.
 	var votes []MemberVote
 	for voteType, selectors := range senateVoteSelectors {
 		for _, sel := range selectors {

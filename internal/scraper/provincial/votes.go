@@ -263,6 +263,21 @@ var voteNamePrefixTokens = map[string]bool{
 
 var splitUppercaseNameTokenRe = regexp.MustCompile(`\b([A-Z])\s+([A-Z][A-Z][A-Z''\-]*)\b`)
 
+var proceduralVoteTailRe = regexp.MustCompile(`(?i)\b(?:and\s+)?the\s+debate\s+being\s+ended\b.*$`)
+var proceduralVoteSentenceRe = regexp.MustCompile(`(?i)\b(?:and\s+)?the\s+debate\s+being\s+ended\b|\bquestion\s+being\s+put\b|\bringing\s+of\s+the\s+bells\b|\bfollowing\s+recorded\s+division\b|\bcharles\s+iii\b`)
+var substantiveVoteDescRe = regexp.MustCompile(`(?i)\b(bill|motion|amendment|resolution|act|third\s+reading|second\s+reading|first\s+reading|be\s+now\s+read|be\s+read)\b`)
+var substantiveVoteClauseRe = regexp.MustCompile(`(?i)\bthat\b[^.]{0,320}\b(?:bill|motion|amendment|resolution|act)\b[^.]{0,320}`)
+var billVoteClauseRe = regexp.MustCompile(`(?i)\bbill(?:\s*\(no\.\s*\d+\)|\s+no\.\s*\d+|\s+\d+[a-z]?)\b[^.]{0,240}`)
+var motionVoteClauseRe = regexp.MustCompile(`(?i)\bmotion\s+\d+[a-z]?\b[^.]{0,240}`)
+
+func compactVoteDesc(text string) string {
+	text = strings.TrimSpace(strings.Join(strings.Fields(strings.ReplaceAll(text, "\u00a0", " ")), " "))
+	if len(text) > 220 {
+		text = strings.TrimSpace(text[:220])
+	}
+	return text
+}
+
 func collapseSplitUppercaseNameTokens(text string) string {
 	for {
 		next := splitUppercaseNameTokenRe.ReplaceAllString(text, `$1$2`)
@@ -331,7 +346,7 @@ func extractPlainVoteNames(blockText string) []string {
 // newBrunswickDescriptionFromContext extracts a description from context text before
 // a match position. Used by NB, MB, and generic parsers.
 func newBrunswickDescriptionFromContext(text string, matchStart int) string {
-	start := matchStart - 260
+	start := matchStart - 700
 	if start < 0 {
 		start = 0
 	}
@@ -339,12 +354,44 @@ func newBrunswickDescriptionFromContext(text string, matchStart int) string {
 	if snippet == "" {
 		return ""
 	}
-	parts := strings.Split(snippet, ".")
-	desc := strings.TrimSpace(parts[len(parts)-1])
-	if len(desc) > 220 {
-		desc = desc[len(desc)-220:]
+
+	// Keep the most recent context before the vote counts.
+	if len(snippet) > 700 {
+		snippet = snippet[len(snippet)-700:]
 	}
-	return strings.TrimSpace(desc)
+
+	cleaned := strings.TrimSpace(proceduralVoteTailRe.ReplaceAllString(snippet, ""))
+
+	for _, re := range []*regexp.Regexp{substantiveVoteClauseRe, billVoteClauseRe, motionVoteClauseRe} {
+		matches := re.FindAllString(cleaned, -1)
+		if len(matches) == 0 {
+			continue
+		}
+		desc := compactVoteDesc(matches[len(matches)-1])
+		if desc != "" {
+			return desc
+		}
+	}
+
+	parts := strings.Split(cleaned, ".")
+	for i := len(parts) - 1; i >= 0; i-- {
+		candidate := compactVoteDesc(parts[i])
+		if candidate == "" {
+			continue
+		}
+		if proceduralVoteSentenceRe.MatchString(candidate) {
+			continue
+		}
+		if substantiveVoteDescRe.MatchString(candidate) {
+			return candidate
+		}
+	}
+
+	if substantiveVoteDescRe.MatchString(cleaned) {
+		return compactVoteDesc(cleaned)
+	}
+
+	return ""
 }
 
 // parsePDFDivisionsYeasNays parses recorded vote divisions from normalised PDF text
@@ -449,6 +496,11 @@ func parsePDFDivisionsYeasNays(
 // ParsePDFDivisionsYeasNaysForTest is test-only access to the generic YEAS/NAYS parser.
 func ParsePDFDivisionsYeasNaysForTest(text, detailURL, province, chamber string, legislature, session, startDivNum int, date string) []ProvincialDivisionResult {
 	return parsePDFDivisionsYeasNays(text, detailURL, province, chamber, legislature, session, startDivNum, date, extractPlainVoteNames)
+}
+
+// DownloadAndExtractPDFTextForTest exposes downloadAndExtractPDFText for tests.
+func DownloadAndExtractPDFTextForTest(pdfURL, province string, client *http.Client) (string, error) {
+	return downloadAndExtractPDFText(pdfURL, province, client)
 }
 
 // ── Generic crawl helpers ─────────────────────────────────────────────────────

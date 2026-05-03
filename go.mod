@@ -2,6 +2,8 @@ module github.com/philspins/opendocket
 
 go 1.25.0
 
+tool github.com/a-h/templ/cmd/templ
+
 require (
 	github.com/PuerkitoBio/goquery v1.12.0
 	github.com/a-h/templ v0.3.1001
@@ -58,5 +60,3 @@ require (
 	golang.org/x/tools v0.42.0 // indirect
 	gopkg.in/yaml.v2 v2.4.0 // indirect
 )
-
-tool github.com/a-h/templ/cmd/templ

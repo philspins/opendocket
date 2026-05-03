@@ -359,7 +359,6 @@ func sessionsToCrawlForSource(src ProvincialSource, currentSession int) []int {
 	return sessions
 }
 
-
 func crawlOntarioDaysConcurrently(dates []string, legislature, session int, client *http.Client, delay time.Duration) ([]ProvincialDivisionResult, int) {
 	if len(dates) == 0 {
 		return nil, 0
