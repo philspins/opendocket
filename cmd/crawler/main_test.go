@@ -8,9 +8,11 @@ package main
 
 import (
 	"database/sql"
+	"fmt"
 	"net/http"
 	"net/http/httptest"
 	"path/filepath"
+	"strings"
 	"sync"
 	"sync/atomic"
 	"testing"
@@ -218,6 +220,101 @@ func TestCrawlMembers_ReturnsErrorOnBadServer(t *testing.T) {
 	if err == nil {
 		t.Error("expected error for unreachable server")
 	}
+}
+
+func TestCrawlMembers_IgnoresPerMemberDelayDuringUpsert(t *testing.T) {
+	original := cloneProvincialAPIs(scraper.ProvincialLegislatureAPIs)
+	scraper.ProvincialLegislatureAPIs = map[string]string{}
+	t.Cleanup(func() { scraper.ProvincialLegislatureAPIs = original })
+
+	const memberCount = 10
+	const configuredDelay = 25 * time.Millisecond
+
+	srv := serveJSON(representMembersJSON(memberCount))
+	defer srv.Close()
+
+	conn := newDB(t)
+	start := time.Now()
+	if err := scraper.CrawlMembers(conn, srv.Client(), configuredDelay, srv.URL); err != nil {
+		t.Fatalf("crawlMembers: %v", err)
+	}
+	elapsed := time.Since(start)
+
+	var count int
+	conn.QueryRow(`SELECT COUNT(1) FROM members`).Scan(&count)
+	if count != memberCount {
+		t.Fatalf("expected %d members in DB, got %d", memberCount, count)
+	}
+
+	// If delay were still applied per member write, this would be ~250ms+.
+	if elapsed >= 200*time.Millisecond {
+		t.Fatalf("crawlMembers took %v; expected per-member delay to be disabled", elapsed)
+	}
+}
+
+func TestCrawlMembers_FetchesProvincialSetsConcurrently(t *testing.T) {
+	original := cloneProvincialAPIs(scraper.ProvincialLegislatureAPIs)
+	t.Cleanup(func() { scraper.ProvincialLegislatureAPIs = original })
+
+	const perSetLatency = 300 * time.Millisecond
+
+	provServer := func(name, id string) *httptest.Server {
+		body := fmt.Sprintf(`{"objects":[{"name":%q,"party_name":"Party","district_name":"District","email":"%s@example.test","url":"https://example.test/members/%s","offices":[],"extra":{}}],"meta":{"next":null}}`, name, id, id)
+		return httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+			time.Sleep(perSetLatency)
+			w.Header().Set("Content-Type", "application/json; charset=utf-8")
+			_, _ = w.Write([]byte(body))
+		}))
+	}
+
+	a := provServer("Alice Alpha", "a1")
+	b := provServer("Bob Beta", "b1")
+	c := provServer("Carol Gamma", "c1")
+	defer a.Close()
+	defer b.Close()
+	defer c.Close()
+
+	scraper.ProvincialLegislatureAPIs = map[string]string{
+		"test-a-legislature": a.URL,
+		"test-b-legislature": b.URL,
+		"test-c-legislature": c.URL,
+	}
+
+	federal := serveJSON(`{"objects":[{"name":"Fed Member","party_name":"Liberal","district_name":"Ottawa Centre","email":"fed@example.test","url":"https://www.ourcommons.ca/Members/en/fed-member(111)","offices":[{"type":"constituency","postal":"Ottawa ON K1A 0A6"}],"extra":{}}],"meta":{"next":null}}`)
+	defer federal.Close()
+
+	conn := newDB(t)
+	start := time.Now()
+	if err := scraper.CrawlMembers(conn, federal.Client(), noDelay, federal.URL); err != nil {
+		t.Fatalf("crawlMembers: %v", err)
+	}
+	elapsed := time.Since(start)
+
+	// Serial behavior would be ~3*300ms plus overhead; concurrent should be near one window.
+	if elapsed >= 650*time.Millisecond {
+		t.Fatalf("crawlMembers took %v; expected provincial API fetches to run concurrently", elapsed)
+	}
+}
+
+func cloneProvincialAPIs(in map[string]string) map[string]string {
+	out := make(map[string]string, len(in))
+	for k, v := range in {
+		out[k] = v
+	}
+	return out
+}
+
+func representMembersJSON(count int) string {
+	var b strings.Builder
+	b.WriteString(`{"objects":[`)
+	for i := 1; i <= count; i++ {
+		if i > 1 {
+			b.WriteByte(',')
+		}
+		fmt.Fprintf(&b, `{"name":"Member %d","party_name":"Party","district_name":"District %d","email":"m%d@example.test","url":"https://www.ourcommons.ca/Members/en/member-%d(%d)","offices":[{"type":"constituency","postal":"Ottawa ON K1A 0A6"}],"extra":{}}`, i, i, i, i, 1000+i)
+	}
+	b.WriteString(`],"meta":{"next":null}}`)
+	return b.String()
 }
 
 // ── CrawlVotes ────────────────────────────────────────────────────────────────

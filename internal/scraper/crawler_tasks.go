@@ -6,7 +6,6 @@ import (
 	"fmt"
 	"net/http"
 	"os"
-	"sort"
 	"strconv"
 	"strings"
 	"sync"
@@ -81,35 +80,55 @@ func CrawlBills(conn *sql.DB, client *http.Client, delay time.Duration, rssURL s
 
 // CrawlMembers fetches federal + provincial members and upserts to DB.
 func CrawlMembers(conn *sql.DB, client *http.Client, delay time.Duration, apiURL string) error {
+	_ = delay // Member crawls are OpenNorth/API-backed; avoid per-row crawl delay for performance.
+
 	profiles, err := CrawlMembersFromAPI(apiURL, client)
 	if err != nil {
 		return err
 	}
-	store.UpsertProfiles(conn, toDBMembers(profiles), delay)
+	store.UpsertProfiles(conn, toDBMembers(profiles), 0)
 
-	setSlugsSorted := make([]string, 0, len(ProvincialLegislatureAPIs))
-	for slug := range ProvincialLegislatureAPIs {
-		setSlugsSorted = append(setSlugsSorted, slug)
+	type provincialMembersResult struct {
+		setSlug  string
+		profiles []MemberProfile
 	}
-	sort.Strings(setSlugsSorted)
-	for _, setSlug := range setSlugsSorted {
-		provProfiles, perr := CrawlProvincialMembersFromAPI(setSlug, "", client)
-		if perr != nil {
-			clog.Debugf("[members] provincial set %s: %v", setSlug, perr)
+
+	results := make(chan provincialMembersResult, len(ProvincialLegislatureAPIs))
+	g := new(errgroup.Group)
+	for setSlug := range ProvincialLegislatureAPIs {
+		setSlug := setSlug
+		g.Go(func() error {
+			provProfiles, perr := CrawlProvincialMembersFromAPI(setSlug, "", client)
+			if perr != nil {
+				clog.Debugf("[members] provincial set %s: %v", setSlug, perr)
+				return nil
+			}
+			// The Represent API for nb-legislature currently returns 0 members.
+			// Fall back to scraping the NB legislature website directly.
+			if len(provProfiles) == 0 && setSlug == "nb-legislature" {
+				clog.Debugf("[members] nb-legislature: Represent API returned 0 members; falling back to NB website scraper")
+				nbProfiles, nberr := CrawlNewBrunswickMembersFromWebsite("", client)
+				if nberr != nil {
+					clog.Debugf("[members] nb-legislature website fallback: %v", nberr)
+				} else {
+					provProfiles = nbProfiles
+				}
+			}
+			results <- provincialMembersResult{setSlug: setSlug, profiles: provProfiles}
+			return nil
+		})
+	}
+
+	if err := g.Wait(); err != nil {
+		return err
+	}
+	close(results)
+
+	for result := range results {
+		if len(result.profiles) == 0 {
 			continue
 		}
-		// The Represent API for nb-legislature currently returns 0 members.
-		// Fall back to scraping the NB legislature website directly.
-		if len(provProfiles) == 0 && setSlug == "nb-legislature" {
-			clog.Debugf("[members] nb-legislature: Represent API returned 0 members; falling back to NB website scraper")
-			nbProfiles, nberr := CrawlNewBrunswickMembersFromWebsite("", client)
-			if nberr != nil {
-				clog.Debugf("[members] nb-legislature website fallback: %v", nberr)
-			} else {
-				provProfiles = nbProfiles
-			}
-		}
-		store.UpsertProfiles(conn, toDBMembers(provProfiles), delay)
+		store.UpsertProfiles(conn, toDBMembers(result.profiles), 0)
 	}
 	return nil
 }
