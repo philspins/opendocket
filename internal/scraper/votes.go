@@ -3,13 +3,13 @@ package scraper
 
 import (
 	"fmt"
-	"log"
 	"net/http"
 	"regexp"
 	"strconv"
 	"strings"
 
 	"github.com/PuerkitoBio/goquery"
+	"github.com/philspins/opendocket/internal/clog"
 	"github.com/philspins/opendocket/internal/utils"
 )
 
@@ -67,7 +67,7 @@ func CrawlVotesIndex(
 	if client == nil {
 		client = utils.NewHTTPClient()
 	}
-	log.Printf("[votes] fetching index: %s", url)
+	clog.Infof("[votes] fetching index: %s", url)
 
 	doc, err := fetchDoc(url, client)
 	if err != nil {
@@ -159,7 +159,7 @@ func CrawlVotesIndex(
 		})
 	})
 
-	log.Printf("[votes] found %d divisions", len(divs))
+	clog.Infof("[votes] found %d divisions", len(divs))
 	return divs, nil
 }
 
@@ -200,7 +200,7 @@ func CrawlDivisionDetail(divisionID, url string, client *http.Client) ([]MemberV
 	if client == nil {
 		client = utils.NewHTTPClient()
 	}
-	log.Printf("[votes] scraping division detail: %s", url)
+	clog.Infof("[votes] scraping division detail: %s", url)
 
 	doc, err := fetchDoc(url, client)
 	if err != nil {
@@ -264,7 +264,7 @@ func CrawlDivisionDetail(divisionID, url string, client *http.Client) ([]MemberV
 		}
 	}
 
-	log.Printf("[votes] division %s: %d member votes", divisionID, len(votes))
+	clog.Infof("[votes] division %s: %d member votes", divisionID, len(votes))
 	return votes, nil
 }
 
@@ -279,7 +279,7 @@ func CrawlSittingCalendar(url string, client *http.Client) ([]string, error) {
 	if client == nil {
 		client = utils.NewHTTPClient()
 	}
-	log.Printf("[votes] fetching sitting calendar: %s", url)
+	clog.Infof("[votes] fetching sitting calendar: %s", url)
 
 	doc, err := fetchDoc(url, client)
 	if err != nil {
@@ -325,7 +325,7 @@ func CrawlSittingCalendar(url string, client *http.Client) ([]string, error) {
 		}
 	}
 
-	log.Printf("[votes] found %d sitting dates", len(dates))
+	clog.Infof("[votes] found %d sitting dates", len(dates))
 	return dates, nil
 }
 

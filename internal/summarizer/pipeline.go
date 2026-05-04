@@ -10,7 +10,6 @@ import (
 	"errors"
 	"fmt"
 	"io"
-	"log"
 	"net/http"
 	neturl "net/url"
 	"os"
@@ -26,6 +25,7 @@ import (
 
 	"github.com/PuerkitoBio/goquery"
 	"github.com/pdfcpu/pdfcpu/pkg/api"
+	"github.com/philspins/opendocket/internal/clog"
 	"github.com/philspins/opendocket/internal/utils"
 	"golang.org/x/net/html"
 )
@@ -478,7 +478,7 @@ Respond with only valid JSON, no markdown or extra text.`, billID, billTitle, bi
 			return nil, lastErr
 		}
 		if i < len(models)-1 {
-			log.Printf("[summarizer] model %q unavailable; retrying with %q", candidate, models[i+1])
+			clog.Infof("[summarizer] model %q unavailable; retrying with %q", candidate, models[i+1])
 		}
 	}
 	if lastErr != nil {
@@ -561,7 +561,7 @@ func callClaudeAPI(ctx context.Context, apiKey string, req claudeRequest) (*clau
 					delay = backoff
 				}
 				if resp.StatusCode == http.StatusTooManyRequests {
-					log.Printf("[summarizer] claude rate limited; retrying in %s (attempt %d/%d)", delay, attempt, claudeMaxAttempts)
+					clog.Infof("[summarizer] claude rate limited; retrying in %s (attempt %d/%d)", delay, attempt, claudeMaxAttempts)
 				}
 				if attempt == claudeMaxAttempts {
 					return nil, fmt.Errorf("api returned %d (%s): %s", resp.StatusCode, apiErr.Error.Type, apiErr.Error.Message)
@@ -581,7 +581,7 @@ func callClaudeAPI(ctx context.Context, apiKey string, req claudeRequest) (*clau
 				delay = backoff
 			}
 			if resp.StatusCode == http.StatusTooManyRequests {
-				log.Printf("[summarizer] claude rate limited; retrying in %s (attempt %d/%d)", delay, attempt, claudeMaxAttempts)
+				clog.Infof("[summarizer] claude rate limited; retrying in %s (attempt %d/%d)", delay, attempt, claudeMaxAttempts)
 			}
 			if attempt == claudeMaxAttempts {
 				return nil, fmt.Errorf("api returned %d: %s", resp.StatusCode, strings.TrimSpace(string(respBody)))
@@ -604,7 +604,7 @@ func callClaudeAPI(ctx context.Context, apiKey string, req claudeRequest) (*clau
 func SummarizeBillsFromChannel(ctx context.Context, db *sql.DB, requests <-chan BillSummaryRequest) (int, error) {
 	workers := summarizerParallelism()
 	if workers > 1 {
-		log.Printf("[summarizer] parallel workers: %d", workers)
+		clog.Infof("[summarizer] parallel workers: %d", workers)
 	}
 
 	var processed int64
@@ -629,37 +629,37 @@ func SummarizeBillsFromChannel(ctx context.Context, db *sql.DB, requests <-chan 
 					// The bill text doesn't exist at the stored URL (e.g. pro-forma
 					// Senate bills like S-1).  Clear full_text_url so we don't
 					// retry on every future crawl run.
-					log.Printf("[summarizer] bill text unavailable (404) for %q; clearing full_text_url", req.BillID)
+					clog.Infof("[summarizer] bill text unavailable (404) for %q; clearing full_text_url", req.BillID)
 					db.ExecContext(ctx, `UPDATE bills SET full_text_url = '' WHERE id = ?`, req.BillID)
 				} else {
-					log.Printf("[summarizer] fetch bill text %q: %v", req.BillID, err)
+					clog.Infof("[summarizer] fetch bill text %q: %v", req.BillID, err)
 				}
 				continue
 			}
 
 			// Gate summarization on the API key and staleness check.
 			if os.Getenv("ANTHROPIC_API_KEY") == "" {
-				log.Printf("[summarizer] ANTHROPIC_API_KEY not set; skipping %q", req.BillID)
+				clog.Infof("[summarizer] ANTHROPIC_API_KEY not set; skipping %q", req.BillID)
 				continue
 			}
 			needed, err := shouldSummarizeBill(ctx, db, req.BillID, req.LastActivityDate)
 			if err != nil {
-				log.Printf("[summarizer] check bill %q: %v", req.BillID, err)
+				clog.Infof("[summarizer] check bill %q: %v", req.BillID, err)
 				continue
 			}
 			if !needed {
-				log.Printf("[summarizer] skip unchanged bill %q", req.BillID)
+				clog.Infof("[summarizer] skip unchanged bill %q", req.BillID)
 				continue
 			}
 
-			log.Printf("[summarizer] summarizing bill %q (%s)...", req.BillID, req.BillTitle)
+			clog.Infof("[summarizer] summarizing bill %q (%s)...", req.BillID, req.BillTitle)
 			summary, err := SummarizeBill(ctx, db, req.BillID, req.BillTitle, billText, req.LastActivityDate)
 			if err != nil {
-				log.Printf("[summarizer] summarize error %q: %v", req.BillID, err)
+				clog.Infof("[summarizer] summarize error %q: %v", req.BillID, err)
 				continue
 			}
 			if summary == nil {
-				log.Printf("[summarizer] skip unchanged bill %q", req.BillID)
+				clog.Infof("[summarizer] skip unchanged bill %q", req.BillID)
 				continue
 			}
 
@@ -668,12 +668,12 @@ func SummarizeBillsFromChannel(ctx context.Context, db *sql.DB, requests <-chan 
 				`UPDATE bills SET summary_ai = ?, category = ? WHERE id = ?`,
 				string(summaryJSON), summary.Category, req.BillID)
 			if err != nil {
-				log.Printf("[summarizer] store summary %q: %v", req.BillID, err)
+				clog.Infof("[summarizer] store summary %q: %v", req.BillID, err)
 				continue
 			}
 
 			atomic.AddInt64(&processed, 1)
-			log.Printf("[summarizer] ✓ stored summary for %q", req.BillID)
+			clog.Infof("[summarizer] ✓ stored summary for %q", req.BillID)
 
 			select {
 			case <-time.After(1 * time.Second):
@@ -727,7 +727,7 @@ func SummarizeNewBills(ctx context.Context, db *sql.DB, onlyMissing bool) (int, 
 		for rows.Next() {
 			var billID, number, title, fullTextURL string
 			if err := rows.Scan(&billID, &number, &title, &fullTextURL); err != nil {
-				log.Printf("[summarizer] scan error: %v", err)
+				clog.Infof("[summarizer] scan error: %v", err)
 				continue
 			}
 
@@ -743,7 +743,7 @@ func SummarizeNewBills(ctx context.Context, db *sql.DB, onlyMissing bool) (int, 
 				FullTextURL: fullTextURL,
 			}:
 			case <-ctx.Done():
-				log.Printf("[summarizer] producer shutting down: %v", ctx.Err())
+				clog.Infof("[summarizer] producer shutting down: %v", ctx.Err())
 				return
 			}
 		}
@@ -816,7 +816,7 @@ func fetchBillText(ctx context.Context, url string) (string, error) {
 	// Use goquery to parse HTML and extract text.
 	doc, err := goquery.NewDocumentFromReader(bytes.NewReader(body))
 	if err != nil {
-		log.Printf("[summarizer] goquery parse failed for %s: %v; falling back to tokenizer extraction", sanitizeLogURL(url), err)
+		clog.Infof("[summarizer] goquery parse failed for %s: %v; falling back to tokenizer extraction", sanitizeLogURL(url), err)
 		fallbackText := extractTextWithTokenizer(body)
 		return strings.TrimSpace(collapseWhitespace(fallbackText)), nil
 	}

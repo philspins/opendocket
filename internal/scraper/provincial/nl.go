@@ -2,13 +2,13 @@ package provincial
 
 import (
 	"fmt"
-	"log"
 	"net/http"
 	"regexp"
 	"sort"
 	"strings"
 
 	"github.com/PuerkitoBio/goquery"
+	"github.com/philspins/opendocket/internal/clog"
 	"github.com/philspins/opendocket/internal/utils"
 )
 
@@ -182,7 +182,7 @@ func parseNLJournalDivisions(text, detailURL string, legislature, session, start
 			},
 		})
 	}
-	log.Printf("[nl-votes] %s: parsed %d divisions (outcome-only)", date, len(results))
+	clog.Infof("[nl-votes] %s: parsed %d divisions (outcome-only)", date, len(results))
 	return results
 }
 
@@ -198,7 +198,7 @@ func crawlNLVotesFromPDF(indexURL string, legislature, session int, client *http
 	if client == nil {
 		client = utils.NewHTTPClient()
 	}
-	log.Printf("[nl-votes] fetching journals index: %s", indexURL)
+	clog.Infof("[nl-votes] fetching journals index: %s", indexURL)
 	indexDoc, err := fetchDoc(indexURL, client)
 	if err != nil {
 		return nil, fmt.Errorf("nl journals index: %w", err)
@@ -223,7 +223,7 @@ func crawlNLVotesFromPDF(indexURL string, legislature, session int, client *http
 		sessionDirs = append(sessionDirs, full)
 	})
 	if len(sessionDirs) == 0 {
-		log.Printf("[nl-votes] no session directories found; falling back to generic parser")
+		clog.Infof("[nl-votes] no session directories found; falling back to generic parser")
 		return crawlGenericProvincialVotesWithMatcher(indexURL, "nl", "newfoundland_labrador", legislature, session, client, newfoundlandVotesLinkRe)
 	}
 	sort.Strings(sessionDirs)
@@ -237,7 +237,7 @@ func crawlNLVotesFromPDF(indexURL string, legislature, session int, client *http
 	for _, dirURL := range sessionDirs {
 		dirDoc, derr := fetchDoc(dirURL, client)
 		if derr != nil {
-			log.Printf("[nl-votes] skip session dir %s: %v", dirURL, derr)
+			clog.Infof("[nl-votes] skip session dir %s: %v", dirURL, derr)
 			continue
 		}
 		dirDoc.Find("a[href]").Each(func(_ int, a *goquery.Selection) {
@@ -259,7 +259,7 @@ func crawlNLVotesFromPDF(indexURL string, legislature, session int, client *http
 		pdfLinks = pdfLinks[len(pdfLinks)-80:]
 	}
 	if len(pdfLinks) == 0 {
-		log.Printf("[nl-votes] no journal PDFs discovered")
+		clog.Infof("[nl-votes] no journal PDFs discovered")
 		return nil, nil
 	}
 
@@ -268,7 +268,7 @@ func crawlNLVotesFromPDF(indexURL string, legislature, session int, client *http
 	for _, pdfURL := range pdfLinks {
 		text, terr := downloadAndExtractPDFText(pdfURL, "nl", client)
 		if terr != nil {
-			log.Printf("[nl-votes] skip pdf %s: %v", pdfURL, terr)
+			clog.Infof("[nl-votes] skip pdf %s: %v", pdfURL, terr)
 			continue
 		}
 		date := ""
@@ -291,7 +291,7 @@ func crawlNLVotesFromPDF(indexURL string, legislature, session int, client *http
 			nextDivNum++
 		}
 	}
-	log.Printf("[nl-votes] parsed %d divisions from %d PDFs", len(results), len(pdfLinks))
+	clog.Infof("[nl-votes] parsed %d divisions from %d PDFs", len(results), len(pdfLinks))
 	return results, nil
 }
 

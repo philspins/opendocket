@@ -4,9 +4,9 @@ package scheduler
 import (
 	"context"
 	"database/sql"
-	"log"
 	"time"
 
+	"github.com/philspins/opendocket/internal/clog"
 	"github.com/robfig/cron/v3"
 )
 
@@ -40,35 +40,35 @@ func New(cfg Config) *cron.Cron {
 
 	// Nightly full crawl at 02:00 UTC
 	c.AddFunc(NightlyCronSpec, func() {
-		log.Printf("[scheduler] nightly_full_crawl starting at %s", time.Now().UTC().Format(time.RFC3339))
+		clog.Infof("[scheduler] nightly_full_crawl starting at %s", time.Now().UTC().Format(time.RFC3339))
 		if err := cfg.FullCrawlFn(cfg.DB); err != nil {
-			log.Printf("[scheduler] nightly_full_crawl error: %v", err)
+			clog.Infof("[scheduler] nightly_full_crawl error: %v", err)
 		} else {
-			log.Printf("[scheduler] nightly_full_crawl complete")
+			clog.Infof("[scheduler] nightly_full_crawl complete")
 		}
 	})
 
 	// Frequent vote check every 4 hours
 	c.AddFunc(FrequentVoteCronSpec, func() {
-		log.Printf("[scheduler] frequent_vote_check starting at %s", time.Now().UTC().Format(time.RFC3339))
+		clog.Infof("[scheduler] frequent_vote_check starting at %s", time.Now().UTC().Format(time.RFC3339))
 		if err := cfg.FrequentVoteCheck(cfg.DB); err != nil {
-			log.Printf("[scheduler] frequent_vote_check error: %v", err)
+			clog.Infof("[scheduler] frequent_vote_check error: %v", err)
 		} else {
-			log.Printf("[scheduler] frequent_vote_check complete")
+			clog.Infof("[scheduler] frequent_vote_check complete")
 		}
 	})
 
 	// AI summarization at 04:00 UTC
 	if cfg.AISummarizationFn != nil {
 		c.AddFunc(AISummaryCronSpec, func() {
-			log.Printf("[scheduler] ai_summarization starting at %s", time.Now().UTC().Format(time.RFC3339))
+			clog.Infof("[scheduler] ai_summarization starting at %s", time.Now().UTC().Format(time.RFC3339))
 			ctx, cancel := context.WithTimeout(context.Background(), 2*time.Hour)
 			defer cancel()
 			count, err := cfg.AISummarizationFn(ctx, cfg.DB)
 			if err != nil {
-				log.Printf("[scheduler] ai_summarization error: %v", err)
+				clog.Infof("[scheduler] ai_summarization error: %v", err)
 			} else {
-				log.Printf("[scheduler] ai_summarization complete (%d summarized)", count)
+				clog.Infof("[scheduler] ai_summarization complete (%d summarized)", count)
 			}
 		})
 	}
@@ -79,11 +79,11 @@ func New(cfg Config) *cron.Cron {
 // Start initialises and runs the scheduler. This function blocks until the
 // process is killed (send SIGINT/SIGTERM to stop).
 func Start(cfg Config) {
-	log.Println("[scheduler] starting (UTC)")
-	log.Println("[scheduler]   nightly_full_crawl   : daily at 02:00 UTC")
-	log.Println("[scheduler]   frequent_vote_check  : every 4 hours")
+	clog.Infof("[scheduler] starting (UTC)")
+	clog.Infof("[scheduler]   nightly_full_crawl   : daily at 02:00 UTC")
+	clog.Infof("[scheduler]   frequent_vote_check  : every 4 hours")
 	if cfg.AISummarizationFn != nil {
-		log.Println("[scheduler]   ai_summarization     : daily at 04:00 UTC")
+		clog.Infof("[scheduler]   ai_summarization     : daily at 04:00 UTC")
 	}
 
 	c := New(cfg)

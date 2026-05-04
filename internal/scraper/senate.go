@@ -3,13 +3,13 @@ package scraper
 
 import (
 	"fmt"
-	"log"
 	"net/http"
 	"regexp"
 	"strconv"
 	"strings"
 
 	"github.com/PuerkitoBio/goquery"
+	"github.com/philspins/opendocket/internal/clog"
 	"github.com/philspins/opendocket/internal/utils"
 )
 
@@ -35,7 +35,7 @@ func CrawlSenateVotesIndex(
 	if client == nil {
 		client = utils.NewHTTPClient()
 	}
-	log.Printf("[senate] fetching votes index: %s", url)
+	clog.Infof("[senate] fetching votes index: %s", url)
 
 	doc, err := fetchDoc(url, client)
 	if err != nil {
@@ -129,7 +129,7 @@ func CrawlSenateVotesIndex(
 		})
 	})
 
-	log.Printf("[senate] found %d divisions", len(divs))
+	clog.Infof("[senate] found %d divisions", len(divs))
 	return divs, nil
 }
 
@@ -160,7 +160,7 @@ func CrawlSenateDivisionDetail(divisionID, url string, client *http.Client) ([]M
 	if client == nil {
 		client = utils.NewHTTPClient()
 	}
-	log.Printf("[senate] scraping division detail: %s", url)
+	clog.Infof("[senate] scraping division detail: %s", url)
 
 	doc, err := fetchDoc(url, client)
 	if err != nil {
@@ -189,6 +189,6 @@ func CrawlSenateDivisionDetail(divisionID, url string, client *http.Client) ([]M
 		}
 	}
 
-	log.Printf("[senate] division %s: %d votes", divisionID, len(votes))
+	clog.Infof("[senate] division %s: %d votes", divisionID, len(votes))
 	return votes, nil
 }

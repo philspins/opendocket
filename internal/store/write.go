@@ -3,9 +3,10 @@ package store
 import (
 	"database/sql"
 	"fmt"
-	"log"
 	"strings"
 	"time"
+
+	"github.com/philspins/opendocket/internal/clog"
 )
 
 // ── write-side record types ────────────────────────────────────────────────────
@@ -123,7 +124,7 @@ func UpsertMember(db *sql.DB, m MemberRecord) error {
 func UpsertProfiles(db *sql.DB, members []MemberRecord, delay time.Duration) {
 	for _, m := range members {
 		if err := UpsertMember(db, m); err != nil {
-			log.Printf("[members] upsert %s: %v", m.ID, err)
+			clog.Infof("[members] upsert %s: %v", m.ID, err)
 		}
 		time.Sleep(delay)
 	}

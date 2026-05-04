@@ -3,13 +3,13 @@ package provincial
 import (
 	"fmt"
 	"image/color"
-	"log"
 	"net/http"
 	"regexp"
 	"strconv"
 	"strings"
 
 	"github.com/PuerkitoBio/goquery"
+	"github.com/philspins/opendocket/internal/clog"
 	"github.com/philspins/opendocket/internal/utils"
 )
 
@@ -142,7 +142,7 @@ func crawlSaskatchewanMinutesLinks(archiveURL string, client *http.Client) ([]st
 	if client == nil {
 		client = utils.NewHTTPClient()
 	}
-	log.Printf("[sk-votes] fetching archive: %s", archiveURL)
+	clog.Infof("[sk-votes] fetching archive: %s", archiveURL)
 
 	doc, err := fetchDoc(archiveURL, client)
 	if err != nil {
@@ -161,7 +161,7 @@ func crawlSaskatchewanMinutesLinks(archiveURL string, client *http.Client) ([]st
 		}
 	})
 
-	log.Printf("[sk-votes] found %d Assembly Minutes HTML links", len(links))
+	clog.Infof("[sk-votes] found %d Assembly Minutes HTML links", len(links))
 	return links, nil
 }
 
@@ -176,7 +176,7 @@ func crawlSaskatchewanMinutes(minutesURL string, legislature, session int, clien
 	if client == nil {
 		client = utils.NewHTTPClient()
 	}
-	log.Printf("[sk-votes] scraping Minutes: %s", minutesURL)
+	clog.Infof("[sk-votes] scraping Minutes: %s", minutesURL)
 
 	m := skDateFromURLRe.FindStringSubmatch(minutesURL)
 	if len(m) != 2 {
@@ -345,6 +345,6 @@ func parseSaskatchewanMinutesDoc(doc *goquery.Document, legislature, session int
 		})
 	})
 
-	log.Printf("[sk-votes] %s: parsed %d divisions", date, len(results))
+	clog.Infof("[sk-votes] %s: parsed %d divisions", date, len(results))
 	return results
 }

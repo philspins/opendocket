@@ -2,7 +2,6 @@ package provincial
 
 import (
 	"fmt"
-	"log"
 	"net/http"
 	"regexp"
 	"sort"
@@ -10,6 +9,7 @@ import (
 	"strings"
 
 	"github.com/PuerkitoBio/goquery"
+	"github.com/philspins/opendocket/internal/clog"
 	"github.com/philspins/opendocket/internal/utils"
 )
 
@@ -240,7 +240,7 @@ func parseAlbertaVPDivisions(text, detailURL string, legislature, session, start
 			Votes: votes,
 		})
 	}
-	log.Printf("[ab-votes] parsed %d divisions", len(results))
+	clog.Debugf("[ab-votes] parsed %d divisions", len(results))
 	return results
 }
 
@@ -305,7 +305,7 @@ func parseAlbertaQuestionBlocks(text, detailURL string, legislature, session, st
 			Votes: votes,
 		})
 	}
-	log.Printf("[ab-votes] parsed %d divisions", len(results))
+	clog.Debugf("[ab-votes] parsed %d divisions", len(results))
 	return results
 }
 
@@ -356,7 +356,7 @@ func crawlAlbertaVotesFromPDF(indexURL string, legislature, session int, client 
 	if client == nil {
 		client = utils.NewHTTPClient()
 	}
-	log.Printf("[ab-votes] fetching index: %s", indexURL)
+	clog.Infof("[ab-votes] fetching index: %s", indexURL)
 	indexDoc, err := fetchDoc(indexURL, client)
 	if err != nil {
 		return nil, fmt.Errorf("ab votes index: %w", err)
@@ -382,7 +382,7 @@ func crawlAlbertaVotesFromPDF(indexURL string, legislature, session int, client 
 		pdfLinks = pdfLinks[len(pdfLinks)-60:]
 	}
 	if len(pdfLinks) == 0 {
-		log.Printf("[ab-votes] no VP PDFs discovered")
+		clog.Infof("[ab-votes] no VP PDFs discovered")
 		return nil, nil
 	}
 
@@ -391,7 +391,7 @@ func crawlAlbertaVotesFromPDF(indexURL string, legislature, session int, client 
 	for _, pdfURL := range pdfLinks {
 		text, terr := downloadAndExtractPDFText(pdfURL, "ab", client)
 		if terr != nil {
-			log.Printf("[ab-votes] skip pdf %s: %v", pdfURL, terr)
+			clog.Debugf("[ab-votes] skip pdf %s: %v", pdfURL, terr)
 			continue
 		}
 		date := extractDateFromURL(pdfURL)
@@ -408,7 +408,7 @@ func crawlAlbertaVotesFromPDF(indexURL string, legislature, session int, client 
 			nextDivNum++
 		}
 	}
-	log.Printf("[ab-votes] parsed %d divisions from %d PDFs", len(results), len(pdfLinks))
+	clog.Infof("[ab-votes] parsed %d divisions from %d PDFs", len(results), len(pdfLinks))
 	return results, nil
 }
 

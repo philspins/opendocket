@@ -2,7 +2,6 @@ package provincial
 
 import (
 	"fmt"
-	"log"
 	"net/http"
 	"regexp"
 	"sort"
@@ -10,6 +9,7 @@ import (
 	"time"
 
 	"github.com/PuerkitoBio/goquery"
+	"github.com/philspins/opendocket/internal/clog"
 	"github.com/philspins/opendocket/internal/utils"
 )
 
@@ -101,11 +101,11 @@ func discoverNovaScotiaVotePDFLinks(doc *goquery.Document, baseURL string, legis
 // listings remain as a fallback when no Hansard PDFs are exposed.
 func crawlNovaScotiaVotesFromPDF(indexURL string, legislature, session int, client *http.Client) ([]ProvincialDivisionResult, error) {
 	sessionURL := novaScotiaHansardSessionURL(indexURL, legislature, session)
-	log.Printf("[ns-votes] fetching hansard session index: %s", sessionURL)
+	clog.Infof("[ns-votes] fetching hansard session index: %s", sessionURL)
 	indexDoc, err := fetchDoc(sessionURL, client)
 	if err != nil {
 		if indexURL != "" && indexURL != sessionURL {
-			log.Printf("[ns-votes] hansard session index unavailable, falling back to %s: %v", indexURL, err)
+			clog.Infof("[ns-votes] hansard session index unavailable, falling back to %s: %v", indexURL, err)
 			indexDoc, err = fetchDoc(indexURL, client)
 			if err != nil {
 				return nil, fmt.Errorf("ns votes index: %w", err)
@@ -119,7 +119,7 @@ func crawlNovaScotiaVotesFromPDF(indexURL string, legislature, session int, clie
 	pdfLinks := discoverNovaScotiaVotePDFLinks(indexDoc, sessionURL, legislature, session)
 	if len(pdfLinks) == 0 {
 		if indexURL != "" && indexURL != sessionURL {
-			log.Printf("[ns-votes] no hansard PDFs discovered at %s; falling back to %s", sessionURL, indexURL)
+			clog.Infof("[ns-votes] no hansard PDFs discovered at %s; falling back to %s", sessionURL, indexURL)
 			fallbackDoc, ferr := fetchDoc(indexURL, client)
 			if ferr != nil {
 				return nil, fmt.Errorf("ns votes fallback index: %w", ferr)
@@ -128,7 +128,7 @@ func crawlNovaScotiaVotesFromPDF(indexURL string, legislature, session int, clie
 			sessionURL = indexURL
 		}
 		if len(pdfLinks) == 0 {
-			log.Printf("[ns-votes] no vote PDFs discovered for legislature=%d session=%d", legislature, session)
+			clog.Infof("[ns-votes] no vote PDFs discovered for legislature=%d session=%d", legislature, session)
 			return nil, nil
 		}
 	}
@@ -138,7 +138,7 @@ func crawlNovaScotiaVotesFromPDF(indexURL string, legislature, session int, clie
 	for _, pdfURL := range pdfLinks {
 		text, terr := downloadAndExtractPDFText(pdfURL, "ns", client)
 		if terr != nil {
-			log.Printf("[ns-votes] skip pdf %s: %v", pdfURL, terr)
+			clog.Infof("[ns-votes] skip pdf %s: %v", pdfURL, terr)
 			continue
 		}
 		date := extractDateFromURL(pdfURL)
@@ -155,7 +155,7 @@ func crawlNovaScotiaVotesFromPDF(indexURL string, legislature, session int, clie
 			nextDivNum++
 		}
 	}
-	log.Printf("[ns-votes] parsed %d divisions from %d PDFs", len(results), len(pdfLinks))
+	clog.Infof("[ns-votes] parsed %d divisions from %d PDFs", len(results), len(pdfLinks))
 	return results, nil
 }
 
