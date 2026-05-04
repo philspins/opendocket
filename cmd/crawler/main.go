@@ -135,7 +135,9 @@ func main() {
 		}
 	}
 
-	// Phase 2: build the remaining crawl tasks and run them concurrently.
+	// Phase 2: crawl bills, calendar, and provincial concurrently.
+	// Votes must not start until bills are persisted — divisions.bill_id is a FK
+	// into bills, so inserting a vote before its bill exists causes a constraint error.
 	type task struct {
 		name string
 		fn   func() error
@@ -239,7 +241,8 @@ func runAll(conn *sql.DB, client *http.Client, delay time.Duration, parallelism 
 		scraper.RunParallel(parallelism, tasks)
 	}
 
-	// Phase 2: crawl bill-producing domains before votes and senate.
+	// Phase 2: crawl bills and calendar concurrently. Votes must not start
+	// until bills are persisted, otherwise divisions.bill_id FK constraints fail.
 	phaseTwoTasks := []func(){
 		func() { scraper.CrawlCalendar(conn, client, delay, "") },
 		func() {
@@ -271,7 +274,7 @@ func runAll(conn *sql.DB, client *http.Client, delay time.Duration, parallelism 
 	}
 	runTasks(phaseTwoTasks)
 
-	// Phase 3: crawl domains that may reference stored bill rows.
+	// Phase 3: crawl votes only after all bills are in the DB.
 	phaseThreeTasks := []func(){
 		func() { scraper.CrawlVotes(conn, client, delay, "") },
 		func() { scraper.CrawlSenate(conn, client, delay, "") },
