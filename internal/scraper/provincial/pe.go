@@ -469,7 +469,7 @@ func crawlPEIBillsFromWorkflow(wdfBase string, year, legislature, session int, c
 	}
 
 	sort.Slice(out, func(i, j int) bool { return out[i].ID < out[j].ID })
-	clog.Infof("[pe-bills] wdf parsed %d bills", len(out))
+	clog.Debugf("[pe-bills] wdf parsed %d bills", len(out))
 	return out, nil
 }
 
@@ -765,18 +765,18 @@ func crawlPEIVotesFromWorkflow(wdfBase string, year, legislature, session int, c
 		queryVars["search"] = "assembly"
 		queryVars["general_assembly"] = strconv.Itoa(legislature)
 		queryVars["session"] = strconv.Itoa(session)
-		clog.Infof("[pe-votes] fetching journals for legislature=%d session=%d via WDF", legislature, session)
+		clog.Debugf("[pe-votes] fetching journals for legislature=%d session=%d via WDF", legislature, session)
 	} else {
 		queryVars["year"] = strconv.Itoa(year)
 		queryVars["search"] = "year"
-		clog.Infof("[pe-votes] fetching journals for year=%d via WDF", year)
+		clog.Debugf("[pe-votes] fetching journals for year=%d via WDF", year)
 	}
 	body, err := postPEIWorkflow(context.Background(), wdfBase, peiWorkflowJournals, peiWDFActivityJournals, queryVars, client, delay)
 	if err != nil || body == nil {
 		clog.Infof("[pe-votes] WDF workflow returned no data: %v", err)
 		return nil, err
 	}
-	clog.Infof("[pe-votes] WDF returned %d bytes", len(body))
+	clog.Debugf("[pe-votes] WDF returned %d bytes", len(body))
 
 	var resp wdfTreeResponse
 	if err := json.Unmarshal(body, &resp); err != nil {
@@ -789,7 +789,7 @@ func crawlPEIVotesFromWorkflow(wdfBase string, year, legislature, session int, c
 	}
 
 	rows := wdfCollectRows(resp.Data)
-	clog.Infof("[pe-votes] WDF returned %d journal rows", len(rows))
+	clog.Debugf("[pe-votes] WDF returned %d journal rows", len(rows))
 	if len(rows) == 0 {
 		clog.Infof("[pe-votes] wdf returned 0 journal rows; falling back to HTML")
 		return nil, nil
@@ -860,7 +860,7 @@ func crawlPEIVotesFromWorkflow(wdfBase string, year, legislature, session int, c
 }
 
 func crawlPEIVotes(indexURL string, legislature, session int, client *http.Client) ([]ProvincialDivisionResult, error) {
-	clog.Infof("[pe-votes] fetching index: %s", indexURL)
+	clog.Debugf("[pe-votes] fetching index: %s", indexURL)
 	resp, err := client.Get(indexURL)
 	if err != nil {
 		return nil, fmt.Errorf("pe votes index: %w", err)

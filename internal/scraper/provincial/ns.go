@@ -73,7 +73,7 @@ func nsDateFromHansardURL(rawURL string) string {
 // It returns the results and the number of day pages found (0 means the
 // session page has no individual Hansard pages, likely an older session).
 func crawlNovaScotiaVotesFromHTML(sessionURL string, legislature, session int, client *http.Client) ([]ProvincialDivisionResult, int, error) {
-	clog.Infof("[ns-votes] fetching hansard session index for html: %s", sessionURL)
+	clog.Debugf("[ns-votes] fetching hansard session index for html: %s", sessionURL)
 	indexDoc, err := fetchDoc(sessionURL, client)
 	if err != nil {
 		return nil, 0, fmt.Errorf("ns html session index: %w", err)
@@ -268,7 +268,7 @@ func discoverNovaScotiaVotePDFLinks(doc *goquery.Document, baseURL string, legis
 // listings remain as a fallback when no Hansard PDFs are exposed.
 func crawlNovaScotiaVotesFromPDF(indexURL string, legislature, session int, client *http.Client) ([]ProvincialDivisionResult, error) {
 	sessionURL := novaScotiaHansardSessionURL(indexURL, legislature, session)
-	clog.Infof("[ns-votes] fetching hansard session index for pdf: %s", sessionURL)
+	clog.Debugf("[ns-votes] fetching hansard session index for pdf: %s", sessionURL)
 	indexDoc, err := fetchDoc(sessionURL, client)
 	if err != nil {
 		if indexURL != "" && indexURL != sessionURL {

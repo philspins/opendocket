@@ -130,15 +130,15 @@ func BuildCrawlPlan(conn *sql.DB, client *http.Client, delay time.Duration, src 
 	legislature, currentSession := resolveProvincialLegislatureSession(conn, src, client)
 	sessions := sessionsToCrawlForSource(src, currentSession)
 	if len(sessions) == 1 {
-		clog.Infof("[provincial][%s] detected legislature/session: %d/%d", src.Code, legislature, currentSession)
+		clog.Debugf("[provincial][%s] detected legislature/session: %d/%d", src.Code, legislature, currentSession)
 	} else {
-		clog.Infof("[provincial][%s] detected legislature/current session: %d/%d; crawling sessions %v", src.Code, legislature, currentSession, sessions)
+		clog.Debugf("[provincial][%s] detected legislature/current session: %d/%d; crawling sessions %v", src.Code, legislature, currentSession, sessions)
 	}
 
 	plan := CrawlPlan{Source: src}
 	allowPreviousSessionFallback := len(sessions) == 1
 	for _, session := range sessions {
-		clog.Infof("[provincial][%s] crawling legislature/session: %d/%d", src.Code, legislature, session)
+		clog.Debugf("[provincial][%s] crawling legislature/session: %d/%d", src.Code, legislature, session)
 		sp, err := buildSessionPlan(conn, client, delay, src, legislature, session, allowPreviousSessionFallback)
 		if err != nil {
 			return plan, err

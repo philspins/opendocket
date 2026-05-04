@@ -8,6 +8,7 @@ import (
 	"net/http"
 	"net/url"
 	"regexp"
+	"sort"
 	"strconv"
 	"strings"
 
@@ -260,8 +261,9 @@ func fetchRepresentPages(apiURL, governmentLevel, setSlug string, client *http.C
 
 	var profiles []MemberProfile
 	pageURL := apiURL
+	clog.Debugf("[members] fetching members from Represent API")
 	for pageURL != "" {
-		clog.Infof("[members] fetching API page: %s", pageURL)
+		clog.Debugf("[members] fetching API page: %s", pageURL)
 
 		resp, err := client.Get(pageURL)
 		if err != nil {
@@ -343,8 +345,36 @@ func fetchRepresentPages(apiURL, governmentLevel, setSlug string, client *http.C
 		}
 	}
 
-	clog.Infof("[members] fetched %d %s members from Represent API", len(profiles), governmentLevel)
+	if governmentLevel == "provincial" && setSlug != "" {
+		clog.Debugf("[members] fetched %d %s members from Represent API for set %s by province: %s", len(profiles), governmentLevel, setSlug, membersByProvinceSummary(profiles))
+	} else {
+		clog.Debugf("[members] fetched %d %s members from Represent API by province: %s", len(profiles), governmentLevel, membersByProvinceSummary(profiles))
+	}
 	return profiles, nil
+}
+
+func membersByProvinceSummary(profiles []MemberProfile) string {
+	if len(profiles) == 0 {
+		return "none"
+	}
+	counts := make(map[string]int)
+	for _, profile := range profiles {
+		province := strings.TrimSpace(profile.Province)
+		if province == "" {
+			province = "Unknown"
+		}
+		counts[province]++
+	}
+	keys := make([]string, 0, len(counts))
+	for province := range counts {
+		keys = append(keys, province)
+	}
+	sort.Strings(keys)
+	parts := make([]string, 0, len(keys))
+	for _, province := range keys {
+		parts = append(parts, fmt.Sprintf("%s=%d", province, counts[province]))
+	}
+	return strings.Join(parts, ", ")
 }
 
 // normalizeRepresentPhotoURL converts Represent API photo_url values to an

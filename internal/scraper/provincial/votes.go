@@ -3,8 +3,10 @@ package provincial
 
 import (
 	"bufio"
+	"errors"
 	"fmt"
 	"io"
+	"net"
 	"net/http"
 	"os"
 	"path/filepath"
@@ -19,6 +21,8 @@ import (
 	"github.com/philspins/opendocket/internal/clog"
 	"github.com/philspins/opendocket/internal/utils"
 )
+
+var errNonPDFResponse = errors.New("non-pdf response")
 
 // ── types ─────────────────────────────────────────────────────────────────────
 
@@ -47,6 +51,27 @@ func ProvincialDivisionID(province string, legislature, session, num int, date s
 // ── PDF extraction ────────────────────────────────────────────────────────────
 
 func downloadAndExtractPDFText(pdfURL, province string, client *http.Client) (string, error) {
+	const attempts = 3
+	var lastErr error
+	for attempt := 1; attempt <= attempts; attempt++ {
+		text, err := downloadAndExtractPDFTextOnce(pdfURL, province, client)
+		if err == nil {
+			return text, nil
+		}
+		lastErr = err
+		if attempt < attempts && isTransientPDFError(err) {
+			time.Sleep(time.Duration(attempt) * 250 * time.Millisecond)
+			continue
+		}
+		return "", err
+	}
+	if lastErr != nil {
+		return "", lastErr
+	}
+	return "", fmt.Errorf("GET %q: unknown PDF extraction error", pdfURL)
+}
+
+func downloadAndExtractPDFTextOnce(pdfURL, province string, client *http.Client) (string, error) {
 	resp, err := client.Get(pdfURL)
 	if err != nil {
 		return "", fmt.Errorf("GET %q: %w", pdfURL, err)
@@ -56,13 +81,22 @@ func downloadAndExtractPDFText(pdfURL, province string, client *http.Client) (st
 		snippet, _ := io.ReadAll(io.LimitReader(resp.Body, 512))
 		return "", fmt.Errorf("GET %q: status %d - %s", pdfURL, resp.StatusCode, strings.TrimSpace(string(snippet)))
 	}
+	peek := make([]byte, 5)
+	n, _ := io.ReadFull(resp.Body, peek)
+	peek = peek[:n]
+	contentType := strings.ToLower(strings.TrimSpace(resp.Header.Get("Content-Type")))
+	isPDFHeader := len(peek) >= 5 && string(peek[:5]) == "%PDF-"
+	if !isPDFHeader && strings.Contains(contentType, "text/html") {
+		return "", fmt.Errorf("%w: GET %q redirected to HTML (status %d, content-type %q)", errNonPDFResponse, pdfURL, resp.StatusCode, contentType)
+	}
+	reader := io.MultiReader(strings.NewReader(string(peek)), resp.Body)
 	tmp, err := os.CreateTemp("", "opendocket-"+province+"-*.pdf")
 	if err != nil {
 		return "", err
 	}
 	tmpPath := tmp.Name()
 	defer func() { _ = tmp.Close(); _ = os.Remove(tmpPath) }()
-	written, err := io.Copy(tmp, io.LimitReader(resp.Body, 32<<20))
+	written, err := io.Copy(tmp, io.LimitReader(reader, 32<<20))
 	if err != nil {
 		return "", err
 	}
@@ -73,6 +107,22 @@ func downloadAndExtractPDFText(pdfURL, province string, client *http.Client) (st
 		return "", err
 	}
 	return extractProvincialPDFText(tmpPath)
+}
+
+func isTransientPDFError(err error) bool {
+	if err == nil {
+		return false
+	}
+	var netErr net.Error
+	if errors.As(err, &netErr) && (netErr.Timeout() || netErr.Temporary()) {
+		return true
+	}
+	msg := strings.ToLower(err.Error())
+	return strings.Contains(msg, "eof") ||
+		strings.Contains(msg, "no header version available") ||
+		strings.Contains(msg, "xreftable failed") ||
+		strings.Contains(msg, "timeout") ||
+		strings.Contains(msg, "connection reset")
 }
 
 func extractProvincialPDFText(pdfPath string) (string, error) {
@@ -485,7 +535,7 @@ func crawlGenericProvincialVotesWithMatcher(indexURL, provinceCode, chamber stri
 	if client == nil {
 		client = utils.NewHTTPClient()
 	}
-	clog.Infof("[%s-votes] fetching index: %s", provinceCode, indexURL)
+	clog.Debugf("[%s-votes] fetching index: %s", provinceCode, indexURL)
 
 	doc, err := fetchDoc(indexURL, client)
 	if err != nil {

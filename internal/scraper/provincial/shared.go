@@ -1,12 +1,15 @@
 package provincial
 
 import (
+	"errors"
 	"fmt"
 	"io"
+	"net"
 	"net/http"
 	"regexp"
 	"strconv"
 	"strings"
+	"time"
 
 	"github.com/PuerkitoBio/goquery"
 )
@@ -30,18 +33,55 @@ type DivisionStub struct {
 }
 
 func fetchDoc(url string, client *http.Client) (*goquery.Document, error) {
-	resp, err := client.Get(url)
-	if err != nil {
-		return nil, fmt.Errorf("GET %q: %w", url, err)
-	}
-	defer resp.Body.Close()
+	const attempts = 3
+	var lastErr error
+	for attempt := 1; attempt <= attempts; attempt++ {
+		resp, err := client.Get(url)
+		if err != nil {
+			lastErr = fmt.Errorf("GET %q: %w", url, err)
+			if attempt < attempts && isTransientFetchError(err) {
+				time.Sleep(time.Duration(attempt) * 200 * time.Millisecond)
+				continue
+			}
+			return nil, lastErr
+		}
+		if resp.StatusCode != http.StatusOK {
+			body, _ := io.ReadAll(io.LimitReader(resp.Body, 512))
+			_ = resp.Body.Close()
+			return nil, fmt.Errorf("GET %q: status %d — %s", url, resp.StatusCode, body)
+		}
 
-	if resp.StatusCode != http.StatusOK {
-		body, _ := io.ReadAll(io.LimitReader(resp.Body, 512))
-		return nil, fmt.Errorf("GET %q: status %d — %s", url, resp.StatusCode, body)
+		doc, derr := goquery.NewDocumentFromReader(resp.Body)
+		_ = resp.Body.Close()
+		if derr != nil {
+			lastErr = derr
+			if attempt < attempts && isTransientFetchError(derr) {
+				time.Sleep(time.Duration(attempt) * 200 * time.Millisecond)
+				continue
+			}
+			return nil, derr
+		}
+		return doc, nil
 	}
+	if lastErr != nil {
+		return nil, lastErr
+	}
+	return nil, fmt.Errorf("GET %q: unknown fetch error", url)
+}
 
-	return goquery.NewDocumentFromReader(resp.Body)
+func isTransientFetchError(err error) bool {
+	if err == nil {
+		return false
+	}
+	var netErr net.Error
+	if errors.As(err, &netErr) && (netErr.Timeout() || netErr.Temporary()) {
+		return true
+	}
+	msg := strings.ToLower(err.Error())
+	return strings.Contains(msg, "eof") ||
+		strings.Contains(msg, "timeout") ||
+		strings.Contains(msg, "connection reset") ||
+		strings.Contains(msg, "closed network connection")
 }
 
 type legislatureSession struct {

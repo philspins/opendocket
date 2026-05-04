@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"net/http"
 	"os"
+	"sort"
 	"strconv"
 	"strings"
 	"sync"
@@ -123,14 +124,57 @@ func CrawlMembers(conn *sql.DB, client *http.Client, delay time.Duration, apiURL
 		return err
 	}
 	close(results)
+	allProvincialProfiles := make([]MemberProfile, 0)
 
 	for result := range results {
 		if len(result.profiles) == 0 {
 			continue
 		}
+		allProvincialProfiles = append(allProvincialProfiles, result.profiles...)
 		store.UpsertProfiles(conn, toDBMembers(result.profiles), 0)
 	}
+	clog.Infof("[members] summary by province (federal/provincial): %s", federalProvincialMembersByProvinceSummary(profiles, allProvincialProfiles))
 	return nil
+}
+
+func federalProvincialMembersByProvinceSummary(federalProfiles, provincialProfiles []MemberProfile) string {
+	if len(federalProfiles) == 0 && len(provincialProfiles) == 0 {
+		return "none"
+	}
+	type counts struct {
+		federal    int
+		provincial int
+	}
+	byProvince := make(map[string]counts)
+	for _, profile := range federalProfiles {
+		province := strings.TrimSpace(profile.Province)
+		if province == "" {
+			province = "Unknown"
+		}
+		entry := byProvince[province]
+		entry.federal++
+		byProvince[province] = entry
+	}
+	for _, profile := range provincialProfiles {
+		province := strings.TrimSpace(profile.Province)
+		if province == "" {
+			province = "Unknown"
+		}
+		entry := byProvince[province]
+		entry.provincial++
+		byProvince[province] = entry
+	}
+	keys := make([]string, 0, len(byProvince))
+	for province := range byProvince {
+		keys = append(keys, province)
+	}
+	sort.Strings(keys)
+	parts := make([]string, 0, len(keys))
+	for _, province := range keys {
+		entry := byProvince[province]
+		parts = append(parts, fmt.Sprintf("%s federal=%d provincial=%d", province, entry.federal, entry.provincial))
+	}
+	return strings.Join(parts, "; ")
 }
 
 func toDBMembers(profiles []MemberProfile) []store.MemberRecord {

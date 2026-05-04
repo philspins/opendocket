@@ -61,7 +61,7 @@ func CrawlAndPersistLegislatureCalendars(conn *sql.DB, client *http.Client) erro
 			}
 			continue
 		}
-		clog.Infof("[calendar] detected %d dates for %s", len(dates), jurisdiction)
+		clog.Debugf("[calendar] detected %d dates for %s", len(dates), jurisdiction)
 		if len(dates) == 0 {
 			continue
 		}

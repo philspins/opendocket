@@ -131,7 +131,7 @@ func crawlOntarioVPDay(vpURL string, parliament, session int, date string, clien
 	if client == nil {
 		client = utils.NewHTTPClient()
 	}
-	clog.Infof("[ontario-votes] scraping V&P: %s", vpURL)
+	clog.Debugf("[ontario-votes] scraping V&P: %s", vpURL)
 
 	doc, err := fetchDoc(vpURL, client)
 	if err != nil {

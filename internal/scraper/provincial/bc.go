@@ -367,7 +367,7 @@ func parseBCVotesDivisions(doc *goquery.Document, sourceURL, date, province stri
 // Each file is at:  {limsBase}/pdms/ldp/{parl}{sess}/votes/{fileName}
 func crawlBritishColumbiaVotesFromLIMS(limsBase, parliament, session string, legislature, sessionNum int, client *http.Client) ([]ProvincialDivisionResult, error) {
 	indexURL := fmt.Sprintf("%s/pdms/votes-and-proceedings/%s%s", limsBase, parliament, session)
-	clog.Infof("[bc-votes] fetching LIMS index: %s", indexURL)
+	clog.Debugf("[bc-votes] fetching LIMS index: %s", indexURL)
 
 	req, err := http.NewRequest("GET", indexURL, nil)
 	if err != nil {
@@ -390,7 +390,7 @@ func crawlBritishColumbiaVotesFromLIMS(limsBase, parliament, session string, leg
 	}
 
 	files := apiResp.AllParliamentaryFileAttributes.Nodes
-	clog.Infof("[bc-votes] LIMS index: %d VP files for %s%s", len(files), parliament, session)
+	clog.Debugf("[bc-votes] LIMS index: %d VP files for %s%s", len(files), parliament, session)
 
 	var results []ProvincialDivisionResult
 	nextDivNum := 1

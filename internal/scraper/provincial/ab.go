@@ -356,7 +356,7 @@ func crawlAlbertaVotesFromPDF(indexURL string, legislature, session int, client 
 	if client == nil {
 		client = utils.NewHTTPClient()
 	}
-	clog.Infof("[ab-votes] fetching index: %s", indexURL)
+	clog.Debugf("[ab-votes] fetching index: %s", indexURL)
 	indexDoc, err := fetchDoc(indexURL, client)
 	if err != nil {
 		return nil, fmt.Errorf("ab votes index: %w", err)

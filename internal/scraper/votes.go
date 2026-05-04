@@ -67,7 +67,7 @@ func CrawlVotesIndex(
 	if client == nil {
 		client = utils.NewHTTPClient()
 	}
-	clog.Infof("[votes] fetching index: %s", url)
+	clog.Debugf("[votes] fetching index: %s", url)
 
 	doc, err := fetchDoc(url, client)
 	if err != nil {

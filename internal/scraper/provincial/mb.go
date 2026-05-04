@@ -1,6 +1,7 @@
 package provincial
 
 import (
+	"errors"
 	"fmt"
 	"image"
 	"image/color"
@@ -400,7 +401,7 @@ func crawlManitobaVotesFromPDF(indexURL string, legislature, session int, client
 	if client == nil {
 		client = utils.NewHTTPClient()
 	}
-	clog.Infof("[mb-votes] fetching index: %s", indexURL)
+	clog.Debugf("[mb-votes] fetching index: %s", indexURL)
 	indexDoc, err := fetchDoc(indexURL, client)
 	if err != nil {
 		return nil, fmt.Errorf("mb votes index: %w", err)
@@ -474,6 +475,10 @@ func crawlManitobaVotesFromPDF(indexURL string, legislature, session int, client
 	for _, pdfURL := range pdfLinks {
 		text, terr := downloadAndExtractPDFText(pdfURL, "mb", client)
 		if terr != nil {
+			if errors.Is(terr, errNonPDFResponse) {
+				clog.Debugf("[mb-votes] skip non-pdf link %s: %v", pdfURL, terr)
+				continue
+			}
 			clog.Infof("[mb-votes] skip pdf %s: %v", pdfURL, terr)
 			continue
 		}

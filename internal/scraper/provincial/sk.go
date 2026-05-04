@@ -161,7 +161,7 @@ func crawlSaskatchewanMinutesLinks(archiveURL string, client *http.Client) ([]st
 		}
 	})
 
-	clog.Infof("[sk-votes] found %d Assembly Minutes HTML links", len(links))
+	clog.Debugf("[sk-votes] found %d Assembly Minutes HTML links", len(links))
 	return links, nil
 }
 
@@ -176,7 +176,7 @@ func crawlSaskatchewanMinutes(minutesURL string, legislature, session int, clien
 	if client == nil {
 		client = utils.NewHTTPClient()
 	}
-	clog.Infof("[sk-votes] scraping Minutes: %s", minutesURL)
+	clog.Debugf("[sk-votes] scraping Minutes: %s", minutesURL)
 
 	m := skDateFromURLRe.FindStringSubmatch(minutesURL)
 	if len(m) != 2 {
