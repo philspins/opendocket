@@ -38,6 +38,9 @@ func TestParseAlbertaVPDivisions_ForAgainstFormat(t *testing.T) {
 	if divs[0].Division.Result != "Carried" {
 		t.Fatalf("result=%q, want Carried", divs[0].Division.Result)
 	}
+	if divs[0].Division.Description != "Bill 37 amendment" {
+		t.Fatalf("description=%q, want %q", divs[0].Division.Description, "Bill 37 amendment")
+	}
 	if len(divs[0].Votes) < 5 {
 		t.Fatalf("len(votes)=%d, want >=5", len(divs[0].Votes))
 	}
@@ -86,8 +89,21 @@ func TestParseAlbertaVPDivisions_QuestionBlocksKeepBillDescription(t *testing.T)
 	if len(divs) != 1 {
 		t.Fatalf("len(divs)=%d, want 1", len(divs))
 	}
-	if !strings.Contains(divs[0].Division.Description, "Bill 27 Financial Statutes Amendment Act") {
-		t.Fatalf("description=%q", divs[0].Division.Description)
+	want := "Bill 27 Financial Statutes Amendment Act, 2026 - Second Reading"
+	if divs[0].Division.Description != want {
+		t.Fatalf("description=%q, want %q", divs[0].Division.Description, want)
+	}
+}
+
+func TestParseAlbertaVPDivisions_FirstReadingDescriptionIsolated(t *testing.T) {
+	text := `DIVISION 1 On the motion that the following Bill be now read a First time: Bill 9 Protecting Alberta's Children Statutes Amendment Act, 2025 -- Hon. Mr. Amery For the motion: 48 A B C Against the motion: 35 D E F`
+	divs := ParseAlbertaVPDivisionsForTest(text, "https://example.com/vp.pdf", 31, 2, 1, "2025-11-18")
+	if len(divs) != 1 {
+		t.Fatalf("len(divs)=%d, want 1", len(divs))
+	}
+	want := "Bill 9 Protecting Alberta's Children Statutes Amendment Act, 2025 - First Reading"
+	if divs[0].Division.Description != want {
+		t.Fatalf("description=%q, want %q", divs[0].Division.Description, want)
 	}
 }
 
