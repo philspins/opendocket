@@ -160,7 +160,7 @@ func CrawlSenateDivisionDetail(divisionID, url string, client *http.Client) ([]M
 	if client == nil {
 		client = utils.NewHTTPClient()
 	}
-	clog.Infof("[senate] scraping division detail: %s", url)
+	clog.Debugf("[senate] scraping division detail: %s", url)
 
 	doc, err := fetchDoc(url, client)
 	if err != nil {
@@ -189,6 +189,6 @@ func CrawlSenateDivisionDetail(divisionID, url string, client *http.Client) ([]M
 		}
 	}
 
-	clog.Infof("[senate] division %s: %d votes", divisionID, len(votes))
+	clog.Debugf("[senate] division %s: %d votes", divisionID, len(votes))
 	return votes, nil
 }
