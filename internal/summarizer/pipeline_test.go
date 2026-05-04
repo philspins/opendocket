@@ -233,7 +233,7 @@ func TestFetchBillText_PDF(t *testing.T) {
 	}))
 	defer srv.Close()
 
-	text, err := fetchBillText(t.Context(), srv.URL+"/bill.pdf")
+	text, err := fetchBillText(t.Context(), "", srv.URL+"/bill.pdf")
 	if err != nil {
 		t.Fatalf("fetchBillText(pdf): %v", err)
 	}
@@ -252,7 +252,7 @@ func TestFetchBillText_FallsBackForDeeplyNestedHTML(t *testing.T) {
 	}))
 	defer srv.Close()
 
-	text, err := fetchBillText(context.Background(), srv.URL)
+	text, err := fetchBillText(context.Background(), "", srv.URL)
 	if err != nil {
 		t.Fatalf("fetchBillText returned error: %v", err)
 	}
@@ -261,6 +261,62 @@ func TestFetchBillText_FallsBackForDeeplyNestedHTML(t *testing.T) {
 	}
 	if strings.Contains(text, "ignored()") {
 		t.Fatalf("expected script content to be removed, got %q", text)
+	}
+}
+
+func TestFetchBillText_PEExpiredLinkRefreshesViaWDF(t *testing.T) {
+	pdfBytes := buildTestPDF("Refreshed PE bill text")
+
+	fileSrv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		switch {
+		case strings.HasPrefix(r.URL.Path, "/download/dms"):
+			w.Header().Set("Content-Type", "text/html; charset=UTF-8")
+			w.WriteHeader(http.StatusInternalServerError)
+			_, _ = w.Write([]byte(`<html><body><h1>Error retrieving file</h1><p>The link is expired (try refreshing the page you got the link from)</p></body></html>`))
+		case strings.HasPrefix(r.URL.Path, "/fresh.pdf"):
+			w.Header().Set("Content-Type", "application/pdf")
+			_, _ = w.Write(pdfBytes)
+		default:
+			w.WriteHeader(http.StatusNotFound)
+		}
+	}))
+	defer fileSrv.Close()
+
+	wdfSrv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.Method != http.MethodPost {
+			w.WriteHeader(http.StatusMethodNotAllowed)
+			return
+		}
+		defer r.Body.Close()
+		var req struct {
+			QueryName string `json:"queryName"`
+		}
+		if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+			w.WriteHeader(http.StatusBadRequest)
+			return
+		}
+		w.Header().Set("Content-Type", "application/json")
+		switch req.QueryName {
+		case "LegislativeAssemblyBillSearch":
+			_, _ = w.Write([]byte(`{"data":[{"type":"TableV2","children":[{"type":"TableV2Row","children":[{"type":"TableV2Cell","children":[{"type":"LinkV2","data":{"queryParams":{"id":"bill-doc-34"}}}]},{"type":"TableV2Cell","data":{"text":"34"}}]}]}]}`))
+		case "LegislativeAssemblyBillView":
+			_, _ = w.Write([]byte(`{"data":[{"type":"TableV2","children":[{"type":"TableV2Row","children":[{"type":"TableV2Cell","children":[{"type":"LinkV2","data":{"href":"` + fileSrv.URL + `/fresh.pdf"}}]}]}]}]}`))
+		default:
+			w.WriteHeader(http.StatusBadRequest)
+		}
+	}))
+	defer wdfSrv.Close()
+
+	origWDF := peiWDFWorkflowURL
+	peiWDFWorkflowURL = wdfSrv.URL
+	t.Cleanup(func() { peiWDFWorkflowURL = origWDF })
+
+	text, err := fetchBillText(context.Background(), "pe-67-2-34", fileSrv.URL+"/download/dms?objectId=expired&fileName=bill-34.pdf")
+	if err != nil {
+		t.Fatalf("fetchBillText returned error: %v", err)
+	}
+	if !strings.Contains(text, "Refreshed PE bill text") {
+		t.Fatalf("expected refreshed bill text, got %q", text)
 	}
 }
 
