@@ -7,7 +7,7 @@ CRAWLER_BIN ?= opendocket-crawler
 SERVER_BIN ?= opendocket-server
 CRAWLER_FLAGS ?= $(FLAGS)
 
-.PHONY: help build build-crawler build-server crawler server test templ clean
+.PHONY: help build build-crawler build-server crawler server test templ clean eol-check eol-fix
 
 help:
 	@echo "Available targets:"
@@ -20,10 +20,12 @@ help:
 	@echo "                        make crawler -- --provincial"
 	@echo "  make server         Start web service (DB=$(DB), ADDR=$(ADDR))"
 	@echo "  make test           Run all tests"
+	@echo "  make eol-check      Fail if any tracked file contains CRLF line endings"
+	@echo "  make eol-fix        Convert CRLF endings in tracked files to LF"
 	@echo "  make templ          Regenerate templ files"
 	@echo "  make clean          Remove built binaries"
 
-build: build-crawler build-server
+build: eol-fix build-crawler build-server
 
 build-crawler:
 	go build -o $(CRAWLER_BIN) ./cmd/crawler
@@ -42,8 +44,22 @@ endif
 server:
 	go run ./cmd/server -db $(DB) -addr $(ADDR)
 
-test:
+test: eol-check
 	go test ./...
+
+eol-check:
+	@files="$$(git ls-files -z | xargs -0 grep -Il $$'\r' || true)"; \
+	if [ -n "$$files" ]; then \
+		echo "CRLF line endings detected in tracked files:"; \
+		echo "$$files"; \
+		echo "Run: make eol-fix or normalize files to LF before committing."; \
+		exit 1; \
+	fi; \
+	echo "LF line-ending check passed."
+
+eol-fix:
+	@git ls-files -z | xargs -0 sed -i 's/\r$$//'
+	@echo "Normalized tracked files to LF."
 
 templ:
 	go run github.com/a-h/templ/cmd/templ@v0.3.1001 generate
