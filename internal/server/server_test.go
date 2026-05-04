@@ -1122,6 +1122,28 @@ func TestRecentBillVotes_DeduplicatesAndFallsBackToNonBillDivisions(t *testing.T
 	}
 }
 
+func TestDedupeBillDetailDivisions_NormalizesSameDayDuplicates(t *testing.T) {
+	got := dedupeBillDetailDivisions([]store.DivisionRow{
+		{ID: "d-1", Date: "2026-04-28", Description: "Miscellaneous Statutes Amendment Act, 2026"},
+		{ID: "d-2", Date: "2026-04-28", Description: "  miscellaneous statutes amendment act,  2026  "},
+		{ID: "d-3", Date: "2026-04-28", Description: "Miscellaneous Statutes Amendment Act, 2026 at third reading"},
+		{ID: "d-4", Date: "2026-04-29", Description: "Miscellaneous Statutes Amendment Act, 2026"},
+	})
+
+	if len(got) != 3 {
+		t.Fatalf("len=%d want 3", len(got))
+	}
+	if got[0].ID != "d-1" {
+		t.Fatalf("first kept id=%q want d-1", got[0].ID)
+	}
+	if got[1].ID != "d-3" {
+		t.Fatalf("second kept id=%q want d-3", got[1].ID)
+	}
+	if got[2].ID != "d-4" {
+		t.Fatalf("third kept id=%q want d-4", got[2].ID)
+	}
+}
+
 func TestResolveRepresentativeMemberID_DoesNotFallbackToWrongGovernmentLevel(t *testing.T) {
 	srv, _, conn := newTestServerWithConn(t)
 	for _, member := range []store.MemberRecord{
