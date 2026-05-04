@@ -262,6 +262,9 @@ var voteNamePrefixTokens = map[string]bool{
 	"ST": true, "VAN": true, "VON": true,
 }
 
+var newBrunswickDescRecordedDivisionTailRe = regexp.MustCompile(`(?is)\bRECORDED\s+DIVISION\b.*$`)
+var newBrunswickDescBoilerplateRe = regexp.MustCompile(`(?is)\b(?:and\s+the\s+debate\s+being\s+ended|the\s+debate\s+being\s+ended|and\s+the\s+question\s+being\s+put|the\s+question\s+being\s+put|leave\s+was\s+granted\s+to\s+dispense\s+with\s+the\s+ten\s*-?\s*minute\s+time\s+allotted\s+for\s+the\s+ringing\s+of\s+the\s+bells|on\s+the\s+following\s+recorded\s+division)\b`)
+
 var splitUppercaseNameTokenRe = regexp.MustCompile(`\b([A-Z])\s+([A-Z][A-Z][A-Z''\-]*)\b`)
 
 func collapseSplitUppercaseNameTokens(text string) string {
@@ -332,7 +335,7 @@ func extractPlainVoteNames(blockText string) []string {
 // newBrunswickDescriptionFromContext extracts a description from context text before
 // a match position. Used by NB, MB, and generic parsers.
 func newBrunswickDescriptionFromContext(text string, matchStart int) string {
-	start := matchStart - 260
+	start := matchStart - 700
 	if start < 0 {
 		start = 0
 	}
@@ -340,12 +343,25 @@ func newBrunswickDescriptionFromContext(text string, matchStart int) string {
 	if snippet == "" {
 		return ""
 	}
-	parts := strings.Split(snippet, ".")
-	desc := strings.TrimSpace(parts[len(parts)-1])
-	if len(desc) > 220 {
-		desc = desc[len(desc)-220:]
+
+	snippet = strings.TrimSpace(newBrunswickDescRecordedDivisionTailRe.ReplaceAllString(snippet, ""))
+	parts := strings.FieldsFunc(snippet, func(r rune) bool {
+		return r == '.' || r == ';' || r == ':'
+	})
+	for i := len(parts) - 1; i >= 0; i-- {
+		desc := strings.TrimSpace(parts[i])
+		if desc == "" || newBrunswickDescBoilerplateRe.MatchString(desc) {
+			continue
+		}
+		if len(desc) > 220 {
+			desc = strings.TrimSpace(desc[len(desc)-220:])
+		}
+		if desc != "" {
+			return desc
+		}
 	}
-	return strings.TrimSpace(desc)
+
+	return ""
 }
 
 // parsePDFDivisionsYeasNays parses recorded vote divisions from normalised PDF text

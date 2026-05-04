@@ -1,6 +1,9 @@
 package provincial
 
-import "testing"
+import (
+	"strings"
+	"testing"
+)
 
 func TestNewBrunswickJournalDate_PrefersPDFTextDate(t *testing.T) {
 	pdfURL := "https://example.com/journals/34000015.pdf"
@@ -59,5 +62,21 @@ func TestParseNewBrunswickVoteNames_KeepsInitialAndSurname(t *testing.T) {
 		if got != want[i] {
 			t.Fatalf("names[%d]=%q, want %q (all=%v)", i, got, want[i], names)
 		}
+	}
+}
+
+func TestNewBrunswickDescriptionFromContext_PrefersSubstantiveMotionText(t *testing.T) {
+	text := `THAT Bill 10 be now read a third time and passed. And the debate being ended, and the question being put on the amendment, it was defeat ed on the following recorded division after leave was granted to dispense with the ten - minute time allotted for the ringing of the bells : RECORDED DIVISION YEAS - 19 Mr. A NAYS - 25 Mr. B`
+	matchStart := strings.Index(text, "YEAS - 19")
+	if matchStart < 0 {
+		t.Fatal("YEAS marker not found in test text")
+	}
+
+	desc := newBrunswickDescriptionFromContext(text, matchStart)
+	if !strings.Contains(strings.ToLower(desc), "bill 10") {
+		t.Fatalf("desc=%q; expected substantive bill context", desc)
+	}
+	if strings.Contains(strings.ToLower(desc), "debate being ended") {
+		t.Fatalf("desc=%q; procedural boilerplate should be stripped", desc)
 	}
 }
