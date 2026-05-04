@@ -87,39 +87,44 @@ func TestCrawlCalendar_ReturnsErrorOnBadServer(t *testing.T) {
 
 // ── crawlBills ────────────────────────────────────────────────────────────────
 
-// billsRSSBody is a minimal RSS feed with one valid bill entry.
-const billsRSSBody = `<?xml version="1.0" encoding="UTF-8"?>
+// billsRSS builds a minimal RSS feed pointing the bill detail link at baseURL
+// so that CrawlBillDetail fetches from the test server (not the real parl.ca).
+func billsRSS(baseURL string) string {
+	return `<?xml version="1.0" encoding="UTF-8"?>
 <rss version="2.0">
   <channel>
     <title>LEGISinfo</title>
     <item>
       <title>Budget Implementation Act</title>
-      <link>https://www.parl.ca/legisinfo/en/bill/45-1/c-47</link>
+      <link>` + baseURL + `/legisinfo/en/bill/45-1/c-47</link>
       <pubDate>Wed, 03 Apr 2024 00:00:00 GMT</pubDate>
     </item>
   </channel>
 </rss>`
+}
 
-// billDetailBody is a minimal bill detail page.
+// billDetailBody is a minimal bill detail page, including a DocumentViewer link
+// so that FullTextURL is populated (mirroring real LEGISinfo pages).
 const billDetailBody = `<html><body>
   <div class="bill-latest-activity">2nd Reading</div>
   <div class="bill-type">Government Bill</div>
+  <a href="/DocumentViewer/en/45-1/bill/C-47/first-reading">View Bill Text</a>
 </body></html>`
 
 func TestCrawlBills_PersistsBill(t *testing.T) {
 	// We need two different responses: RSS feed and detail page.
 	// Use a mux that serves RSS to /rss and the detail page to everything else.
 	mux := http.NewServeMux()
+	srv := httptest.NewServer(mux)
+	defer srv.Close()
 	mux.HandleFunc("/rss", func(w http.ResponseWriter, _ *http.Request) {
 		w.Header().Set("Content-Type", "application/rss+xml")
-		w.Write([]byte(billsRSSBody))
+		w.Write([]byte(billsRSS(srv.URL)))
 	})
 	mux.HandleFunc("/", func(w http.ResponseWriter, _ *http.Request) {
 		w.Header().Set("Content-Type", "text/html")
 		w.Write([]byte(billDetailBody))
 	})
-	srv := httptest.NewServer(mux)
-	defer srv.Close()
 
 	conn := newDB(t)
 	if err := scraper.CrawlBills(conn, srv.Client(), noDelay, srv.URL+"/rss", nil); err != nil {
@@ -144,16 +149,16 @@ func TestCrawlBills_ReturnsErrorOnBadRSS(t *testing.T) {
 
 func TestCrawlBills_EmitsSummaryRequest(t *testing.T) {
 	mux := http.NewServeMux()
+	srv := httptest.NewServer(mux)
+	defer srv.Close()
 	mux.HandleFunc("/rss", func(w http.ResponseWriter, _ *http.Request) {
 		w.Header().Set("Content-Type", "application/rss+xml")
-		w.Write([]byte(billsRSSBody))
+		w.Write([]byte(billsRSS(srv.URL)))
 	})
 	mux.HandleFunc("/", func(w http.ResponseWriter, _ *http.Request) {
 		w.Header().Set("Content-Type", "text/html")
 		w.Write([]byte(billDetailBody))
 	})
-	srv := httptest.NewServer(mux)
-	defer srv.Close()
 
 	conn := newDB(t)
 	ch := make(chan summarizer.BillSummaryRequest, 4)

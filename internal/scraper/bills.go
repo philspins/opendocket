@@ -24,6 +24,7 @@ const (
 	RSSUrl         = "https://www.parl.ca/legisinfo/en/bills/rss"
 	LegisInfoBase  = "https://www.parl.ca/legisinfo/en/bill"
 	DocumentViewer = "https://www.parl.ca/DocumentViewer/en/%d-%d/bill/%s/first-reading"
+	parlBase       = "https://www.parl.ca"
 )
 
 // StageOrder defines the canonical reading order.
@@ -201,13 +202,19 @@ func CrawlBillDetail(billID, url string, client *http.Client) (BillDetail, error
 		}
 	}
 
-	// Full text URL: bill_id = "{parl}-{session}-{billNum}"
-	parl, sess, ok := utils.ParliamentSessionFromBillID(billID)
+	// Full text URL: extracted from the page so we only set it when Parliament
+	// has actually published the document. Speculative construction caused
+	// permanent 404-retry loops for pro-forma bills (S-1, C-1) and bills
+	// whose text hasn't been uploaded yet.
 	var fullTextURL string
-	if ok {
-		billNum := utils.BillNumberFromID(billID)
-		fullTextURL = fmt.Sprintf(DocumentViewer, parl, sess, billNum)
-	}
+	doc.Find("a[href*='DocumentViewer'][href*='first-reading']").Each(func(_ int, s *goquery.Selection) {
+		if href, exists := s.Attr("href"); exists && fullTextURL == "" {
+			if strings.HasPrefix(href, "/") {
+				href = parlBase + href
+			}
+			fullTextURL = href
+		}
+	})
 
 	return BillDetail{
 		CurrentStatus:  currentStatus,

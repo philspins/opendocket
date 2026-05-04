@@ -90,6 +90,14 @@ const sampleBillHTML = `<html><body>
   <div class="bill-profile-sponsor">
     Sponsored by <a href="/Members/en/123006">Jane Doe</a>
   </div>
+  <a href="/DocumentViewer/en/45-1/bill/C-47/first-reading">View Bill Text</a>
+</body></html>`
+
+// proFormaBillHTML has no DocumentViewer link (e.g. S-1 / C-1 procedural bills).
+const proFormaBillHTML = `<html><body>
+  <div class="bill-latest-activity">1st Reading</div>
+  <div class="bill-type">Government Bill</div>
+  <h2 id="FirstReading">First Reading</h2>
 </body></html>`
 
 func TestCrawlBillDetail_ParsesStatus(t *testing.T) {
@@ -134,6 +142,16 @@ func TestCrawlBillDetail_BuildsFullTextURL(t *testing.T) {
 	want := "https://www.parl.ca/DocumentViewer/en/45-1/bill/C-47/first-reading"
 	if detail.FullTextURL != want {
 		t.Errorf("FullTextURL=%q, want %q", detail.FullTextURL, want)
+	}
+}
+
+func TestCrawlBillDetail_NoFullTextURLForProFormaBill(t *testing.T) {
+	srv := newTestServer(proFormaBillHTML)
+	defer srv.Close()
+
+	detail, _ := scraper.CrawlBillDetail("45-1-s-1", srv.URL, srv.Client())
+	if detail.FullTextURL != "" {
+		t.Errorf("expected empty FullTextURL for pro-forma bill, got %q", detail.FullTextURL)
 	}
 }
 

@@ -275,6 +275,8 @@ func executeSessionPlan(conn *sql.DB, client *http.Client, delay time.Duration, 
 		return fmt.Errorf("load provincial members for %s: %w", src.Province, err)
 	}
 
+	wiki := newProvincialWikiLookup(src.Code, client)
+
 	for _, res := range sp.Divisions {
 		billID := provincialBillIDFromDescription(conn, src.Code, sp.Legislature, sp.Session, res.Division.Description)
 		if err := store.UpsertDivision(conn, store.DivisionRecord{
@@ -303,10 +305,15 @@ func executeSessionPlan(conn *sql.DB, client *http.Client, delay time.Duration, 
 		for _, mv := range res.Votes {
 			memberID := resolveProvincialMemberIDFromCandidates(memberCandidates, mv.MemberName)
 			if memberID == "" {
-				if src.Code == "nl" {
+				// Create a provisional member record for unmatched names so votes are not
+				// lost. This handles former members not in the Represent API and new
+				// members that haven't been crawled yet.
+				// AB is excluded: its plain-token PDF parser still emits enough non-name
+				// tokens that auto-creating records would pollute the members table.
+				if src.Code != "ab" {
 					fallbackID := provisionalProvincialMemberID(src.Code, mv.MemberName)
 					if fallbackID != "" {
-						if err := store.UpsertMember(conn, store.MemberRecord{
+						rec := store.MemberRecord{
 							ID:              fallbackID,
 							Name:            mv.MemberName,
 							Province:        src.Province,
@@ -314,7 +321,15 @@ func executeSessionPlan(conn *sql.DB, client *http.Client, delay time.Duration, 
 							Active:          false,
 							LastScraped:     utils.NowISO(),
 							GovernmentLevel: "provincial",
-						}); err == nil {
+						}
+						if wiki != nil {
+							if party, riding, ok := wiki.lookup(mv.MemberName); ok {
+								rec.Party = party
+								rec.Riding = riding
+								clog.Debugf("[wiki] enriched provisional member %q: party=%q riding=%q", mv.MemberName, party, riding)
+							}
+						}
+						if err := store.UpsertMember(conn, rec); err == nil {
 							memberID = fallbackID
 						}
 					}

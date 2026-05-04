@@ -304,6 +304,18 @@ var voteKeywords = map[string]bool{
 	"JOURNALS": true, "JOURNAL": true, "SITTING": true,
 	"RECORDED": true, "CHAIR": true, "SPEAKER": true, "DEPUTY": true,
 	"MINUTES": true, "REPORT": true, "PAGE": true,
+	// Month and day names that appear in AB/MB V&P PDF text blocks.
+	"JANUARY": true, "FEBRUARY": true, "MARCH": true, "APRIL": true,
+	"MAY": true, "JUNE": true, "JULY": true, "AUGUST": true,
+	"SEPTEMBER": true, "OCTOBER": true, "NOVEMBER": true, "DECEMBER": true,
+	"MONDAY": true, "TUESDAY": true, "WEDNESDAY": true, "THURSDAY": true, "FRIDAY": true,
+	// Parliamentary and government titles/abbreviations.
+	"MLA": true, "MLC": true, "PREMIER": true, "MINISTER": true, "MEMBER": true,
+	"GOVERNMENT": true, "OPPOSITION": true, "LEADER": true,
+	// Alberta-specific boilerplate that bleeds into name blocks from PDF extraction.
+	"APPROPRIATION": true, "SUPPLEMENTARY": true, "FISCAL": true,
+	"BUDGET": true, "ESTIMATES": true, "SUPPLY": true, "LOAN": true,
+	"ALBERTA": true, "PROVINCE": true, "PROVINCIAL": true,
 }
 
 var voteNamePrefixTokens = map[string]bool{

@@ -7,8 +7,9 @@ import (
 )
 
 type provincialMemberCandidate struct {
-	ID   string
-	Name string
+	ID     string
+	Name   string
+	Riding string
 }
 
 // NormalisePersonName strips titles and normalises whitespace/punctuation for name matching.
@@ -54,7 +55,7 @@ func commonPrefixLen(a, b string) int {
 
 func loadProvincialMemberCandidates(conn *sql.DB, province string) ([]provincialMemberCandidate, error) {
 	rows, err := conn.Query(`
-		SELECT id, name FROM members
+		SELECT id, name, COALESCE(riding, '') FROM members
 		WHERE government_level = 'provincial' AND lower(province) = lower(?)`, province)
 	if err != nil {
 		return nil, err
@@ -64,7 +65,7 @@ func loadProvincialMemberCandidates(conn *sql.DB, province string) ([]provincial
 	list := make([]provincialMemberCandidate, 0)
 	for rows.Next() {
 		var c provincialMemberCandidate
-		if err := rows.Scan(&c.ID, &c.Name); err != nil {
+		if err := rows.Scan(&c.ID, &c.Name, &c.Riding); err != nil {
 			continue
 		}
 		list = append(list, c)
@@ -84,6 +85,37 @@ func resolveProvincialMemberID(conn *sql.DB, province, sourceName string) (strin
 }
 
 func resolveProvincialMemberIDFromCandidates(list []provincialMemberCandidate, sourceName string) string {
+	// Handle "Surname (Riding)" format used by Ontario V&P documents when multiple
+	// members share a last name (e.g. "Smith (Parry Sound—Muskoka)").
+	if idx := strings.Index(sourceName, "("); idx > 0 {
+		namePart := strings.TrimSpace(sourceName[:idx])
+		ridingPart := ""
+		if end := strings.Index(sourceName[idx:], ")"); end >= 0 {
+			ridingPart = strings.TrimSpace(sourceName[idx+1 : idx+end])
+		}
+		wantLast := normalisePersonName(namePart)
+		wantRiding := strings.ToLower(strings.TrimSpace(ridingPart))
+
+		var matches []provincialMemberCandidate
+		for _, c := range list {
+			nameParts := strings.Fields(normalisePersonName(c.Name))
+			if len(nameParts) > 0 && nameParts[len(nameParts)-1] == wantLast {
+				matches = append(matches, c)
+			}
+		}
+		if len(matches) == 1 {
+			return matches[0].ID
+		}
+		if len(matches) > 1 && wantRiding != "" {
+			for _, c := range matches {
+				cRiding := strings.ToLower(strings.TrimSpace(c.Riding))
+				if cRiding == wantRiding {
+					return c.ID
+				}
+			}
+		}
+	}
+
 	want := normalisePersonName(sourceName)
 	if want == "" {
 		return ""
@@ -96,6 +128,29 @@ func resolveProvincialMemberIDFromCandidates(list []provincialMemberCandidate, s
 	}
 
 	parts := strings.Fields(want)
+
+	// Hyphenated surnames like "Wong-Tam" normalise to two tokens ["wong", "tam"].
+	// Try matching the tail of a candidate's normalised name against all source tokens.
+	if len(parts) >= 2 && len(parts[0]) > 1 {
+		for _, c := range list {
+			nameParts := strings.Fields(normalisePersonName(c.Name))
+			if len(nameParts) < len(parts) {
+				continue
+			}
+			tail := nameParts[len(nameParts)-len(parts):]
+			match := true
+			for i, p := range parts {
+				if tail[i] != p {
+					match = false
+					break
+				}
+			}
+			if match {
+				return c.ID
+			}
+		}
+	}
+
 	if len(parts) == 2 && len(parts[0]) == 1 {
 		initial := parts[0]
 		last := parts[1]

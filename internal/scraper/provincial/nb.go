@@ -312,7 +312,13 @@ func CrawlNewBrunswickVotes(indexURL string, legislature, session int, client *h
 }
 
 // parseNewBrunswickVoteNames extracts names from NB-style vote blocks (Hon. Mr./Ms. prefix format).
-var newBrunswickNameTokenRe = regexp.MustCompile(`(?i)(?:Hon\.\s+)?(?:Mr\.|Ms\.)\s+(?:[A-Z]\.\s+)?[A-Z][A-Za-z\.'\-]+(?:\s*\-\s*[A-Z][A-Za-z\.'\-]+)*`)
+// Title prefix matching is case-sensitive so mid-sentence "ms." artifacts ("ms. On",
+// "ms. Concerning") are not mistaken for name entries. Minimum 3 characters in the
+// name portion avoids matching OCR-split fragments like "Ho" or "Th".
+var newBrunswickNameTokenRe = regexp.MustCompile(`(?:Hon\.\s+)?(?:Mr\.|Ms\.)\s+(?:[A-Z]\.\s+)?[A-Z][A-Za-z\.'\-]{2,}(?:\s*-\s*[A-Z][A-Za-z\.'\-]+)*`)
+
+// nbTitlePrefixes are stripped case-insensitively from each matched token.
+var nbTitlePrefixes = []string{"Hon. Mr. ", "Hon. Ms. ", "Hon. ", "Mr. ", "Ms. ", "Dr. "}
 
 func parseNewBrunswickVoteNames(blockText string) []string {
 	if strings.TrimSpace(blockText) == "" {
@@ -332,10 +338,18 @@ func parseNewBrunswickVoteNames(blockText string) []string {
 			continue
 		}
 		name = strings.ReplaceAll(name, " - ", "-")
-		name = strings.TrimSpace(strings.TrimPrefix(name, "Hon. "))
-		name = strings.TrimSpace(strings.TrimPrefix(name, "Mr. "))
-		name = strings.TrimSpace(strings.TrimPrefix(name, "Ms. "))
-		name = strings.TrimSpace(strings.TrimPrefix(name, "Dr. "))
+		lower := strings.ToLower(name)
+		for _, p := range nbTitlePrefixes {
+			if strings.HasPrefix(lower, strings.ToLower(p)) {
+				name = strings.TrimSpace(name[len(p):])
+				lower = strings.ToLower(name)
+				break
+			}
+		}
+		// Skip procedural non-names that survive prefix stripping.
+		if strings.EqualFold(name, "Speaker") || len(name) < 3 {
+			continue
+		}
 		key := strings.ToLower(name)
 		if seen[key] {
 			continue
