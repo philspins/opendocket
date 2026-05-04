@@ -120,7 +120,7 @@ func CrawlBillsRSS(rssURL string, client *http.Client) ([]BillStub, error) {
 			LastActivityDate: lastActivity,
 		})
 	}
-	clog.Infof("[bills] RSS contained %d bills", len(stubs))
+	clog.Debugf("[bills] RSS contained %d bills", len(stubs))
 	return stubs, nil
 }
 
@@ -256,7 +256,6 @@ func sortStages(in []StageRecord) []StageRecord {
 	}
 	return out
 }
-
 
 // ── Fetching raw HTML (shared helper) ─────────────────────────────────────────
 

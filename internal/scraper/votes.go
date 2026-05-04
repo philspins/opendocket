@@ -279,7 +279,7 @@ func CrawlSittingCalendar(url string, client *http.Client) ([]string, error) {
 	if client == nil {
 		client = utils.NewHTTPClient()
 	}
-	clog.Infof("[votes] fetching sitting calendar: %s", url)
+	clog.Debugf("[votes] fetching sitting calendar: %s", url)
 
 	doc, err := fetchDoc(url, client)
 	if err != nil {
