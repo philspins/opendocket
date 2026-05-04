@@ -60,7 +60,7 @@ func crawlOntarioVPSittingDates(indexURL string, parliament, session int, client
 	if client == nil {
 		client = utils.NewHTTPClient()
 	}
-	clog.Infof("[ontario-votes] fetching session index: %s", indexURL)
+	clog.Debugf("[ontario-votes] fetching session index: %s", indexURL)
 
 	doc, err := fetchDoc(indexURL, client)
 	if err != nil {

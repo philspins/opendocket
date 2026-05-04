@@ -142,7 +142,7 @@ func crawlSaskatchewanMinutesLinks(archiveURL string, client *http.Client) ([]st
 	if client == nil {
 		client = utils.NewHTTPClient()
 	}
-	clog.Infof("[sk-votes] fetching archive: %s", archiveURL)
+	clog.Debugf("[sk-votes] fetching archive: %s", archiveURL)
 
 	doc, err := fetchDoc(archiveURL, client)
 	if err != nil {
