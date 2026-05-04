@@ -425,13 +425,13 @@ func crawlBritishColumbiaVotesFromLIMS(limsBase, parliament, session string, leg
 
 		divs := parseBCVotesDivisions(fileDoc, fileURL, date, "british_columbia", legislature, sessionNum, nextDivNum)
 		if len(divs) > 0 {
-			clog.Infof("[bc-votes] %s: parsed %d divisions", date, len(divs))
+			clog.Debugf("[bc-votes] %s: parsed %d divisions", date, len(divs))
 			results = append(results, divs...)
 			nextDivNum += len(divs)
 		}
 	}
 
-	clog.Infof("[bc-votes] parsed %d divisions from %d files", len(results), len(files))
+	clog.Debugf("[bc-votes] parsed %d divisions from %d files", len(results), len(files))
 	return results, nil
 }
 

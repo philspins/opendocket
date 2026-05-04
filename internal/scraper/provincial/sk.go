@@ -345,6 +345,6 @@ func parseSaskatchewanMinutesDoc(doc *goquery.Document, legislature, session int
 		})
 	})
 
-	clog.Infof("[sk-votes] %s: parsed %d divisions", date, len(results))
+	clog.Debugf("[sk-votes] %s: parsed %d divisions", date, len(results))
 	return results
 }

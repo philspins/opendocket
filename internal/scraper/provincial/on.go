@@ -385,6 +385,6 @@ func parseOntarioVPDoc(doc *goquery.Document, parliament, session int, date stri
 		})
 	})
 
-	clog.Infof("[ontario-votes] %s: parsed %d divisions", date, len(results))
+	clog.Debugf("[ontario-votes] %s: parsed %d divisions", date, len(results))
 	return results
 }

@@ -855,7 +855,7 @@ func crawlPEIVotesFromWorkflow(wdfBase string, year, legislature, session int, c
 		time.Sleep(delay)
 	}
 
-	clog.Infof("[pe-votes] wdf parsed %d divisions from %d journals", len(results), len(rows))
+	clog.Debugf("[pe-votes] wdf parsed %d divisions from %d journals", len(results), len(rows))
 	return results, nil
 }
 
@@ -896,7 +896,7 @@ func crawlPEIVotes(indexURL string, legislature, session int, client *http.Clien
 		parsed := parseGenericProvincialVotesDoc(dayDoc, "pe", "pei", legislature, session, date)
 		results = append(results, parsed...)
 	}
-	clog.Infof("[pe-votes] parsed %d divisions", len(results))
+	clog.Debugf("[pe-votes] parsed %d divisions", len(results))
 	return results, nil
 }
 

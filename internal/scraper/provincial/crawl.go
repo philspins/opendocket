@@ -277,12 +277,6 @@ func executeSessionPlan(conn *sql.DB, client *http.Client, delay time.Duration, 
 
 	for _, res := range sp.Divisions {
 		billID := provincialBillIDFromDescription(conn, src.Code, sp.Legislature, sp.Session, res.Division.Description)
-		description := strings.TrimSpace(res.Division.Description)
-		if billID != "" {
-			if title := billTitleForDivisionDescription(conn, billID); title != "" {
-				description = title
-			}
-		}
 		if err := store.UpsertDivision(conn, store.DivisionRecord{
 			ID:          res.Division.ID,
 			Parliament:  res.Division.Parliament,
@@ -290,7 +284,7 @@ func executeSessionPlan(conn *sql.DB, client *http.Client, delay time.Duration, 
 			Number:      res.Division.Number,
 			Date:        res.Division.Date,
 			BillID:      billID,
-			Description: description,
+			Description: strings.TrimSpace(res.Division.Description),
 			Yeas:        res.Division.Yeas,
 			Nays:        res.Division.Nays,
 			Paired:      res.Division.Paired,

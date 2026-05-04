@@ -113,7 +113,7 @@ func crawlNovaScotiaVotesFromHTML(sessionURL string, legislature, session int, c
 			divNum++
 		}
 	}
-	clog.Infof("[ns-votes] parsed %d divisions from %d html day pages", len(results), len(dayURLs))
+	clog.Debugf("[ns-votes] parsed %d divisions from %d html day pages", len(results), len(dayURLs))
 	return results, len(dayURLs), nil
 }
 
@@ -322,7 +322,7 @@ func crawlNovaScotiaVotesFromPDF(indexURL string, legislature, session int, clie
 			nextDivNum++
 		}
 	}
-	clog.Infof("[ns-votes] parsed %d divisions from %d PDFs", len(results), len(pdfLinks))
+	clog.Debugf("[ns-votes] parsed %d divisions from %d PDFs", len(results), len(pdfLinks))
 	return results, nil
 }
 

@@ -494,7 +494,7 @@ func crawlManitobaVotesFromPDF(indexURL string, legislature, session int, client
 			nextDivNum++
 		}
 	}
-	clog.Infof("[mb-votes] parsed %d divisions from %d PDFs", len(results), len(pdfLinks))
+	clog.Debugf("[mb-votes] parsed %d divisions from %d PDFs", len(results), len(pdfLinks))
 	return results, nil
 }
 

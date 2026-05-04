@@ -189,7 +189,7 @@ func parseNLJournalDivisions(text, detailURL string, legislature, session, start
 			},
 		})
 	}
-	clog.Infof("[nl-votes] %s: parsed %d divisions (outcome-only)", date, len(results))
+	clog.Debugf("[nl-votes] %s: parsed %d divisions (outcome-only)", date, len(results))
 	return results
 }
 
@@ -397,7 +397,7 @@ func crawlNLVotesFromPDF(indexURL string, legislature, session int, client *http
 			nextDivNum++
 		}
 	}
-	clog.Infof("[nl-votes] parsed %d divisions from %d PDFs", len(results), len(pdfLinks))
+	clog.Debugf("[nl-votes] parsed %d divisions from %d PDFs", len(results), len(pdfLinks))
 	return results, nil
 }
 

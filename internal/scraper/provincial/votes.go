@@ -509,7 +509,7 @@ func crawlGenericProvincialVotesWithMatcher(indexURL, provinceCode, chamber stri
 		results = append(results, parsed...)
 	}
 
-	clog.Infof("[%s-votes] parsed %d divisions", provinceCode, len(results))
+	clog.Debugf("[%s-votes] parsed %d divisions", provinceCode, len(results))
 	return results, nil
 }
 

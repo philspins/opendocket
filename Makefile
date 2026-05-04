@@ -48,7 +48,8 @@ test: eol-check
 	go test ./...
 
 eol-check:
-	@files="$$(git ls-files -z | xargs -0 grep -Il $$'\r' || true)"; \
+	@cr="$$(printf '\r')"; \
+	files="$$(git grep -I -z -l "$$cr" -- . | tr '\0' '\n' || true)"; \
 	if [ -n "$$files" ]; then \
 		echo "CRLF line endings detected in tracked files:"; \
 		echo "$$files"; \
@@ -58,7 +59,8 @@ eol-check:
 	echo "LF line-ending check passed."
 
 eol-fix:
-	@git ls-files -z | xargs -0 sed -i 's/\r$$//'
+	@cr="$$(printf '\r')"; \
+	git grep -I -z -l "$$cr" -- . | xargs -0 -r sed -i 's/\r$$//'
 	@echo "Normalized tracked files to LF."
 
 templ:

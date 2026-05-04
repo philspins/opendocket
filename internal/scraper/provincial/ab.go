@@ -408,7 +408,7 @@ func crawlAlbertaVotesFromPDF(indexURL string, legislature, session int, client 
 			nextDivNum++
 		}
 	}
-	clog.Infof("[ab-votes] parsed %d divisions from %d PDFs", len(results), len(pdfLinks))
+	clog.Debugf("[ab-votes] parsed %d divisions from %d PDFs", len(results), len(pdfLinks))
 	return results, nil
 }
 

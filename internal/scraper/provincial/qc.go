@@ -302,7 +302,7 @@ func crawlQuebecVotes(indexURL string, legislature, session int, client *http.Cl
 		})
 	}
 
-	clog.Infof("[qc-votes] parsed %d divisions", len(results))
+	clog.Debugf("[qc-votes] parsed %d divisions", len(results))
 	return results, nil
 }
 

@@ -91,7 +91,7 @@ func crawlNewBrunswickVotesFromPDF(indexURL string, legislature, session int, cl
 		return crawlGenericProvincialVotesWithMatcher(indexURL, "nb", "new_brunswick", legislature, session, client, newBrunswickVotesLinkRe)
 	}
 
-	clog.Infof("[nb-votes] parsed %d divisions from %d PDFs", len(results), len(pdfLinks))
+	clog.Debugf("[nb-votes] parsed %d divisions from %d PDFs", len(results), len(pdfLinks))
 	return results, nil
 }
 

@@ -283,7 +283,8 @@ func newProvinceDB(t *testing.T) *sql.DB {
 
 func TestCrawlProvinceSource_PersistsBillsAndDivisions(t *testing.T) {
 	vpHTML := `<!DOCTYPE html><html><body>
-<p>Bill 12 second reading carried on the following division:</p>
+<p>On the motion that Bill (No. 12) intituled Test Act be now read a second time, the House divided.</p>
+<p>Motion carried on the following division:</p>
 <table class="division">
 <tr><td class="head" colspan="4">Yeas &#8212; 8</td></tr>
 <tr><td>Smith <br>Jones <br></td><td>Brown <br>Davis <br></td><td>Wilson <br>Taylor <br></td><td>Allen <br>Foster <br></td></tr>
@@ -341,6 +342,17 @@ func TestCrawlProvinceSource_PersistsBillsAndDivisions(t *testing.T) {
 	}
 	if divCount == 0 {
 		t.Fatal("expected at least one british_columbia division")
+	}
+
+	var description string
+	if err := conn.QueryRow(`SELECT description FROM divisions WHERE chamber='british_columbia' LIMIT 1`).Scan(&description); err != nil {
+		t.Fatalf("division description query: %v", err)
+	}
+	if !strings.Contains(strings.ToLower(description), "read a second time") {
+		t.Fatalf("expected stored division description to preserve vote context, got %q", description)
+	}
+	if description == "Test Act" {
+		t.Fatalf("expected division description not to be overwritten by bill title, got %q", description)
 	}
 }
 
