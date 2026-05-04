@@ -372,7 +372,7 @@ func billTitleForDivisionDescription(conn *sql.DB, billID string) string {
 // seedMembers is called when fewer than 10 provincial members exist in the DB;
 // pass nil to skip member seeding (e.g. in tests).
 func CrawlProvinceSource(conn *sql.DB, client *http.Client, delay time.Duration, src ProvincialSource, enqueueSummary BillSummaryEnqueue, seedMembers MemberSeeder) error {
-	clog.Infof("[provincial] crawling %s", src.Province)
+	clog.Debugf("[provincial] crawling %s", src.Province)
 	plan, err := BuildCrawlPlan(conn, client, delay, src)
 	if err != nil {
 		return err

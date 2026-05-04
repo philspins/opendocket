@@ -324,6 +324,7 @@ func CrawlSenate(conn *sql.DB, client *http.Client, delay time.Duration, indexUR
 // If codes is non-empty only the named province codes (e.g. "pe", "on") are
 // crawled; otherwise all sources in ProvincialSources run.
 func CrawlProvincial(conn *sql.DB, client *http.Client, delay time.Duration, parallelism int, codes []string, enqueueSummary BillSummaryEnqueue) error {
+	clog.Infof("[provincial] crawling provincial sources")
 	sources := provincial.ProvincialSources
 	if len(codes) > 0 {
 		set := make(map[string]bool, len(codes))

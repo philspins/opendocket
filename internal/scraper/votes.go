@@ -325,7 +325,7 @@ func CrawlSittingCalendar(url string, client *http.Client) ([]string, error) {
 		}
 	}
 
-	clog.Infof("[votes] found %d sitting dates", len(dates))
+	clog.Debugf("[votes] found %d sitting dates", len(dates))
 	return dates, nil
 }
 

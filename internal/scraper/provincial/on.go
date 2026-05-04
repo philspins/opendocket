@@ -103,7 +103,7 @@ func crawlOntarioVPSittingDates(indexURL string, parliament, session int, client
 	}
 	sort.Strings(dates)
 
-	clog.Infof("[ontario-votes] found %d sitting dates with V&P", len(dates))
+	clog.Debugf("[ontario-votes] found %d sitting dates with V&P", len(dates))
 	return dates, nil
 }
 
