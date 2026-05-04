@@ -373,11 +373,114 @@ func billTitleForDivisionDescription(conn *sql.DB, billID string) string {
 // pass nil to skip member seeding (e.g. in tests).
 func CrawlProvinceSource(conn *sql.DB, client *http.Client, delay time.Duration, src ProvincialSource, enqueueSummary BillSummaryEnqueue, seedMembers MemberSeeder) error {
 	clog.Debugf("[provincial] crawling %s", src.Province)
-	plan, err := BuildCrawlPlan(conn, client, delay, src)
-	if err != nil {
-		return err
+	legislature, currentSession := resolveProvincialLegislatureSession(conn, src, client)
+	sessions := sessionsToCrawlForSource(src, currentSession)
+	if len(sessions) == 1 {
+		clog.Debugf("[provincial][%s] detected legislature/session: %d/%d", src.Code, legislature, currentSession)
+	} else {
+		clog.Debugf("[provincial][%s] detected legislature/current session: %d/%d; crawling sessions %v", src.Code, legislature, currentSession, sessions)
 	}
-	return ExecuteCrawlPlan(conn, client, delay, plan, enqueueSummary, seedMembers)
+
+	stats := provincialCrawlStats{}
+	defer func() {
+		if stats.MemberVotesSeen > 0 && stats.MemberVotesUpserted == 0 && stats.MemberVotesUnmatched == stats.MemberVotesSeen {
+			var memberCount int
+			_ = conn.QueryRow(
+				`SELECT COUNT(1) FROM members WHERE government_level='provincial' AND lower(province)=lower(?)`,
+				src.Province).Scan(&memberCount)
+			if memberCount == 0 {
+				clog.Infof("[provincial][%s] hint: 0 provincial members in DB for %q — run --members first to enable vote matching", src.Code, src.Province)
+			}
+		}
+		clog.Infof("[provincial][%s] summary bills=%d/%d divisions=%d/%d votes=%d/%d unmatched=%d errors=%d",
+			src.Code,
+			stats.BillsUpserted, stats.BillsSeen,
+			stats.DivisionsUpserted, stats.DivisionsSeen,
+			stats.MemberVotesUpserted, stats.MemberVotesSeen,
+			stats.MemberVotesUnmatched,
+			stats.Errors,
+		)
+	}()
+
+	allowPreviousSessionFallback := len(sessions) == 1
+	for _, session := range sessions {
+		clog.Debugf("[provincial][%s] crawling legislature/session: %d/%d", src.Code, legislature, session)
+
+		effectiveSession := session
+		bills, berr := crawlBillsForSource(src, legislature, session, client)
+		if allowPreviousSessionFallback && berr == nil && len(bills) == 0 && session > 1 && provinceBillCountInDB(conn, src.Code) == 0 {
+			clog.Infof("[provincial][%s] 0 bills for session %d; retrying with previous session %d to seed DB", src.Code, session, session-1)
+			prevBills, prevErr := crawlBillsForSource(src, legislature, session-1, client)
+			if prevErr == nil && len(prevBills) > 0 {
+				bills = prevBills
+				effectiveSession = session - 1
+			}
+		}
+		if berr != nil {
+			clog.Infof("[provincial] %s bills error: %v", src.Code, berr)
+		}
+
+		if len(bills) > 0 {
+			if err := executeSessionPlan(conn, client, delay, src, SessionPlan{
+				Legislature: legislature,
+				Session:     effectiveSession,
+				Bills:       bills,
+			}, enqueueSummary, seedMembers, &stats); err != nil {
+				return err
+			}
+		}
+
+		var divs []ProvincialDivisionResult
+		switch src.Special {
+		case "on":
+			dates, err := CrawlOntarioVPSittingDates(src.VotesURL, legislature, effectiveSession, client)
+			if err != nil {
+				return fmt.Errorf("ontario dates: %w", err)
+			}
+			ontarioDivs, _ := crawlOntarioDaysConcurrently(dates, legislature, effectiveSession, client, delay)
+			divs = ontarioDivs
+		case "sk":
+			links, err := CrawlSaskatchewanMinutesLinks(src.VotesURL, client)
+			if err != nil {
+				clog.Infof("[provincial] sk: cannot discover minutes links (archive URL may have changed): %v", err)
+			} else {
+				skDivs, _ := crawlSaskatchewanMinutesConcurrently(links, legislature, effectiveSession, client, delay)
+				divs = skDivs
+			}
+		default:
+			parsed, err := crawlDivisionsForSource(src, legislature, effectiveSession, client)
+			if err != nil {
+				return err
+			}
+			if allowPreviousSessionFallback && len(parsed) == 0 && effectiveSession > 1 && provinceDivisionCountInDB(conn, src.Code) == 0 {
+				clog.Infof("[provincial][%s] 0 divisions for session %d; retrying with previous session %d to seed DB", src.Code, effectiveSession, effectiveSession-1)
+				prevParsed, prevErr := crawlDivisionsForSource(src, legislature, effectiveSession-1, client)
+				if prevErr == nil && len(prevParsed) > 0 {
+					parsed = prevParsed
+				}
+			}
+			divs = parsed
+		}
+
+		if len(divs) > 0 {
+			if err := executeSessionPlan(conn, client, delay, src, SessionPlan{
+				Legislature: legislature,
+				Session:     effectiveSession,
+				Divisions:   divs,
+			}, enqueueSummary, seedMembers, &stats); err != nil {
+				return err
+			}
+		}
+
+		// Ensure 0-result sessions still contribute to seen counters and summary shape.
+		if len(bills) == 0 && len(divs) == 0 {
+			if err := executeSessionPlan(conn, client, delay, src, SessionPlan{Legislature: legislature, Session: effectiveSession}, enqueueSummary, seedMembers, &stats); err != nil {
+				return err
+			}
+		}
+	}
+
+	return nil
 }
 
 func sessionsToCrawlForSource(src ProvincialSource, currentSession int) []int {

@@ -44,7 +44,9 @@ const (
 	peiCaptchaSignature    = "captcha.perfdrive.com"
 	peiBotManagerSignature = "perfdrive.com"
 
-	peiDefaultDelay = 1 * time.Second
+	// Keep PE-specific internal delay disabled so bills/votes can be handed off
+	// to summarization as quickly as possible; top-level crawler delay still applies.
+	peiDefaultDelay = 0 * time.Second
 )
 
 const peiGeneralAssembly = 67
