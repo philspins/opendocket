@@ -651,7 +651,7 @@ func SummarizeBillsFromChannel(ctx context.Context, db *sql.DB, requests <-chan 
 					// The bill text doesn't exist at the stored URL (e.g. pro-forma
 					// Senate bills like S-1).  Clear full_text_url so we don't
 					// retry on every future crawl run.
-					clog.Infof("[summarizer] bill text unavailable (404) for %q; clearing full_text_url", req.BillID)
+					clog.Infof("[summarizer] bill text unavailable (404) for %q at %q; clearing full_text_url", req.BillID, req.FullTextURL)
 					db.ExecContext(ctx, `UPDATE bills SET full_text_url = '' WHERE id = ?`, req.BillID)
 				} else {
 					clog.Infof("[summarizer] fetch bill text %q: %v", req.BillID, err)
