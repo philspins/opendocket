@@ -648,7 +648,7 @@ func SummarizeBillsFromChannel(ctx context.Context, db *sql.DB, requests <-chan 
 				continue
 			}
 			if !needed {
-				clog.Infof("[summarizer] skip unchanged bill %q", req.BillID)
+				clog.Debugf("[summarizer] skip unchanged bill %q", req.BillID)
 				continue
 			}
 
@@ -659,7 +659,7 @@ func SummarizeBillsFromChannel(ctx context.Context, db *sql.DB, requests <-chan 
 				continue
 			}
 			if summary == nil {
-				clog.Infof("[summarizer] skip unchanged bill %q", req.BillID)
+				clog.Debugf("[summarizer] skip unchanged bill %q", req.BillID)
 				continue
 			}
 
