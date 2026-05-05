@@ -401,7 +401,7 @@ func dedupeBillDetailDivisions(divs []store.DivisionRow) []store.DivisionRow {
 	seen := make(map[string]struct{}, len(divs))
 	out := make([]store.DivisionRow, 0, len(divs))
 	for _, d := range divs {
-		key := strings.TrimSpace(d.Date) + "|" + strings.ToLower(strings.Join(strings.Fields(d.Description), " "))
+		key := d.ID
 		if _, ok := seen[key]; ok {
 			continue
 		}

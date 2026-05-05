@@ -1122,25 +1122,34 @@ func TestRecentBillVotes_DeduplicatesAndFallsBackToNonBillDivisions(t *testing.T
 	}
 }
 
-func TestDedupeBillDetailDivisions_NormalizesSameDayDuplicates(t *testing.T) {
+func TestDedupeBillDetailDivisions_DeduplicatesByID(t *testing.T) {
+	// Two rows with the same ID (can happen if a query returns duplicate rows)
+	// must be collapsed. Rows with distinct IDs must all be kept, even when
+	// their date and description look equivalent after normalisation.
 	got := dedupeBillDetailDivisions([]store.DivisionRow{
 		{ID: "d-1", Date: "2026-04-28", Description: "Miscellaneous Statutes Amendment Act, 2026"},
+		{ID: "d-1", Date: "2026-04-28", Description: "Miscellaneous Statutes Amendment Act, 2026"}, // duplicate ID
 		{ID: "d-2", Date: "2026-04-28", Description: "  miscellaneous statutes amendment act,  2026  "},
 		{ID: "d-3", Date: "2026-04-28", Description: "Miscellaneous Statutes Amendment Act, 2026 at third reading"},
 		{ID: "d-4", Date: "2026-04-29", Description: "Miscellaneous Statutes Amendment Act, 2026"},
 	})
 
-	if len(got) != 3 {
-		t.Fatalf("len=%d want 3", len(got))
+	// d-1 appears twice but should only be kept once; the other three distinct
+	// IDs are all kept regardless of how similar their descriptions are.
+	if len(got) != 4 {
+		t.Fatalf("len=%d want 4", len(got))
 	}
 	if got[0].ID != "d-1" {
 		t.Fatalf("first kept id=%q want d-1", got[0].ID)
 	}
-	if got[1].ID != "d-3" {
-		t.Fatalf("second kept id=%q want d-3", got[1].ID)
+	if got[1].ID != "d-2" {
+		t.Fatalf("second kept id=%q want d-2", got[1].ID)
 	}
-	if got[2].ID != "d-4" {
-		t.Fatalf("third kept id=%q want d-4", got[2].ID)
+	if got[2].ID != "d-3" {
+		t.Fatalf("third kept id=%q want d-3", got[2].ID)
+	}
+	if got[3].ID != "d-4" {
+		t.Fatalf("fourth kept id=%q want d-4", got[3].ID)
 	}
 }
 
