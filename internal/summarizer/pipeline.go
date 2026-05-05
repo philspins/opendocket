@@ -61,28 +61,48 @@ var (
 
 type tokenBucket struct {
 	tokens chan struct{}
+	stop   chan struct{}
+	once   sync.Once
 }
 
 func newTokenBucket(rate int) *tokenBucket {
 	if rate <= 0 {
 		return nil
 	}
-	bucket := &tokenBucket{tokens: make(chan struct{}, rate)}
-	for i := 0; i < rate; i++ {
-		bucket.tokens <- struct{}{}
+	bucket := &tokenBucket{
+		tokens: make(chan struct{}, rate),
+		stop:   make(chan struct{}),
 	}
+	// Seed with one token so the very first request proceeds immediately,
+	// then let the ticker refill at the configured rate. Pre-filling all
+	// rate tokens (the previous behaviour) caused a burst equal to the
+	// full capacity on startup, defeating the purpose of rate limiting.
+	bucket.tokens <- struct{}{}
 	interval := time.Minute / time.Duration(rate)
 	go func() {
 		ticker := time.NewTicker(interval)
 		defer ticker.Stop()
-		for range ticker.C {
+		for {
 			select {
-			case bucket.tokens <- struct{}{}:
-			default:
+			case <-bucket.stop:
+				return
+			case <-ticker.C:
+				select {
+				case bucket.tokens <- struct{}{}:
+				default:
+				}
 			}
 		}
 	}()
 	return bucket
+}
+
+// Stop terminates the background refill goroutine. Safe to call more than once.
+func (bucket *tokenBucket) Stop() {
+	if bucket == nil {
+		return
+	}
+	bucket.once.Do(func() { close(bucket.stop) })
 }
 
 func (bucket *tokenBucket) wait(ctx context.Context) error {
