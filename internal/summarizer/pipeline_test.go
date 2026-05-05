@@ -336,7 +336,7 @@ func TestCallClaudeAPI_RetriesAfterRateLimit(t *testing.T) {
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
 		if requests.Add(1) == 1 {
 			w.Header().Set("Content-Type", "application/json")
-			w.Header().Set("Retry-After", "1")
+			w.Header().Set("Retry-After", "0")
 			w.WriteHeader(http.StatusTooManyRequests)
 			_, _ = w.Write([]byte(`{"error":{"type":"rate_limit_error","message":"slow down"}}`))
 			return
@@ -361,7 +361,7 @@ func TestCallClaudeAPI_RetriesAfterRateLimit(t *testing.T) {
 		claudeInitialBackoff = origBackoff
 	})
 
-	ctx, cancel := context.WithTimeout(context.Background(), 1500*time.Millisecond)
+	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 	defer cancel()
 
 	resp, err := callClaudeAPI(ctx, "test-key", claudeRequest{

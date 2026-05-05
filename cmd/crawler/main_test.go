@@ -261,12 +261,23 @@ func TestCrawlMembers_FetchesProvincialSetsConcurrently(t *testing.T) {
 	original := cloneProvincialAPIs(scraper.ProvincialLegislatureAPIs)
 	t.Cleanup(func() { scraper.ProvincialLegislatureAPIs = original })
 
-	const perSetLatency = 300 * time.Millisecond
+	// Track how many handlers are executing simultaneously.
+	var inFlight atomic.Int32
+	var maxConcurrent atomic.Int32
 
 	provServer := func(name, id string) *httptest.Server {
 		body := fmt.Sprintf(`{"objects":[{"name":%q,"party_name":"Party","district_name":"District","email":"%s@example.test","url":"https://example.test/members/%s","offices":[],"extra":{}}],"meta":{"next":null}}`, name, id, id)
 		return httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
-			time.Sleep(perSetLatency)
+			cur := inFlight.Add(1)
+			defer inFlight.Add(-1)
+			for {
+				prev := maxConcurrent.Load()
+				if cur <= prev || maxConcurrent.CompareAndSwap(prev, cur) {
+					break
+				}
+			}
+			// Small sleep so that all three handlers overlap in time.
+			time.Sleep(20 * time.Millisecond)
 			w.Header().Set("Content-Type", "application/json; charset=utf-8")
 			_, _ = w.Write([]byte(body))
 		}))
@@ -289,15 +300,14 @@ func TestCrawlMembers_FetchesProvincialSetsConcurrently(t *testing.T) {
 	defer federal.Close()
 
 	conn := newDB(t)
-	start := time.Now()
 	if err := scraper.CrawlMembers(conn, federal.Client(), noDelay, federal.URL); err != nil {
 		t.Fatalf("crawlMembers: %v", err)
 	}
-	elapsed := time.Since(start)
 
-	// Serial behavior would be ~3*300ms plus overhead; concurrent should be near one window.
-	if elapsed >= 650*time.Millisecond {
-		t.Fatalf("crawlMembers took %v; expected provincial API fetches to run concurrently", elapsed)
+	// At least two provincial servers must have been in-flight simultaneously
+	// to confirm concurrent fetching. Serial execution would never exceed 1.
+	if got := maxConcurrent.Load(); got < 2 {
+		t.Fatalf("max concurrent provincial requests = %d, want ≥ 2 (expected concurrent fetching)", got)
 	}
 }
 
