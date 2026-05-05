@@ -530,6 +530,12 @@ Respond with only valid JSON, no markdown or extra text.`, billID, billTitle, bi
 	return &result, nil
 }
 
+// shouldRetryHTTPStatus reports whether the given HTTP status code warrants an
+// automatic retry. Rate-limit (429) and server errors (5xx) are both transient.
+func shouldRetryHTTPStatus(code int) bool {
+	return code == http.StatusTooManyRequests || code >= http.StatusInternalServerError
+}
+
 func callClaudeAPI(ctx context.Context, apiKey string, req claudeRequest) (*claudeResponse, error) {
 	body, err := json.Marshal(req)
 	if err != nil {
@@ -577,29 +583,19 @@ func callClaudeAPI(ctx context.Context, apiKey string, req claudeRequest) (*clau
 			return &apiResp, nil
 		}
 
+		// Try to parse a structured error from the response body; used for
+		// both the retry decision and the terminal error message.
 		var apiErr claudeResponse
-		if err := json.Unmarshal(respBody, &apiErr); err == nil && apiErr.Error != nil {
-			if resp.StatusCode == http.StatusTooManyRequests || resp.StatusCode >= http.StatusInternalServerError {
-				delay := parseRetryAfter(resp.Header.Get("Retry-After"), time.Now().UTC())
-				if delay <= 0 {
-					delay = backoff
-				}
-				if resp.StatusCode == http.StatusTooManyRequests {
-					clog.Infof("[summarizer] claude rate limited; retrying in %s (attempt %d/%d)", delay, attempt, claudeMaxAttempts)
-				}
-				if attempt == claudeMaxAttempts {
-					return nil, fmt.Errorf("api returned %d (%s): %s", resp.StatusCode, apiErr.Error.Type, apiErr.Error.Message)
-				}
-				if waitErr := waitForRetry(ctx, delay); waitErr != nil {
-					return nil, waitErr
-				}
-				backoff *= 2
-				continue
+		hasAPIErr := json.Unmarshal(respBody, &apiErr) == nil && apiErr.Error != nil
+
+		errMsg := func() string {
+			if hasAPIErr {
+				return fmt.Sprintf("api returned %d (%s): %s", resp.StatusCode, apiErr.Error.Type, apiErr.Error.Message)
 			}
-			return nil, fmt.Errorf("api returned %d (%s): %s", resp.StatusCode, apiErr.Error.Type, apiErr.Error.Message)
+			return fmt.Sprintf("api returned %d: %s", resp.StatusCode, strings.TrimSpace(string(respBody)))
 		}
 
-		if resp.StatusCode == http.StatusTooManyRequests || resp.StatusCode >= http.StatusInternalServerError {
+		if shouldRetryHTTPStatus(resp.StatusCode) {
 			delay := parseRetryAfter(resp.Header.Get("Retry-After"), time.Now().UTC())
 			if delay <= 0 {
 				delay = backoff
@@ -608,7 +604,7 @@ func callClaudeAPI(ctx context.Context, apiKey string, req claudeRequest) (*clau
 				clog.Infof("[summarizer] claude rate limited; retrying in %s (attempt %d/%d)", delay, attempt, claudeMaxAttempts)
 			}
 			if attempt == claudeMaxAttempts {
-				return nil, fmt.Errorf("api returned %d: %s", resp.StatusCode, strings.TrimSpace(string(respBody)))
+				return nil, fmt.Errorf("%s", errMsg())
 			}
 			if waitErr := waitForRetry(ctx, delay); waitErr != nil {
 				return nil, waitErr
@@ -617,7 +613,7 @@ func callClaudeAPI(ctx context.Context, apiKey string, req claudeRequest) (*clau
 			continue
 		}
 
-		return nil, fmt.Errorf("api returned %d: %s", resp.StatusCode, strings.TrimSpace(string(respBody)))
+		return nil, fmt.Errorf("%s", errMsg())
 	}
 
 	return nil, fmt.Errorf("claude api retry loop exhausted")
