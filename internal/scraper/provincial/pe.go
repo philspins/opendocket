@@ -91,6 +91,125 @@ func wdfCollectRows(nodes []wdfNode) []wdfNode {
 	return out
 }
 
+// peBillIDPartsRe matches a PEI bill ID of the form "pe-<legislature>-<session>-<number>".
+var peBillIDPartsRe = regexp.MustCompile(`(?i)^pe-(\d+)-(\d+)-([a-z0-9-]+)$`)
+
+// wdfFindBillDocID searches the WDF response tree for the doc-ID associated with
+// a given bill number. The bill number match is case-insensitive.
+func wdfFindBillDocID(nodes []wdfNode, wantedBillNumber string) string {
+	wantedBillNumber = strings.ToUpper(strings.TrimSpace(wantedBillNumber))
+	for _, row := range wdfCollectRows(nodes) {
+		if len(row.Children) < 2 || len(row.Children[0].Children) == 0 {
+			continue
+		}
+		var number string
+		var cd wdfCellData
+		if json.Unmarshal(row.Children[1].Data, &cd) == nil && cd.Text != nil {
+			number = strings.ToUpper(strings.TrimSpace(*cd.Text))
+		}
+		if number == "" || number != wantedBillNumber {
+			continue
+		}
+		linkNode := row.Children[0].Children[0]
+		if linkNode.Type != "LinkV2" {
+			continue
+		}
+		var ld wdfLinkData
+		if json.Unmarshal(linkNode.Data, &ld) != nil {
+			continue
+		}
+		if id := strings.TrimSpace(ld.QueryParams["id"]); id != "" {
+			return id
+		}
+	}
+	return ""
+}
+
+// IsPEExpiredLinkResponse returns true when the HTTP response indicates that a
+// PEI bill-document link has expired. This happens when the docs.assembly.pe.ca
+// server returns HTTP 500 with an "Error retrieving file / link is expired" body.
+func IsPEExpiredLinkResponse(rawURL string, statusCode int, snippet string) bool {
+	if statusCode != http.StatusInternalServerError {
+		return false
+	}
+	u, err := neturl.Parse(rawURL)
+	if err != nil {
+		return false
+	}
+	host := strings.ToLower(u.Host)
+	if host != "docs.assembly.pe.ca" && !strings.HasPrefix(host, "127.0.0.1") && !strings.HasPrefix(host, "localhost") {
+		return false
+	}
+	if !strings.Contains(strings.ToLower(u.Path), "/download/dms") {
+		return false
+	}
+	lower := strings.ToLower(snippet)
+	return strings.Contains(lower, "error retrieving file") && strings.Contains(lower, "link is expired")
+}
+
+// ResolveFreshPEBillTextURL contacts the PEI WDF workflow API to look up a new
+// download URL for a bill whose stored URL has expired. billID must be a PEI bill
+// ID of the form "pe-<legislature>-<session>-<billNumber>". wdfBase is the root
+// of the WDF API server (e.g. "https://wdf.princeedwardisland.ca"); pass a local
+// test-server URL in tests to avoid network calls.
+func ResolveFreshPEBillTextURL(ctx context.Context, billID, wdfBase string) (string, error) {
+	if strings.TrimSpace(billID) == "" {
+		return "", fmt.Errorf("empty bill id")
+	}
+	matches := peBillIDPartsRe.FindStringSubmatch(strings.TrimSpace(billID))
+	if len(matches) != 4 {
+		return "", fmt.Errorf("not a PE bill id: %s", billID)
+	}
+	legislature, err := strconv.Atoi(matches[1])
+	if err != nil {
+		return "", err
+	}
+	session, err := strconv.Atoi(matches[2])
+	if err != nil {
+		return "", err
+	}
+	billNumber := strings.ToUpper(strings.TrimSpace(matches[3]))
+	if billNumber == "" {
+		return "", fmt.Errorf("missing bill number")
+	}
+
+	searchParams := map[string]string{
+		"search_bills":     "true",
+		"wdf_url_query":    "true",
+		"search":           "assembly",
+		"general_assembly": strconv.Itoa(legislature),
+		"session":          strconv.Itoa(session),
+	}
+	searchBody, err := postPEIWorkflowHTTP(ctx, wdfBase, peiWorkflowBills, peiWDFActivityBills, searchParams, nil, 0)
+	if err != nil {
+		return "", err
+	}
+	if searchBody == nil {
+		return "", fmt.Errorf("PE WDF search returned no data for %s", billID)
+	}
+	var searchResp wdfTreeResponse
+	if err := json.Unmarshal(searchBody, &searchResp); err != nil {
+		return "", err
+	}
+	billDocID := wdfFindBillDocID(searchResp.Data, billNumber)
+	if billDocID == "" {
+		return "", fmt.Errorf("bill doc id not found for %s", billID)
+	}
+
+	viewBody, err := postPEIWorkflowHTTP(ctx, wdfBase, peiWorkflowBills, peiWDFActivityBillView, map[string]string{"id": billDocID}, nil, 0)
+	if err != nil {
+		return "", err
+	}
+	if viewBody == nil {
+		return "", fmt.Errorf("PE WDF view returned no data for %s", billID)
+	}
+	var viewResp wdfTreeResponse
+	if err := json.Unmarshal(viewBody, &viewResp); err != nil {
+		return "", err
+	}
+	return firstWDFLinkHref(viewResp.Data), nil
+}
+
 // ── PEI WDF HTTP helpers ──────────────────────────────────────────────────────
 
 func isPEICaptchaBody(body []byte) bool {

@@ -26,6 +26,7 @@ import (
 	"github.com/PuerkitoBio/goquery"
 	"github.com/pdfcpu/pdfcpu/pkg/api"
 	"github.com/philspins/opendocket/internal/clog"
+	"github.com/philspins/opendocket/internal/scraper/provincial"
 	"github.com/philspins/opendocket/internal/utils"
 	"golang.org/x/net/html"
 )
@@ -47,8 +48,10 @@ const (
 var (
 	anthropicMessagesURL = claudeURL
 	claudeInitialBackoff = 5 * time.Second
-	peiWDFWorkflowURL    = "https://wdf.princeedwardisland.ca/legislative-assembly/services/api/workflow"
-	claudeHTTPClient     = func() *http.Client {
+	// peiWDFAPIBase is the root of the PEI WDF API. Overridden in tests to
+	// point at a local server.
+	peiWDFAPIBase    = "https://wdf.princeedwardisland.ca"
+	claudeHTTPClient = func() *http.Client {
 		client := utils.NewHTTPClient()
 		client.Timeout = 60 * time.Second
 		return client
@@ -353,27 +356,6 @@ type BillSummaryRequest struct {
 	FullTextURL      string
 	LastActivityDate string
 }
-
-type peWDFNode struct {
-	Type     string          `json:"type"`
-	Data     json.RawMessage `json:"data"`
-	Children []peWDFNode     `json:"children"`
-}
-
-type peWDFTreeResponse struct {
-	Data []peWDFNode `json:"data"`
-}
-
-type peWDFCellData struct {
-	Text *string `json:"text"`
-}
-
-type peWDFLinkData struct {
-	Href        *string           `json:"href"`
-	QueryParams map[string]string `json:"queryParams"`
-}
-
-var peBillIDPartsRe = regexp.MustCompile(`(?i)^pe-(\d+)-(\d+)-([a-z0-9-]+)$`)
 
 // shouldSummarizeBill returns true when a bill needs a fresh AI summary.
 // Rules:
@@ -806,8 +788,8 @@ func fetchBillTextWithFallback(ctx context.Context, billID, url string, allowPER
 	if resp.StatusCode != http.StatusOK {
 		preview, _ := io.ReadAll(io.LimitReader(resp.Body, 512))
 		snippet := strings.TrimSpace(collapseWhitespace(string(preview)))
-		if allowPERefresh && isPEExpiredLinkResponse(url, resp.StatusCode, snippet) {
-			if freshURL, ferr := resolveFreshPEBillTextURL(ctx, billID); ferr == nil && strings.TrimSpace(freshURL) != "" && freshURL != url {
+		if allowPERefresh && provincial.IsPEExpiredLinkResponse(url, resp.StatusCode, snippet) {
+			if freshURL, ferr := provincial.ResolveFreshPEBillTextURL(ctx, billID, peiWDFAPIBase); ferr == nil && strings.TrimSpace(freshURL) != "" && freshURL != url {
 				clog.Infof("[summarizer] refreshed expired PE bill link for %q", billID)
 				return fetchBillTextWithFallback(ctx, billID, freshURL, false)
 			}
@@ -863,181 +845,6 @@ func fetchBillTextWithFallback(ctx context.Context, billID, url string, allowPER
 	text = collapseWhitespace(text)
 
 	return strings.TrimSpace(text), nil
-}
-
-func isPEExpiredLinkResponse(rawURL string, statusCode int, snippet string) bool {
-	if statusCode != http.StatusInternalServerError {
-		return false
-	}
-	u, err := neturl.Parse(rawURL)
-	if err != nil {
-		return false
-	}
-	host := strings.ToLower(u.Host)
-	if host != "docs.assembly.pe.ca" && !strings.HasPrefix(host, "127.0.0.1") && !strings.HasPrefix(host, "localhost") {
-		return false
-	}
-	if !strings.Contains(strings.ToLower(u.Path), "/download/dms") {
-		return false
-	}
-	lower := strings.ToLower(snippet)
-	return strings.Contains(lower, "error retrieving file") && strings.Contains(lower, "link is expired")
-}
-
-func resolveFreshPEBillTextURL(ctx context.Context, billID string) (string, error) {
-	if strings.TrimSpace(billID) == "" {
-		return "", fmt.Errorf("empty bill id")
-	}
-	matches := peBillIDPartsRe.FindStringSubmatch(strings.TrimSpace(billID))
-	if len(matches) != 4 {
-		return "", fmt.Errorf("not a PE bill id: %s", billID)
-	}
-	legislature, err := strconv.Atoi(matches[1])
-	if err != nil {
-		return "", err
-	}
-	session, err := strconv.Atoi(matches[2])
-	if err != nil {
-		return "", err
-	}
-	billNumber := strings.ToUpper(strings.TrimSpace(matches[3]))
-	if billNumber == "" {
-		return "", fmt.Errorf("missing bill number")
-	}
-
-	searchPayload := map[string]interface{}{
-		"appName":     "LegislativeAssemblyBillProgress",
-		"featureName": "LegislativeAssemblyBillProgress",
-		"metaVars":    map[string]interface{}{"service_id": nil, "save_location": nil},
-		"queryVars": map[string]interface{}{
-			"service":         "LegislativeAssemblyBillProgress",
-			"activity":        "LegislativeAssemblyBillSearch",
-			"search_bills":    "true",
-			"wdf_url_query":   "true",
-			"search":          "assembly",
-			"general_assembly": strconv.Itoa(legislature),
-			"session":         strconv.Itoa(session),
-		},
-		"queryName": "LegislativeAssemblyBillSearch",
-	}
-
-	body, err := postPEWorkflow(ctx, searchPayload)
-	if err != nil {
-		return "", err
-	}
-	var searchResp peWDFTreeResponse
-	if err := json.Unmarshal(body, &searchResp); err != nil {
-		return "", err
-	}
-	billDocID := findPEBillDocID(searchResp.Data, billNumber)
-	if billDocID == "" {
-		return "", fmt.Errorf("bill doc id not found for %s", billID)
-	}
-
-	viewPayload := map[string]interface{}{
-		"appName":     "LegislativeAssemblyBillProgress",
-		"featureName": "LegislativeAssemblyBillProgress",
-		"metaVars":    map[string]interface{}{"service_id": nil, "save_location": nil},
-		"queryVars": map[string]interface{}{
-			"service":  "LegislativeAssemblyBillProgress",
-			"activity": "LegislativeAssemblyBillView",
-			"id":       billDocID,
-		},
-		"queryName": "LegislativeAssemblyBillView",
-	}
-
-	body, err = postPEWorkflow(ctx, viewPayload)
-	if err != nil {
-		return "", err
-	}
-	var viewResp peWDFTreeResponse
-	if err := json.Unmarshal(body, &viewResp); err != nil {
-		return "", err
-	}
-	return firstPEHref(viewResp.Data), nil
-}
-
-func postPEWorkflow(ctx context.Context, payload map[string]interface{}) ([]byte, error) {
-	raw, err := json.Marshal(payload)
-	if err != nil {
-		return nil, err
-	}
-	req, err := http.NewRequestWithContext(ctx, http.MethodPost, peiWDFWorkflowURL, bytes.NewReader(raw))
-	if err != nil {
-		return nil, err
-	}
-	req.Header.Set("Content-Type", "application/json")
-	req.Header.Set("Accept", "application/json")
-	req.Header.Set("Client-Show-Status", "true")
-
-	client := utils.NewHTTPClient()
-	resp, err := client.Do(req)
-	if err != nil {
-		return nil, err
-	}
-	defer resp.Body.Close()
-	if resp.StatusCode != http.StatusOK {
-		preview, _ := io.ReadAll(io.LimitReader(resp.Body, 512))
-		return nil, fmt.Errorf("PE workflow http %d: %s", resp.StatusCode, strings.TrimSpace(collapseWhitespace(string(preview))))
-	}
-	return io.ReadAll(io.LimitReader(resp.Body, 2<<20))
-}
-
-func collectPEWDFRows(nodes []peWDFNode) []peWDFNode {
-	rows := make([]peWDFNode, 0)
-	for _, n := range nodes {
-		if n.Type == "TableV2Row" {
-			rows = append(rows, n)
-		}
-		rows = append(rows, collectPEWDFRows(n.Children)...)
-	}
-	return rows
-}
-
-func firstPEHref(nodes []peWDFNode) string {
-	for _, node := range nodes {
-		if node.Type == "LinkV2" {
-			var ld peWDFLinkData
-			if json.Unmarshal(node.Data, &ld) == nil && ld.Href != nil {
-				if href := strings.TrimSpace(*ld.Href); href != "" {
-					return href
-				}
-			}
-		}
-		if href := firstPEHref(node.Children); href != "" {
-			return href
-		}
-	}
-	return ""
-}
-
-func findPEBillDocID(nodes []peWDFNode, wantedBillNumber string) string {
-	wantedBillNumber = strings.ToUpper(strings.TrimSpace(wantedBillNumber))
-	for _, row := range collectPEWDFRows(nodes) {
-		if len(row.Children) < 2 || len(row.Children[0].Children) == 0 {
-			continue
-		}
-		var number string
-		var cd peWDFCellData
-		if json.Unmarshal(row.Children[1].Data, &cd) == nil && cd.Text != nil {
-			number = strings.ToUpper(strings.TrimSpace(*cd.Text))
-		}
-		if number == "" || number != wantedBillNumber {
-			continue
-		}
-		linkNode := row.Children[0].Children[0]
-		if linkNode.Type != "LinkV2" {
-			continue
-		}
-		var ld peWDFLinkData
-		if json.Unmarshal(linkNode.Data, &ld) != nil {
-			continue
-		}
-		if id := strings.TrimSpace(ld.QueryParams["id"]); id != "" {
-			return id
-		}
-	}
-	return ""
 }
 
 // extractTextWithTokenizer extracts visible text from HTML using a streaming

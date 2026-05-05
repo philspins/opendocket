@@ -307,9 +307,9 @@ func TestFetchBillText_PEExpiredLinkRefreshesViaWDF(t *testing.T) {
 	}))
 	defer wdfSrv.Close()
 
-	origWDF := peiWDFWorkflowURL
-	peiWDFWorkflowURL = wdfSrv.URL
-	t.Cleanup(func() { peiWDFWorkflowURL = origWDF })
+	origBase := peiWDFAPIBase
+	peiWDFAPIBase = wdfSrv.URL
+	t.Cleanup(func() { peiWDFAPIBase = origBase })
 
 	text, err := fetchBillText(context.Background(), "pe-67-2-34", fileSrv.URL+"/download/dms?objectId=expired&fileName=bill-34.pdf")
 	if err != nil {

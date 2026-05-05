@@ -115,16 +115,6 @@ func CrawlMembers(conn *sql.DB, client *http.Client, delay time.Duration, apiURL
 					provProfiles = nbProfiles
 				}
 			}
-			// Always augment NB with former members so votes from previous
-			// sessions can be linked to the correct person.
-			if setSlug == "nb-legislature" {
-				formerProfiles, ferr := CrawlNewBrunswickFormerMembersFromWebsite("", client)
-				if ferr != nil {
-					clog.Debugf("[members] nb-legislature former members: %v", ferr)
-				} else {
-					provProfiles = append(provProfiles, formerProfiles...)
-				}
-			}
 			results <- provincialMembersResult{setSlug: setSlug, profiles: provProfiles}
 			return nil
 		})
@@ -402,14 +392,6 @@ func ensureProvincialMembersForSource(conn *sql.DB, client *http.Client, delay t
 		profiles, err = CrawlNewBrunswickMembersFromWebsite("", client)
 		if err != nil {
 			return err
-		}
-	}
-	if setSlug == "nb-legislature" {
-		formerProfiles, ferr := CrawlNewBrunswickFormerMembersFromWebsite("", client)
-		if ferr != nil {
-			clog.Debugf("[members] nb-legislature former members: %v", ferr)
-		} else {
-			profiles = append(profiles, formerProfiles...)
 		}
 	}
 	if len(profiles) == 0 {
