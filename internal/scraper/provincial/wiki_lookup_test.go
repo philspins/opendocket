@@ -332,3 +332,37 @@ func TestWikiLookup_RidingFallsBackToFederalRow(t *testing.T) {
 		t.Errorf("riding=%q, want %q (should fall back to federal row)", riding, "Scarborough Southwest")
 	}
 }
+
+func TestWikiLookup_PartyMatchesProvincialTenureRange(t *testing.T) {
+	const html = `<!DOCTYPE html><html><body>
+<table class="infobox vcard">
+<tr><th colspan="2" class="infobox-header"><a href="/wiki/MP">Member of Parliament</a> <br /> for <a href="/wiki/FedRiding">Scarborough Southwest</a></th></tr>
+<tr><th scope="row">In office</th><td>April 13, 2026 – present</td></tr>
+<tr><th colspan="2" class="infobox-header"><a href="/wiki/MPP">Member of Provincial Parliament</a> <br /> for <a href="/wiki/ProvRiding">Scarborough Southwest</a></th></tr>
+<tr><th scope="row">In office</th><td>June 7, 2018 – February 3, 2026</td></tr>
+<tr><th scope="row">Party</th><td><a href="/wiki/Liberal">Liberal</a> (since 2026)</td></tr>
+<tr><th scope="row">Other political affiliations</th><td><a href="/wiki/NDP">Ontario New Democratic</a> (2018–2026)</td></tr>
+</table>
+</body></html>`
+
+	lookup := makeWikiServer(t, testCategoryPath, map[string]string{
+		"/wiki/Doly_Begum": html,
+	})
+
+	info, ok := lookup.lookupInfo("Begum")
+	if !ok {
+		t.Fatal("expected lookup to succeed")
+	}
+	if info.party != "Ontario New Democratic" {
+		t.Errorf("party=%q, want %q (party should match provincial tenure years)", info.party, "Ontario New Democratic")
+	}
+	if info.riding != "Scarborough Southwest" {
+		t.Errorf("riding=%q, want %q", info.riding, "Scarborough Southwest")
+	}
+	if info.termStart != "2018-01-01" {
+		t.Errorf("termStart=%q, want %q", info.termStart, "2018-01-01")
+	}
+	if info.termEnd != "2026-12-31" {
+		t.Errorf("termEnd=%q, want %q", info.termEnd, "2026-12-31")
+	}
+}

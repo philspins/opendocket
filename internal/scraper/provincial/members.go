@@ -4,12 +4,15 @@ import (
 	"database/sql"
 	"fmt"
 	"strings"
+	"time"
 )
 
 type provincialMemberCandidate struct {
-	ID     string
-	Name   string
-	Riding string
+	ID        string
+	Name      string
+	Riding    string
+	TermStart string
+	TermEnd   string
 }
 
 // NormalisePersonName strips titles and normalises whitespace/punctuation for name matching.
@@ -55,7 +58,7 @@ func commonPrefixLen(a, b string) int {
 
 func loadProvincialMemberCandidates(conn *sql.DB, province string) ([]provincialMemberCandidate, error) {
 	rows, err := conn.Query(`
-		SELECT id, name, COALESCE(riding, '') FROM members
+		SELECT id, name, COALESCE(riding, ''), COALESCE(term_start, ''), COALESCE(term_end, '') FROM members
 		WHERE government_level = 'provincial' AND lower(province) = lower(?)`, province)
 	if err != nil {
 		return nil, err
@@ -65,7 +68,7 @@ func loadProvincialMemberCandidates(conn *sql.DB, province string) ([]provincial
 	list := make([]provincialMemberCandidate, 0)
 	for rows.Next() {
 		var c provincialMemberCandidate
-		if err := rows.Scan(&c.ID, &c.Name, &c.Riding); err != nil {
+		if err := rows.Scan(&c.ID, &c.Name, &c.Riding, &c.TermStart, &c.TermEnd); err != nil {
 			continue
 		}
 		list = append(list, c)
@@ -77,14 +80,24 @@ func loadProvincialMemberCandidates(conn *sql.DB, province string) ([]provincial
 }
 
 func resolveProvincialMemberID(conn *sql.DB, province, sourceName string) (string, error) {
+	return resolveProvincialMemberIDAtDate(conn, province, sourceName, "")
+}
+
+func resolveProvincialMemberIDAtDate(conn *sql.DB, province, sourceName, divisionDate string) (string, error) {
 	list, err := loadProvincialMemberCandidates(conn, province)
 	if err != nil {
 		return "", err
 	}
-	return resolveProvincialMemberIDFromCandidates(list, sourceName), nil
+	return resolveProvincialMemberIDFromCandidatesAtDate(list, sourceName, divisionDate), nil
 }
 
 func resolveProvincialMemberIDFromCandidates(list []provincialMemberCandidate, sourceName string) string {
+	return resolveProvincialMemberIDFromCandidatesAtDate(list, sourceName, "")
+}
+
+func resolveProvincialMemberIDFromCandidatesAtDate(list []provincialMemberCandidate, sourceName, divisionDate string) string {
+	list = temporalCandidates(list, divisionDate)
+
 	// Handle "Surname (Riding)" format used by Ontario V&P documents when multiple
 	// members share a last name (e.g. "Smith (Parry Sound—Muskoka)").
 	if idx := strings.Index(sourceName, "("); idx > 0 {
@@ -288,5 +301,51 @@ func resolveProvincialMemberIDFromCandidates(list []provincialMemberCandidate, s
 		}
 	}
 
+	return ""
+}
+
+func temporalCandidates(list []provincialMemberCandidate, divisionDate string) []provincialMemberCandidate {
+	voteDate := canonicalISODate(divisionDate)
+	if voteDate == "" {
+		return list
+	}
+	filtered := make([]provincialMemberCandidate, 0, len(list))
+	for _, c := range list {
+		if candidateActiveOnDate(c, voteDate) {
+			filtered = append(filtered, c)
+		}
+	}
+	if len(filtered) == 0 {
+		return list
+	}
+	return filtered
+}
+
+func candidateActiveOnDate(c provincialMemberCandidate, voteDate string) bool {
+	start := canonicalISODate(c.TermStart)
+	end := canonicalISODate(c.TermEnd)
+	if start != "" && voteDate < start {
+		return false
+	}
+	if end != "" && voteDate > end {
+		return false
+	}
+	return true
+}
+
+func canonicalISODate(s string) string {
+	s = strings.TrimSpace(s)
+	if len(s) >= 10 {
+		candidate := s[:10]
+		if _, err := time.Parse("2006-01-02", candidate); err == nil {
+			return candidate
+		}
+	}
+	if t, err := time.Parse("2006-01-02", s); err == nil {
+		return t.Format("2006-01-02")
+	}
+	if t, err := time.Parse(time.RFC3339, s); err == nil {
+		return t.UTC().Format("2006-01-02")
+	}
 	return ""
 }

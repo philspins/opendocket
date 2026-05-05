@@ -303,7 +303,7 @@ func executeSessionPlan(conn *sql.DB, client *http.Client, delay time.Duration, 
 
 		stats.MemberVotesSeen += len(res.Votes)
 		for _, mv := range res.Votes {
-			memberID := resolveProvincialMemberIDFromCandidates(memberCandidates, mv.MemberName)
+			memberID := resolveProvincialMemberIDFromCandidatesAtDate(memberCandidates, mv.MemberName, res.Division.Date)
 			if memberID == "" {
 				// Create a provisional member record for unmatched names so votes are not
 				// lost. This handles former members not in the Represent API and new
@@ -323,10 +323,12 @@ func executeSessionPlan(conn *sql.DB, client *http.Client, delay time.Duration, 
 							GovernmentLevel: "provincial",
 						}
 						if wiki != nil {
-							if party, riding, ok := wiki.lookup(mv.MemberName); ok {
-								rec.Party = party
-								rec.Riding = riding
-								clog.Debugf("[wiki] enriched provisional member %q: party=%q riding=%q", mv.MemberName, party, riding)
+							if info, ok := wiki.lookupInfo(mv.MemberName); ok {
+								rec.Party = info.party
+								rec.Riding = info.riding
+								rec.TermStart = info.termStart
+								rec.TermEnd = info.termEnd
+								clog.Debugf("[wiki] enriched provisional member %q: party=%q riding=%q term=%s..%s", mv.MemberName, info.party, info.riding, info.termStart, info.termEnd)
 							}
 						}
 						if err := store.UpsertMember(conn, rec); err == nil {

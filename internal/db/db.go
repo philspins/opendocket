@@ -44,7 +44,9 @@ func Migrate(db *sql.DB) error {
 			chamber          TEXT DEFAULT 'commons',
 			active           INTEGER DEFAULT 1,
 			last_scraped     TEXT,
-			government_level TEXT DEFAULT 'federal'
+			government_level TEXT DEFAULT 'federal',
+			term_start       TEXT,
+			term_end         TEXT
 		)`,
 		`CREATE TABLE IF NOT EXISTS bills (
 			id                 TEXT PRIMARY KEY,
@@ -218,6 +220,8 @@ func Migrate(db *sql.DB) error {
 		}
 	}
 	_, _ = db.Exec(`ALTER TABLE members ADD COLUMN government_level TEXT DEFAULT 'federal'`)
+	_, _ = db.Exec(`ALTER TABLE members ADD COLUMN term_start TEXT`)
+	_, _ = db.Exec(`ALTER TABLE members ADD COLUMN term_end TEXT`)
 
 	return nil
 }

@@ -51,6 +51,8 @@ type MemberRow struct {
 	Chamber         string
 	Active          bool
 	GovernmentLevel string // "federal" | "provincial"
+	TermStart       string // ISO-8601 date (YYYY-MM-DD)
+	TermEnd         string // ISO-8601 date (YYYY-MM-DD), empty means open-ended
 }
 
 type VoteRow struct {

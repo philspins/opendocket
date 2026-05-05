@@ -268,6 +268,20 @@ func TestResolveProvincialMemberID_StripsTitlesAndMatchesInitialPlusSurname(t *t
 	}
 }
 
+func TestResolveProvincialMemberIDFromCandidatesAtDate(t *testing.T) {
+	list := []provincialMemberCandidate{
+		{ID: "on-historical-smith-jane", Name: "Jane Smith", Riding: "Toronto Centre", TermStart: "2018-01-01", TermEnd: "2022-12-31"},
+		{ID: "on-historical-smith-jordan", Name: "Jordan Smith", Riding: "Toronto Centre", TermStart: "2023-01-01", TermEnd: ""},
+	}
+
+	if got := resolveProvincialMemberIDFromCandidatesAtDate(list, "Smith", "2021-06-01"); got != "on-historical-smith-jane" {
+		t.Fatalf("resolve 2021 Smith = %q, want %q", got, "on-historical-smith-jane")
+	}
+	if got := resolveProvincialMemberIDFromCandidatesAtDate(list, "Smith", "2024-06-01"); got != "on-historical-smith-jordan" {
+		t.Fatalf("resolve 2024 Smith = %q, want %q", got, "on-historical-smith-jordan")
+	}
+}
+
 const noDelay = 0 * time.Millisecond
 
 func newProvinceDB(t *testing.T) *sql.DB {

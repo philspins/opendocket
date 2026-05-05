@@ -230,10 +230,10 @@ func parseAlbertaVPDivisions(text, detailURL string, legislature, session, start
 		}
 
 		votes := make([]ProvincialMemberVote, 0, yeas+nays)
-		for _, name := range extractPlainVoteNames(yeaBlock) {
+		for _, name := range extractPlainVoteNamesN(yeaBlock, yeas) {
 			votes = append(votes, ProvincialMemberVote{DivisionID: divID, MemberName: name, Vote: "Yea"})
 		}
-		for _, name := range extractPlainVoteNames(nayBlock) {
+		for _, name := range extractPlainVoteNamesN(nayBlock, nays) {
 			votes = append(votes, ProvincialMemberVote{DivisionID: divID, MemberName: name, Vote: "Nay"})
 		}
 
@@ -295,10 +295,10 @@ func parseAlbertaQuestionBlocks(text, detailURL string, legislature, session, st
 		}
 
 		votes := make([]ProvincialMemberVote, 0, yeas+nays)
-		for _, name := range extractPlainVoteNames(yeaBlock) {
+		for _, name := range extractPlainVoteNamesN(yeaBlock, yeas) {
 			votes = append(votes, ProvincialMemberVote{DivisionID: divID, MemberName: name, Vote: "Yea"})
 		}
-		for _, name := range extractPlainVoteNames(nayBlock) {
+		for _, name := range extractPlainVoteNamesN(nayBlock, nays) {
 			votes = append(votes, ProvincialMemberVote{DivisionID: divID, MemberName: name, Vote: "Nay"})
 		}
 

@@ -28,6 +28,8 @@ type MemberRecord struct {
 	Active          bool
 	LastScraped     string
 	GovernmentLevel string // "federal" | "provincial"
+	TermStart       string // ISO-8601 date (YYYY-MM-DD)
+	TermEnd         string // ISO-8601 date (YYYY-MM-DD), empty means open-ended
 }
 
 // BillRecord is the write-side representation of a bill, used by scrapers.
@@ -98,8 +100,8 @@ func UpsertMember(db *sql.DB, m MemberRecord) error {
 	_, err := db.Exec(`
 		INSERT INTO members
 			(id, name, party, riding, province, role, photo_url, email, website,
-			 chamber, active, last_scraped, government_level)
-		VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?)
+			 chamber, active, last_scraped, government_level, term_start, term_end)
+		VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)
 		ON CONFLICT(id) DO UPDATE SET
 			name             = excluded.name,
 			party            = excluded.party,
@@ -112,9 +114,11 @@ func UpsertMember(db *sql.DB, m MemberRecord) error {
 			chamber          = excluded.chamber,
 			active           = excluded.active,
 			last_scraped     = excluded.last_scraped,
-			government_level = excluded.government_level`,
+			government_level = excluded.government_level,
+			term_start       = excluded.term_start,
+			term_end         = excluded.term_end`,
 		m.ID, m.Name, m.Party, m.Riding, m.Province, m.Role, m.PhotoURL,
-		m.Email, m.Website, chamber, active, m.LastScraped, govLevel,
+		m.Email, m.Website, chamber, active, m.LastScraped, govLevel, m.TermStart, m.TermEnd,
 	)
 	return err
 }

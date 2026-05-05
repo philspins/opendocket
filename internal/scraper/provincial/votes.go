@@ -316,6 +316,55 @@ var voteKeywords = map[string]bool{
 	"APPROPRIATION": true, "SUPPLEMENTARY": true, "FISCAL": true,
 	"BUDGET": true, "ESTIMATES": true, "SUPPLY": true, "LOAN": true,
 	"ALBERTA": true, "PROVINCE": true, "PROVINCIAL": true,
+	// Parliamentary procedural words that appear after the name list in AB/MB PDFs.
+	"COMMITTEE": true, "COMMITTEES": true, "WHOLE": true, "BACK": true, "WITH": true,
+	"TABLE": true, "TABLING": true, "TABLINGS": true, "PROGRESS": true,
+	"ORDERS": true, "DAY": true, "MOTIONS": true, "MOVED": true,
+	"PURSUANT": true, "STANDING": true, "ACCORDING": true, "CERTAIN": true,
+	"PAPER": true, "BILLS": true, "PASSED": true, "REJECTED": true,
+	"REFERRED": true, "TABLED": true, "DEFERRED": true, "DEFEATED": true,
+	"AGREED": true, "SESSIONAL": true,
+	// Debate/procedural flow words.
+	"ADJOURNMENT": true, "DEBATE": true, "ORAL": true, "ROUTINE": true,
+	"STATEMENTS": true, "URGENT": true, "WRITTEN": true, "DAILY": true,
+	"FALL": true, "THRONE": true, "ADDRESS": true,
+	"NOTICES": true, "QUESTIONS": true, "PETITIONS": true, "REPLIES": true,
+	"DIVISIONS": true, "INTRODUCTION": true,
+	// Officers/titles that appear in AB V&P PDF bodies.
+	"AUDITOR": true, "CLERK": true, "LIEUTENANT": true, "GOVERNOR": true,
+	"GAZETTE": true, "PRESIDENT": true, "TREASURER": true, "BOARD": true,
+	"BUREAU": true, "COMMISSION": true, "COUNCIL": true, "OMBUDSMAN": true,
+	// Government/ministry subject nouns.
+	"ANNUAL": true, "SPECIAL": true, "FEDERAL": true, "MUNICIPAL": true,
+	"NATIONAL": true, "REGIONAL": true, "SOCIAL": true, "HEALTH": true,
+	"EDUCATION": true, "LABOUR": true, "JUSTICE": true, "PUBLIC": true,
+	"GENERAL": true, "REVIEW": true, "GOVERNANCE": true, "AUDIT": true,
+	"SERVICES": true, "AFFAIRS": true, "FINANCE": true, "TREASURY": true,
+	"UTILITIES": true, "INFRASTRUCTURE": true, "TOURISM": true, "ENERGY": true,
+	"ENVIRONMENT": true, "AGRICULTURE": true, "FAMILIES": true, "CHILDREN": true,
+	"SENIORS": true, "MENTAL": true, "COMMUNITY": true, "HOUSING": true,
+	"INDIGENOUS": true, "PARKS": true, "FORESTRY": true,
+	// Direction/geographic words that appear in AB riding names but not as surnames.
+	"NORTH": true, "SOUTH": true, "EAST": true, "WEST": true,
+	"CENTRAL": true, "CENTRE": true, "RURAL": true,
+	// Common English words observed as AB V&P noise.
+	"TITLE": true, "SPEECH": true, "REPLY": true,
+	"PRIVATE": true, "INTERGOVERNMENTAL": true, "INTERSESSIONAL": true,
+	"MEASURES": true, "DEPOSITS": true, "STATUTES": true,
+}
+
+// abRidingPrefixSet is the set of Alberta city/region names that begin
+// hyphenated riding names (e.g. "Calgary-North", "Edmonton-Riverview").
+// These tokens are never valid member surnames.
+var abRidingPrefixSet = map[string]bool{
+	"CALGARY": true, "EDMONTON": true, "AIRDRIE": true, "CHESTERMERE": true,
+	"COCHRANE": true, "BONNYVILLE": true, "BANFF": true, "CAMROSE": true,
+	"LETHBRIDGE": true, "CYPRESS": true, "LIVINGSTONE": true,
+	"STRATHMORE": true, "OLDS": true, "LACOMBE": true,
+	"SHERWOOD": true, "INNISFAIL": true, "STETTLER": true,
+	"VEGREVILLE": true, "WAINWRIGHT": true, "VERMILION": true,
+	"CARDSTON": true, "PINCHER": true, "CROWFOOT": true,
+	"HIGHWOOD": true, "MACLEOD": true,
 }
 
 var voteNamePrefixTokens = map[string]bool{
@@ -340,7 +389,7 @@ func collapseSplitUppercaseNameTokens(text string) string {
 }
 
 func cleanPlainVoteToken(tok string) string {
-	tok = strings.TrimRight(tok, ".,;:)'\"")
+	tok = strings.TrimRight(tok, ".,;:)'\"\\")
 	tok = strings.TrimLeft(tok, "('\"")
 	return tok
 }
@@ -355,6 +404,13 @@ func isPlainVoteNameToken(tok string) bool {
 	if voteKeywords[strings.ToUpper(tok)] {
 		return false
 	}
+	// Reject hyphenated tokens whose first part is a known AB riding-name city
+	// (e.g. "Calgary-North", "Edmonton-Riverview"). These are never surnames.
+	if idx := strings.IndexByte(tok, '-'); idx > 0 {
+		if abRidingPrefixSet[strings.ToUpper(tok[:idx])] {
+			return false
+		}
+	}
 	allDigit := true
 	for _, c := range tok {
 		if c < '0' || c > '9' {
@@ -365,14 +421,24 @@ func isPlainVoteNameToken(tok string) bool {
 	return !allDigit
 }
 
-// extractPlainVoteNames extracts member surnames from a vote-block text where
+// extractPlainVoteNamesN extracts member surnames from a vote-block text where
 // names appear as plain capitalized tokens without "Mr./Ms." prefixes (AB, MB, NS).
-func extractPlainVoteNames(blockText string) []string {
+// max > 0 caps the number of names returned, preventing overflow into boilerplate
+// that follows the name list in AB/MB PDF documents.
+func extractPlainVoteNamesN(blockText string, max int) []string {
 	blockText = collapseSplitUppercaseNameTokens(strings.ReplaceAll(blockText, "\u00a0", " "))
 	rawTokens := strings.Fields(blockText)
 	seen := make(map[string]bool)
 	names := make([]string, 0)
 	for i := 0; i < len(rawTokens); i++ {
+		if max > 0 && len(names) >= max {
+			break
+		}
+		// Skip raw tokens with backslash (PDF path artifacts, Windows-1252 curly
+		// quotes encoded as 0x92/0x94, corrupted bill/section references, etc.).
+		if strings.ContainsAny(rawTokens[i], "\\\x91\x92\x93\x94") {
+			continue
+		}
 		tok := cleanPlainVoteToken(rawTokens[i])
 		if !isPlainVoteNameToken(tok) {
 			continue
@@ -392,6 +458,12 @@ func extractPlainVoteNames(blockText string) []string {
 		names = append(names, tok)
 	}
 	return names
+}
+
+// extractPlainVoteNames extracts member surnames from a vote-block text where
+// names appear as plain capitalized tokens without "Mr./Ms." prefixes (AB, MB, NS).
+func extractPlainVoteNames(blockText string) []string {
+	return extractPlainVoteNamesN(blockText, 0)
 }
 
 // newBrunswickDescriptionFromContext extracts a description from context text before

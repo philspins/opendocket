@@ -387,7 +387,7 @@ func (s *Store) ListMembers(search, party, province, riding, governmentLevel str
 		SELECT id, name, COALESCE(party,''), COALESCE(riding,''), COALESCE(province,''),
 		       COALESCE(role,''), COALESCE(photo_url,''), COALESCE(email,''),
 		       COALESCE(website,''), COALESCE(chamber,'commons'), active,
-		       COALESCE(government_level,'federal')
+		       COALESCE(government_level,'federal'), COALESCE(term_start,''), COALESCE(term_end,'')
 		FROM members WHERE `+strings.Join(where, " AND ")+`
 		ORDER BY name`, args...)
 	if err != nil {
@@ -403,12 +403,12 @@ func (s *Store) GetMember(id string) (MemberRow, error) {
 		SELECT id, name, COALESCE(party,''), COALESCE(riding,''), COALESCE(province,''),
 		       COALESCE(role,''), COALESCE(photo_url,''), COALESCE(email,''),
 		       COALESCE(website,''), COALESCE(chamber,'commons'), active,
-		       COALESCE(government_level,'federal')
+		       COALESCE(government_level,'federal'), COALESCE(term_start,''), COALESCE(term_end,'')
 		FROM members WHERE id = ?`, id)
 	var m MemberRow
 	var active int
 	err := row.Scan(&m.ID, &m.Name, &m.Party, &m.Riding, &m.Province,
-		&m.Role, &m.PhotoURL, &m.Email, &m.Website, &m.Chamber, &active, &m.GovernmentLevel)
+		&m.Role, &m.PhotoURL, &m.Email, &m.Website, &m.Chamber, &active, &m.GovernmentLevel, &m.TermStart, &m.TermEnd)
 	if errors.Is(err, sql.ErrNoRows) {
 		return MemberRow{}, fmt.Errorf("member %q not found", id)
 	}
@@ -423,7 +423,7 @@ func scanMemberRows(rows *sql.Rows) ([]MemberRow, error) {
 		var active int
 		if err := rows.Scan(&m.ID, &m.Name, &m.Party, &m.Riding, &m.Province,
 			&m.Role, &m.PhotoURL, &m.Email, &m.Website, &m.Chamber, &active,
-			&m.GovernmentLevel); err != nil {
+			&m.GovernmentLevel, &m.TermStart, &m.TermEnd); err != nil {
 			return nil, err
 		}
 		m.Active = active == 1
@@ -494,7 +494,7 @@ func (s *Store) GetMembersByRiding(riding string) ([]MemberRow, error) {
 		SELECT id, name, COALESCE(party,''), COALESCE(riding,''), COALESCE(province,''),
 		       COALESCE(role,''), COALESCE(photo_url,''), COALESCE(email,''),
 		       COALESCE(website,''), COALESCE(chamber,'commons'), active,
-		       COALESCE(government_level,'federal')
+		       COALESCE(government_level,'federal'), COALESCE(term_start,''), COALESCE(term_end,'')
 		FROM members WHERE LOWER(riding) LIKE '%' || LOWER(?) || '%'
 		ORDER BY name`, riding)
 	if err != nil {

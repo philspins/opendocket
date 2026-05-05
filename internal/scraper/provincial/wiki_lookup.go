@@ -1,7 +1,10 @@
 package provincial
 
 import (
+	"fmt"
 	"net/http"
+	"regexp"
+	"strconv"
 	"strings"
 	"unicode"
 
@@ -66,9 +69,19 @@ type wikiEntry struct {
 }
 
 type wikiMemberInfo struct {
-	party  string
-	riding string
+	party     string
+	riding    string
+	termStart string
+	termEnd   string
 }
+
+type wikiPartyTerm struct {
+	name      string
+	startYear int
+	endYear   int
+}
+
+var wikiYearRe = regexp.MustCompile(`(18|19|20)\d{2}`)
 
 // provincialWikiLookup caches Wikipedia category pages and individual article
 // scrapes for a single province. Created once per crawl run; loads lazily.
@@ -151,20 +164,28 @@ func (w *provincialWikiLookup) ensureLoaded() {
 // lookup returns party and riding for a member name from a provincial vote record.
 // The name is typically a bare surname or "First Last" after title stripping.
 func (w *provincialWikiLookup) lookup(memberName string) (party, riding string, ok bool) {
+	info, ok := w.lookupInfo(memberName)
+	if !ok {
+		return "", "", false
+	}
+	return info.party, info.riding, true
+}
+
+func (w *provincialWikiLookup) lookupInfo(memberName string) (wikiMemberInfo, bool) {
 	w.ensureLoaded()
 	if len(w.byNormSurname) == 0 {
-		return "", "", false
+		return wikiMemberInfo{}, false
 	}
 
 	normName := normalisePersonName(memberName)
 	parts := strings.Fields(normName)
 	if len(parts) == 0 {
-		return "", "", false
+		return wikiMemberInfo{}, false
 	}
 	surname := strings.ToLower(foldAccents(parts[len(parts)-1]))
 	entries := w.byNormSurname[surname]
 	if len(entries) == 0 {
-		return "", "", false
+		return wikiMemberInfo{}, false
 	}
 
 	articleURL := entries[0].url
@@ -182,9 +203,9 @@ func (w *provincialWikiLookup) lookup(memberName string) (party, riding string, 
 
 	info := w.fetchArticle(articleURL)
 	if info.party == "" && info.riding == "" {
-		return "", "", false
+		return wikiMemberInfo{}, false
 	}
-	return info.party, info.riding, true
+	return info, true
 }
 
 // wikiFirstLinkOrText returns the text of the first hyperlink in sel, or the
@@ -215,6 +236,9 @@ func (w *provincialWikiLookup) fetchArticle(url string) wikiMemberInfo {
 	// legislature row is found, since federal and provincial ridings often share
 	// a name but are not always identical.
 	var fallbackRiding string
+	inProvincialOffice := false
+	provincialTerm := wikiPartyTerm{}
+	partyTerms := make([]wikiPartyTerm, 0, 4)
 
 	doc.Find("table.infobox tr").Each(func(_ int, row *goquery.Selection) {
 		th := row.Find("th")
@@ -223,18 +247,30 @@ func (w *provincialWikiLookup) fetchArticle(url string) wikiMemberInfo {
 		if td.Length() > 0 {
 			// Standard th/td pair — use the first hyperlink text to avoid
 			// qualifiers like "(since 2026)" that appear as trailing plain text.
-			label := strings.ToLower(strings.TrimSpace(th.Text()))
+			label := strings.ToLower(strings.Join(strings.Fields(th.Text()), " "))
 			value := wikiFirstLinkOrText(td)
-			if value == "" {
-				return
+
+			if inProvincialOffice && (strings.Contains(label, "in office") || strings.Contains(label, "assumed office")) {
+				start, end, ok := parseWikiYearRange(td.Text())
+				if ok && provincialTerm.startYear == 0 {
+					provincialTerm.startYear = start
+					provincialTerm.endYear = end
+				}
 			}
+
 			switch {
 			case strings.Contains(label, "political party") || label == "party":
-				if info.party == "" {
+				if value != "" && info.party == "" {
 					info.party = value
 				}
+				if value != "" {
+					start, end, _ := parseWikiYearRange(td.Text())
+					partyTerms = append(partyTerms, wikiPartyTerm{name: value, startYear: start, endYear: end})
+				}
+			case strings.Contains(label, "other political affiliations"):
+				partyTerms = append(partyTerms, parseOtherAffiliations(td)...)
 			case strings.Contains(label, "constituency") || strings.Contains(label, "electoral district") || strings.Contains(label, "riding"):
-				if info.riding == "" {
+				if value != "" && info.riding == "" {
 					info.riding = value
 				}
 			}
@@ -247,6 +283,7 @@ func (w *provincialWikiLookup) fetchArticle(url string) wikiMemberInfo {
 		// between the office title and riding name may not produce a space in .Text().
 		label := strings.ToLower(strings.Join(strings.Fields(th.Text()), " "))
 		if !strings.Contains(label, "member of") && !strings.Contains(label, "member for") {
+			inProvincialOffice = false
 			return
 		}
 		a := th.Find("a").Last()
@@ -262,13 +299,17 @@ func (w *provincialWikiLookup) fetchArticle(url string) wikiMemberInfo {
 			strings.Contains(label, "house of assembly") ||
 			strings.Contains(label, "national assembly")
 		if isProvincial {
+			inProvincialOffice = true
 			if info.riding == "" {
 				info.riding = riding
 			}
 		} else if fallbackRiding == "" {
+			inProvincialOffice = false
 			// e.g. federal "Member of Parliament for [Riding]" — keep as fallback
 			// in case no provincial legislature row appears in this article.
 			fallbackRiding = riding
+		} else {
+			inProvincialOffice = false
 		}
 	})
 
@@ -276,7 +317,153 @@ func (w *provincialWikiLookup) fetchArticle(url string) wikiMemberInfo {
 		info.riding = fallbackRiding
 	}
 
+	if len(partyTerms) > 0 {
+		if selected := pickPartyForTerm(partyTerms, provincialTerm); selected != "" {
+			info.party = selected
+		}
+	}
+
+	if provincialTerm.startYear > 0 {
+		info.termStart = fmt.Sprintf("%04d-01-01", provincialTerm.startYear)
+	}
+	if provincialTerm.endYear > 0 && provincialTerm.endYear < 9999 {
+		info.termEnd = fmt.Sprintf("%04d-12-31", provincialTerm.endYear)
+	}
+
 	clog.Debugf("[wiki] %s → party=%q riding=%q", url, info.party, info.riding)
 	w.articles[url] = info
 	return info
+}
+
+func parseWikiYearRange(raw string) (startYear, endYear int, ok bool) {
+	text := strings.ToLower(strings.TrimSpace(raw))
+	if text == "" {
+		return 0, 0, false
+	}
+	years := wikiYearRe.FindAllString(text, -1)
+	if len(years) == 0 {
+		return 0, 0, false
+	}
+	startYear, _ = strconv.Atoi(years[0])
+	endYear = startYear
+	if len(years) > 1 {
+		endYear, _ = strconv.Atoi(years[len(years)-1])
+	}
+	if strings.Contains(text, "present") || strings.Contains(text, "incumbent") {
+		endYear = 9999
+	}
+	if strings.Contains(text, "since") {
+		endYear = 9999
+	}
+	return startYear, endYear, true
+}
+
+func parseOtherAffiliations(td *goquery.Selection) []wikiPartyTerm {
+	links := td.Find("a")
+	if links.Length() == 0 {
+		return nil
+	}
+	full := strings.Join(strings.Fields(td.Text()), " ")
+	out := make([]wikiPartyTerm, 0, links.Length())
+
+	if links.Length() == 1 {
+		name := strings.TrimSpace(links.First().Text())
+		if name == "" {
+			return nil
+		}
+		start, end, _ := parseWikiYearRange(full)
+		out = append(out, wikiPartyTerm{name: name, startYear: start, endYear: end})
+		return out
+	}
+
+	typed := make([]string, 0, links.Length())
+	links.Each(func(_ int, a *goquery.Selection) {
+		name := strings.TrimSpace(a.Text())
+		if name != "" {
+			typed = append(typed, name)
+		}
+	})
+
+	lowerFull := strings.ToLower(full)
+	for i, name := range typed {
+		if name == "" {
+			continue
+		}
+		seg := full
+		lowerName := strings.ToLower(name)
+		idx := strings.Index(lowerFull, lowerName)
+		if idx >= 0 {
+			start := idx
+			end := len(full)
+			if i+1 < len(typed) {
+				next := strings.ToLower(typed[i+1])
+				if nextIdx := strings.Index(lowerFull[start+len(name):], next); nextIdx >= 0 {
+					end = start + len(name) + nextIdx
+				}
+			}
+			seg = full[start:end]
+		}
+		startYear, endYear, _ := parseWikiYearRange(seg)
+		out = append(out, wikiPartyTerm{name: name, startYear: startYear, endYear: endYear})
+	}
+
+	return out
+}
+
+func pickPartyForTerm(partyTerms []wikiPartyTerm, target wikiPartyTerm) string {
+	if len(partyTerms) == 0 {
+		return ""
+	}
+	if target.startYear == 0 {
+		return partyTerms[0].name
+	}
+	targetEnd := target.endYear
+	if targetEnd == 0 {
+		targetEnd = 9999
+	}
+	bestName := ""
+	bestOverlap := -1
+	for _, p := range partyTerms {
+		if strings.TrimSpace(p.name) == "" {
+			continue
+		}
+		start := p.startYear
+		end := p.endYear
+		if end == 0 {
+			if start > 0 {
+				end = 9999
+			} else {
+				end = 9999
+			}
+		}
+		if start == 0 {
+			start = 0
+		}
+		overlap := wikiMinInt(end, targetEnd) - wikiMaxInt(start, target.startYear) + 1
+		if overlap < 0 {
+			overlap = 0
+		}
+		if overlap > bestOverlap {
+			bestOverlap = overlap
+			bestName = p.name
+		}
+	}
+	if bestName != "" {
+		return bestName
+	}
+	return partyTerms[0].name
+}
+
+func wikiMinInt(a, b int) int {
+	if a < b {
+		return a
+	}
+	return b
+}
+
+func wikiMaxInt(a, b int) int {
+	if a > b {
+		return a
+	}
+	return b
 }
