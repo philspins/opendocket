@@ -38,6 +38,77 @@ const sampleVotesHTML = `<html><body>
   </table>
 </body></html>`
 
+// sampleVotesGridHTML mirrors an ARIA-grid rendering where vote rows are
+// exposed as role=row/role=gridcell instead of semantic tbody/tr/td markup.
+const sampleVotesGridHTML = `<html><body>
+	<div role="grid" aria-label="Votes">
+		<div role="row">
+			<div role="columnheader">Vote Number</div>
+			<div role="columnheader">Vote Respecting</div>
+			<div role="columnheader">Subject</div>
+			<div role="columnheader">Votes</div>
+			<div role="columnheader">Vote Result</div>
+			<div role="columnheader">Date</div>
+		</div>
+		<div role="row">
+			<div role="gridcell"><a href="/Members/en/votes/45/1/109">No. 109</a></div>
+			<div role="gridcell">not applicable</div>
+			<div role="gridcell">Opposition Motion (Sovereign debt funds)</div>
+			<div role="gridcell">160 / 175 / 6</div>
+			<div role="gridcell">Negatived</div>
+			<div role="gridcell">Monday, May 4, 2026</div>
+		</div>
+		<div role="row">
+			<div role="gridcell"><a href="/Members/en/votes/45/1/108">No. 108</a></div>
+			<div role="gridcell">House Government Bill</div>
+			<div role="gridcell">Time allocation for Bill C-11, An Act to amend the National Defence Act and other Acts</div>
+			<div role="gridcell">169 / 164 / 6</div>
+			<div role="gridcell">Agreed To</div>
+			<div role="gridcell">Monday, May 4, 2026</div>
+		</div>
+	</div>
+</body></html>`
+
+// sampleVotesLiveThenGlobalHTML mirrors current ourcommons.ca where a
+// 3-column live-votes table can appear before the full 6-column global table.
+const sampleVotesLiveThenGlobalHTML = `<html><body>
+	<table id="live-votes-index" class="table">
+		<thead><tr><th>Subject</th><th>Sponsor</th><th>Vote Results</th></tr></thead>
+		<tbody>
+			<tr>
+				<td>Opposition Motion</td>
+				<td>Hon. MP</td>
+				<td><a href="/Members/en/live-vote?voteId=1666">Vote Results</a></td>
+			</tr>
+		</tbody>
+	</table>
+
+	<table id="global-votes" class="table">
+		<thead><tr>
+			<th>#</th><th>Vote type</th><th>Description</th>
+			<th>Votes</th><th>Result</th><th>Date</th>
+		</tr></thead>
+		<tbody>
+			<tr>
+				<td><a href="/Members/en/votes/45/1/109">No. 109</a></td>
+				<td></td>
+				<td>Opposition Motion (Sovereign debt funds)</td>
+				<td>160 / 175 / 6</td>
+				<td>Negatived</td>
+				<td>Monday, May 4, 2026</td>
+			</tr>
+			<tr>
+				<td><a href="/Members/en/votes/45/1/108">No. 108</a></td>
+				<td>House Government Bill</td>
+				<td>Time allocation for Bill C-11, An Act to amend the National Defence Act and other Acts</td>
+				<td>169 / 164 / 6</td>
+				<td>Agreed To</td>
+				<td>Monday, May 4, 2026</td>
+			</tr>
+		</tbody>
+	</table>
+</body></html>`
+
 func TestCrawlVotesIndex_ParsesRows(t *testing.T) {
 	srv := newTestServer(sampleVotesHTML)
 	defer srv.Close()
@@ -109,6 +180,41 @@ func TestCrawlVotesIndex_ErrorWhenNoTable(t *testing.T) {
 	_, err := scraper.CrawlVotesIndex(srv.URL, 45, 1, srv.Client())
 	if err == nil {
 		t.Error("expected error when no table found")
+	}
+}
+
+func TestCrawlVotesIndex_ParsesAriaGridRows(t *testing.T) {
+	srv := newTestServer(sampleVotesGridHTML)
+	defer srv.Close()
+
+	divs, err := scraper.CrawlVotesIndex(srv.URL, 45, 1, srv.Client())
+	if err != nil {
+		t.Fatalf("CrawlVotesIndex: %v", err)
+	}
+	if len(divs) != 2 {
+		t.Fatalf("len(divs)=%d, want 2", len(divs))
+	}
+	if divs[0].Number != 109 || divs[0].Yeas != 160 || divs[0].Nays != 175 || divs[0].Paired != 6 {
+		t.Errorf("divs[0] parsed incorrectly: %+v", divs[0])
+	}
+	if divs[1].BillNumber != "C-11" {
+		t.Errorf("divs[1].BillNumber=%q want C-11", divs[1].BillNumber)
+	}
+}
+
+func TestCrawlVotesIndex_ParsesWhenLiveTablePrecedesGlobalTable(t *testing.T) {
+	srv := newTestServer(sampleVotesLiveThenGlobalHTML)
+	defer srv.Close()
+
+	divs, err := scraper.CrawlVotesIndex(srv.URL, 45, 1, srv.Client())
+	if err != nil {
+		t.Fatalf("CrawlVotesIndex: %v", err)
+	}
+	if len(divs) != 2 {
+		t.Fatalf("len(divs)=%d, want 2", len(divs))
+	}
+	if divs[0].Number != 109 || divs[1].Number != 108 {
+		t.Fatalf("unexpected division numbers: got %d,%d want 109,108", divs[0].Number, divs[1].Number)
 	}
 }
 

@@ -74,19 +74,15 @@ func CrawlVotesIndex(
 		return nil, fmt.Errorf("votes index: %w", err)
 	}
 
-	table := doc.Find("table.table, table#votes-table, table").First()
-	if table.Length() == 0 {
+	tables := doc.Find("table#global-votes, table#votes-table, table.table, table")
+	if tables.Length() == 0 && doc.Find("[role='row']").Length() == 0 {
 		return nil, fmt.Errorf("votes index: no table found on %s", url)
 	}
 
 	nonDigitRe := regexp.MustCompile(`\D`)
 
 	var divs []DivisionStub
-	table.Find("tbody tr").Each(func(_ int, row *goquery.Selection) {
-		cols := row.Find("td")
-		// Actual ourcommons.ca column order (6 columns):
-		// 0: vote number  1: bill type (optional)  2: description
-		// 3: "Yeas / Nays / Paired"  4: result (with icon)  5: date
+	appendDivision := func(row *goquery.Selection, cols *goquery.Selection) {
 		if cols.Length() < 5 {
 			return
 		}
@@ -114,32 +110,40 @@ func CrawlVotesIndex(
 
 		result := strings.TrimSpace(cols.Eq(4).Text())
 
-		// Col 5: date formatted as "Wednesday, March 25, 2026"
 		date := ""
 		if cols.Length() > 5 {
 			date = utils.FindDateInText(strings.TrimSpace(cols.Eq(5).Text()))
 		}
 
-		// Extract bill number: first check col 1 (which may contain just a bill
-		// number like "C-47" on some sites), then fall back to the description.
+		// Col 1 contains vote type (e.g. House Government Bill / not applicable).
 		billNumber := utils.ExtractBillNumber(strings.TrimSpace(cols.Eq(1).Text()))
 		if billNumber == "" {
 			billNumber = utils.ExtractBillNumber(description)
 		}
 
-		// Detail link
 		var detailURL string
-		row.Find("a[href*='votes']").Each(func(_ int, a *goquery.Selection) {
-			if detailURL == "" {
-				if href, ok := a.Attr("href"); ok {
-					if strings.HasPrefix(href, "http") {
-						detailURL = href
-					} else {
-						detailURL = "https://www.ourcommons.ca" + href
-					}
+		if a := cols.Eq(0).Find("a[href]").First(); a.Length() > 0 {
+			if href, ok := a.Attr("href"); ok {
+				if strings.HasPrefix(href, "http") {
+					detailURL = href
+				} else {
+					detailURL = "https://www.ourcommons.ca" + href
 				}
 			}
-		})
+		}
+		if detailURL == "" {
+			row.Find("a[href*='votes']").Each(func(_ int, a *goquery.Selection) {
+				if detailURL == "" {
+					if href, ok := a.Attr("href"); ok {
+						if strings.HasPrefix(href, "http") {
+							detailURL = href
+						} else {
+							detailURL = "https://www.ourcommons.ca" + href
+						}
+					}
+				}
+			})
+		}
 
 		divs = append(divs, DivisionStub{
 			ID:          utils.DivisionID(parliament, session, num),
@@ -157,7 +161,39 @@ func CrawlVotesIndex(
 			DetailURL:   detailURL,
 			LastScraped: utils.NowISO(),
 		})
-	})
+	}
+
+	seen := make(map[string]bool)
+	if tables.Length() > 0 {
+		tables.Each(func(_ int, table *goquery.Selection) {
+			table.Find("tbody tr").Each(func(_ int, row *goquery.Selection) {
+				cols := row.Find("td")
+				// Actual ourcommons.ca column order (6 columns):
+				// 0: vote number  1: bill type (optional)  2: description
+				// 3: "Yeas / Nays / Paired"  4: result (with icon)  5: date
+				before := len(divs)
+				appendDivision(row, cols)
+				if len(divs) == before {
+					return
+				}
+				last := divs[len(divs)-1]
+				if seen[last.ID] {
+					divs = divs[:len(divs)-1]
+					return
+				}
+				seen[last.ID] = true
+			})
+		})
+	}
+
+	// Fallback: modern pages may render an ARIA grid (role=row / role=gridcell)
+	// rather than semantic table/tbody markup in the server response.
+	if len(divs) == 0 {
+		doc.Find("[role='row']").Each(func(_ int, row *goquery.Selection) {
+			cols := row.Find("[role='gridcell']")
+			appendDivision(row, cols)
+		})
+	}
 
 	clog.Infof("[votes] found %d divisions", len(divs))
 	return divs, nil

@@ -230,9 +230,14 @@ func CrawlCalendar(conn *sql.DB, client *http.Client, _ time.Duration, sourceURL
 func CrawlVotes(conn *sql.DB, client *http.Client, delay time.Duration, indexURL string) error {
 	divs, err := CrawlVotesIndex(indexURL, CurrentParliament, CurrentSession, client)
 	if err != nil {
+		clog.Infof("[votes] crawl failed: %v", err)
 		return err
 	}
+
+	processed := 0
+	detailScraped := 0
 	for _, div := range divs {
+		processed++
 		existed, err := store.DivisionExists(conn, div.ID)
 		if err != nil {
 			clog.Debugf("[votes] exists check %s: %v", div.ID, err)
@@ -265,6 +270,7 @@ func CrawlVotes(conn *sql.DB, client *http.Client, delay time.Duration, indexURL
 			needsDetail = !hasVotes
 		}
 		if needsDetail && div.DetailURL != "" {
+			detailScraped++
 			votes, err := CrawlDivisionDetail(div.ID, div.DetailURL, client)
 			if err != nil {
 				clog.Debugf("[votes] detail error %s: %v", div.ID, err)
@@ -275,6 +281,8 @@ func CrawlVotes(conn *sql.DB, client *http.Client, delay time.Duration, indexURL
 			time.Sleep(delay)
 		}
 	}
+
+	clog.Infof("[votes] crawl complete: divisions=%d detailed=%d", processed, detailScraped)
 	return nil
 }
 
