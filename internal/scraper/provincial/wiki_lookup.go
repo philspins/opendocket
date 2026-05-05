@@ -430,14 +430,7 @@ func pickPartyForTerm(partyTerms []wikiPartyTerm, target wikiPartyTerm) string {
 		start := p.startYear
 		end := p.endYear
 		if end == 0 {
-			if start > 0 {
-				end = 9999
-			} else {
-				end = 9999
-			}
-		}
-		if start == 0 {
-			start = 0
+			end = 9999
 		}
 		overlap := wikiMinInt(end, targetEnd) - wikiMaxInt(start, target.startYear) + 1
 		if overlap < 0 {
