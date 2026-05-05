@@ -1,8 +1,6 @@
 package provincial
 
 import (
-	"net/http"
-	"net/http/httptest"
 	"testing"
 )
 
@@ -65,13 +63,9 @@ func TestParseNSHansardHTMLPage_VoteTable(t *testing.T) {
 <p>THE CLERK: For, 3. Against, 2</p>
 </body></html>`
 
-	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		w.Write([]byte(hansardHTML))
-	}))
-	defer srv.Close()
-
 	doc := mustDocFromHTML(t, hansardHTML)
-	results := parseNSHansardHTMLPage(doc, srv.URL+"/house_26apr08", 65, 1, 1)
+	// The URL is only used to parse the date from the slug; no HTTP request is made.
+	results := parseNSHansardHTMLPage(doc, "https://nslegislature.ca/house_26apr08", 65, 1, 1)
 
 	if len(results) != 1 {
 		t.Fatalf("len(results)=%d want 1", len(results))

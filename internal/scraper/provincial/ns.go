@@ -54,6 +54,7 @@ func CrawlNovaScotiaBills(indexURL string, legislature, session int, client *htt
 
 // nsDateFromHansardURL parses the sitting date from a Hansard day-page URL.
 // The URL slug "house_26apr09" encodes year=2026, month=April, day=09.
+// Year is interpreted as 20xx; "26" → 2026.
 func nsDateFromHansardURL(rawURL string) string {
 	m := nsHansardSlugRe.FindStringSubmatch(rawURL)
 	if len(m) < 4 {
@@ -110,6 +111,8 @@ func crawlNovaScotiaVotesFromHTML(sessionURL string, legislature, session int, c
 		results = append(results, divs...)
 		divNum += len(divs)
 		if len(divs) == 0 {
+			// Advance the counter even when a day page contains no vote tables so
+			// that division numbers remain consistent if later pages add votes.
 			divNum++
 		}
 	}
