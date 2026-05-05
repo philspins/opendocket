@@ -54,11 +54,7 @@ func fetchDoc(url string, client *http.Client) (*goquery.Document, error) {
 		doc, derr := goquery.NewDocumentFromReader(resp.Body)
 		_ = resp.Body.Close()
 		if derr != nil {
-			lastErr = derr
-			if attempt < attempts && isTransientFetchError(derr) {
-				time.Sleep(time.Duration(attempt) * 200 * time.Millisecond)
-				continue
-			}
+			// Parse errors are structural (bad HTML), not transient — don't retry.
 			return nil, derr
 		}
 		return doc, nil
@@ -74,7 +70,7 @@ func isTransientFetchError(err error) bool {
 		return false
 	}
 	var netErr net.Error
-	if errors.As(err, &netErr) && (netErr.Timeout() || netErr.Temporary()) {
+	if errors.As(err, &netErr) && netErr.Timeout() {
 		return true
 	}
 	msg := strings.ToLower(err.Error())
