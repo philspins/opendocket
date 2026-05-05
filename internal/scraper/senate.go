@@ -178,7 +178,7 @@ func senateCellHasVoteMark(cell *goquery.Selection) bool {
 		return true
 	}
 	text := strings.TrimSpace(cell.Text())
-	return text == "×" || text == "x" || text == "X"
+	return text == "×" || text == "X"
 }
 
 // CrawlSenateDivisionDetail scrapes how each senator voted on a single division.
