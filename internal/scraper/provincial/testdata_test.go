@@ -74,6 +74,10 @@ func TestParseAlbertaBillStatusPDF_WithFixture(t *testing.T) {
 // ParseMBHighlightedSittingDatesFromPDF falls through to the text heuristic when the
 // BBox/OCR approaches find no month headings, and returns Tue-Thu dates for the year.
 func TestParseMBHighlightedSittingDatesFromPDF_HeuristicFallback(t *testing.T) {
+	if !hasCommand("pdftotext") {
+		t.Skip("pdftotext not installed")
+	}
+
 	pdfBytes, err := os.ReadFile("testdata/mb_calendar_sessional.pdf")
 	if err != nil {
 		t.Fatalf("read fixture: %v", err)
