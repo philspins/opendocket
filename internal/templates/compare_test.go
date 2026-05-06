@@ -115,6 +115,7 @@ func TestCompareMPs_RendersSharedVotesTable(t *testing.T) {
 			Date:        "2025-01-10",
 			BillID:      "b1",
 			BillNumber:  "C-1",
+			BillTitle:   "Short Bill One",
 			Description: "First reading",
 			Result:      "Carried",
 			Member1Vote: "Yea",
@@ -151,12 +152,16 @@ func TestCompareMPs_RendersSharedVotesTable(t *testing.T) {
 		`<th class="px-4 py-2.5">Alex Federal</th>`,
 		`<th class="px-4 py-2.5">Blake Federal</th>`,
 		`C-1`,
+		`Short Bill One`,
 		`Yea`,
 		`Nay`,
 	} {
 		if !strings.Contains(html, needle) {
 			t.Fatalf("expected compare shared votes section to contain %q", needle)
 		}
+	}
+	if strings.Contains(html, `First reading`) {
+		t.Fatalf("expected compare shared votes section to prefer bill title over description when available")
 	}
 	for _, size := range []string{"5", "10", "25", "50"} {
 		if !strings.Contains(html, `option value="`+size+`"`) {

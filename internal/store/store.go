@@ -129,7 +129,7 @@ func (s *Store) ListBills(f BillFilter) ([]BillRow, int, error) {
 		       COALESCE(b.short_title,''), COALESCE(b.bill_type,''), COALESCE(b.chamber,''),
 		       COALESCE(b.sponsor_id,''), COALESCE(m.name,''),
 		       COALESCE(b.current_stage,''), COALESCE(b.current_status,''),
-		       COALESCE(b.category,''), COALESCE(b.summary_ai,''), COALESCE(b.summary_lop,''),
+		       COALESCE(b.category,''), COALESCE(b.summary_ai,''),
 		       COALESCE(b.full_text_url,''), COALESCE(b.legisinfo_url,''),
 		       COALESCE(b.introduced_date,''), COALESCE(b.last_activity_date,'')
 		FROM bills b
@@ -153,8 +153,8 @@ func (s *Store) ListBills(f BillFilter) ([]BillRow, int, error) {
 			&b.ShortTitle, &b.BillType, &b.Chamber,
 			&b.SponsorID, &b.SponsorName,
 			&b.CurrentStage, &b.CurrentStatus,
-			&b.Category, &b.SummaryAI, &b.SummaryLoP,
-			&b.FullTextURL, &b.LegisInfoURL,
+			&b.Category, &b.SummaryAI,
+						&b.FullTextURL, &b.LegisInfoURL,
 			&b.IntroducedDate, &b.LastActivityDate,
 		); err != nil {
 			return nil, 0, fmt.Errorf("ListBills scan: %w", err)
@@ -194,7 +194,7 @@ func (s *Store) GetBill(id string) (BillRow, error) {
 		       COALESCE(b.short_title,''), COALESCE(b.bill_type,''), COALESCE(b.chamber,''),
 		       COALESCE(b.sponsor_id,''), COALESCE(m.name,''),
 		       COALESCE(b.current_stage,''), COALESCE(b.current_status,''),
-		       COALESCE(b.category,''), COALESCE(b.summary_ai,''), COALESCE(b.summary_lop,''),
+		       COALESCE(b.category,''), COALESCE(b.summary_ai,''),
 		       COALESCE(b.full_text_url,''), COALESCE(b.legisinfo_url,''),
 		       COALESCE(b.introduced_date,''), COALESCE(b.last_activity_date,'')
 		FROM bills b
@@ -206,8 +206,8 @@ func (s *Store) GetBill(id string) (BillRow, error) {
 		&b.ShortTitle, &b.BillType, &b.Chamber,
 		&b.SponsorID, &b.SponsorName,
 		&b.CurrentStage, &b.CurrentStatus,
-		&b.Category, &b.SummaryAI, &b.SummaryLoP,
-		&b.FullTextURL, &b.LegisInfoURL,
+		&b.Category, &b.SummaryAI,
+					&b.FullTextURL, &b.LegisInfoURL,
 		&b.IntroducedDate, &b.LastActivityDate,
 	)
 	if errors.Is(err, sql.ErrNoRows) {
@@ -387,7 +387,7 @@ func (s *Store) ListMembers(search, party, province, riding, governmentLevel str
 		SELECT id, name, COALESCE(party,''), COALESCE(riding,''), COALESCE(province,''),
 		       COALESCE(role,''), COALESCE(photo_url,''), COALESCE(email,''),
 		       COALESCE(website,''), COALESCE(chamber,'commons'), active,
-		       COALESCE(government_level,'federal')
+		       COALESCE(government_level,'federal'), COALESCE(term_start,''), COALESCE(term_end,'')
 		FROM members WHERE `+strings.Join(where, " AND ")+`
 		ORDER BY name`, args...)
 	if err != nil {
@@ -403,12 +403,12 @@ func (s *Store) GetMember(id string) (MemberRow, error) {
 		SELECT id, name, COALESCE(party,''), COALESCE(riding,''), COALESCE(province,''),
 		       COALESCE(role,''), COALESCE(photo_url,''), COALESCE(email,''),
 		       COALESCE(website,''), COALESCE(chamber,'commons'), active,
-		       COALESCE(government_level,'federal')
+		       COALESCE(government_level,'federal'), COALESCE(term_start,''), COALESCE(term_end,'')
 		FROM members WHERE id = ?`, id)
 	var m MemberRow
 	var active int
 	err := row.Scan(&m.ID, &m.Name, &m.Party, &m.Riding, &m.Province,
-		&m.Role, &m.PhotoURL, &m.Email, &m.Website, &m.Chamber, &active, &m.GovernmentLevel)
+		&m.Role, &m.PhotoURL, &m.Email, &m.Website, &m.Chamber, &active, &m.GovernmentLevel, &m.TermStart, &m.TermEnd)
 	if errors.Is(err, sql.ErrNoRows) {
 		return MemberRow{}, fmt.Errorf("member %q not found", id)
 	}
@@ -423,7 +423,7 @@ func scanMemberRows(rows *sql.Rows) ([]MemberRow, error) {
 		var active int
 		if err := rows.Scan(&m.ID, &m.Name, &m.Party, &m.Riding, &m.Province,
 			&m.Role, &m.PhotoURL, &m.Email, &m.Website, &m.Chamber, &active,
-			&m.GovernmentLevel); err != nil {
+			&m.GovernmentLevel, &m.TermStart, &m.TermEnd); err != nil {
 			return nil, err
 		}
 		m.Active = active == 1
@@ -494,7 +494,7 @@ func (s *Store) GetMembersByRiding(riding string) ([]MemberRow, error) {
 		SELECT id, name, COALESCE(party,''), COALESCE(riding,''), COALESCE(province,''),
 		       COALESCE(role,''), COALESCE(photo_url,''), COALESCE(email,''),
 		       COALESCE(website,''), COALESCE(chamber,'commons'), active,
-		       COALESCE(government_level,'federal')
+		       COALESCE(government_level,'federal'), COALESCE(term_start,''), COALESCE(term_end,'')
 		FROM members WHERE LOWER(riding) LIKE '%' || LOWER(?) || '%'
 		ORDER BY name`, riding)
 	if err != nil {
@@ -560,7 +560,7 @@ func (s *Store) GetMemberVotes(id string, limit int) ([]VoteRow, error) {
 	}
 	rows, err := s.db.Query(`
 		SELECT mv.division_id, COALESCE(d.date,''), COALESCE(d.bill_id,''),
-		       COALESCE(b.number,''), COALESCE(d.description,''),
+		       COALESCE(b.number,''), COALESCE(NULLIF(b.short_title,''), NULLIF(b.title,''), ''), COALESCE(d.description,''),
 		       mv.vote, COALESCE(d.result,'')
 		FROM member_votes mv
 		JOIN divisions d ON d.id = mv.division_id
@@ -578,6 +578,7 @@ func (s *Store) GetMemberVotes(id string, limit int) ([]VoteRow, error) {
 		date        string
 		billID      string
 		billNumber  string
+		billTitle   string
 		description string
 		vote        string
 		result      string
@@ -586,7 +587,7 @@ func (s *Store) GetMemberVotes(id string, limit int) ([]VoteRow, error) {
 	for rows.Next() {
 		var rv rawVote
 		if err := rows.Scan(&rv.divisionID, &rv.date, &rv.billID, &rv.billNumber,
-			&rv.description, &rv.vote, &rv.result); err != nil {
+			&rv.billTitle, &rv.description, &rv.vote, &rv.result); err != nil {
 			return nil, err
 		}
 		rawVotes = append(rawVotes, rv)
@@ -622,6 +623,7 @@ func (s *Store) GetMemberVotes(id string, limit int) ([]VoteRow, error) {
 			Date:           rv.date,
 			BillID:         rv.billID,
 			BillNumber:     rv.billNumber,
+			BillTitle:      rv.billTitle,
 			Description:    rv.description,
 			Vote:           rv.vote,
 			Result:         rv.result,
@@ -816,6 +818,7 @@ func (s *Store) GetSharedMemberVotes(id1, id2 string, limit int) ([]SharedVoteRo
 			COALESCE(d.date, ''),
 			COALESCE(d.bill_id, ''),
 			COALESCE(b.number, ''),
+			COALESCE(NULLIF(b.short_title,''), NULLIF(b.title,''), ''),
 			COALESCE(d.description, ''),
 			COALESCE(d.result, ''),
 			COALESCE(mv1.vote, ''),
@@ -840,6 +843,7 @@ func (s *Store) GetSharedMemberVotes(id1, id2 string, limit int) ([]SharedVoteRo
 			&v.Date,
 			&v.BillID,
 			&v.BillNumber,
+			&v.BillTitle,
 			&v.Description,
 			&v.Result,
 			&v.Member1Vote,

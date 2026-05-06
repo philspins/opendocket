@@ -15,7 +15,6 @@ type BillRow struct {
 	CurrentStatus    string
 	Category         string
 	SummaryAI        string
-	SummaryLoP       string
 	FullTextURL      string
 	LegisInfoURL     string
 	IntroducedDate   string
@@ -52,6 +51,8 @@ type MemberRow struct {
 	Chamber         string
 	Active          bool
 	GovernmentLevel string // "federal" | "provincial"
+	TermStart       string // ISO-8601 date (YYYY-MM-DD)
+	TermEnd         string // ISO-8601 date (YYYY-MM-DD), empty means open-ended
 }
 
 type VoteRow struct {
@@ -59,6 +60,7 @@ type VoteRow struct {
 	Date           string
 	BillID         string
 	BillNumber     string
+	BillTitle      string
 	Description    string
 	Vote           string
 	Result         string
@@ -71,6 +73,7 @@ type SharedVoteRow struct {
 	Date        string
 	BillID      string
 	BillNumber  string
+	BillTitle   string
 	Description string
 	Result      string
 	Member1Vote string

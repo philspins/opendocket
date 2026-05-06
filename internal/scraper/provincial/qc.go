@@ -4,7 +4,6 @@ import (
 	"encoding/json"
 	"fmt"
 	"io"
-	"log"
 	"net/http"
 	neturl "net/url"
 	"regexp"
@@ -14,6 +13,7 @@ import (
 	"time"
 
 	"github.com/PuerkitoBio/goquery"
+	"github.com/philspins/opendocket/internal/clog"
 	"github.com/philspins/opendocket/internal/utils"
 )
 
@@ -224,13 +224,13 @@ func crawlQuebecVotes(indexURL string, legislature, session int, client *http.Cl
 
 	sessionLegislature := quebecSessionLegislatureValue(indexDoc, legislature, session)
 	if sessionLegislature == "" {
-		log.Printf("[qc-votes] sessionLegislature not found; falling back to generic parser")
+		clog.Infof("[qc-votes] sessionLegislature not found; falling back to generic parser")
 		return crawlGenericProvincialVotesWithMatcher(indexURL, "qc", "quebec", legislature, session, client, quebecVotesLinkRe)
 	}
 
 	firstPage, err := quebecSearchVotes(indexURL, sessionLegislature, 0, 25, true, client)
 	if err != nil {
-		log.Printf("[qc-votes] JSON search failed (%v); falling back to generic parser", err)
+		clog.Infof("[qc-votes] JSON search failed (%v); falling back to generic parser", err)
 		return crawlGenericProvincialVotesWithMatcher(indexURL, "qc", "quebec", legislature, session, client, quebecVotesLinkRe)
 	}
 
@@ -240,7 +240,7 @@ func crawlQuebecVotes(indexURL string, legislature, session int, client *http.Cl
 		for page := 1; page < totalPages; page++ {
 			nextPage, perr := quebecPaginateVotes(indexURL, firstPage.NomRequete, page, firstPage.QuantiteParPage, client)
 			if perr != nil {
-				log.Printf("[qc-votes] pagination page=%d failed: %v", page, perr)
+				clog.Infof("[qc-votes] pagination page=%d failed: %v", page, perr)
 				continue
 			}
 			votes = append(votes, nextPage.Donnees...)
@@ -271,7 +271,7 @@ func crawlQuebecVotes(indexURL string, legislature, session int, client *http.Cl
 
 		detailDoc, derr := fetchDoc(detailURL, client)
 		if derr != nil {
-			log.Printf("[qc-votes] skip vote detail %s: %v", detailURL, derr)
+			clog.Infof("[qc-votes] skip vote detail %s: %v", detailURL, derr)
 			continue
 		}
 
@@ -302,7 +302,7 @@ func crawlQuebecVotes(indexURL string, legislature, session int, client *http.Cl
 		})
 	}
 
-	log.Printf("[qc-votes] parsed %d divisions", len(results))
+	clog.Debugf("[qc-votes] parsed %d divisions", len(results))
 	return results, nil
 }
 

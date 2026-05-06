@@ -3,16 +3,15 @@
 // Bills:
 //   - LEGISinfo RSS feed   → bill stubs
 //   - LEGISinfo detail page → stage timeline, sponsor, status
-//   - Library of Parliament → plain-English summaries
 package scraper
 
 import (
 	"fmt"
 	"io"
-	"log"
 	"net/http"
-	"regexp"
 	"strings"
+
+	"github.com/philspins/opendocket/internal/clog"
 
 	"github.com/PuerkitoBio/goquery"
 	"github.com/mmcdole/gofeed"
@@ -25,9 +24,7 @@ const (
 	RSSUrl         = "https://www.parl.ca/legisinfo/en/bills/rss"
 	LegisInfoBase  = "https://www.parl.ca/legisinfo/en/bill"
 	DocumentViewer = "https://www.parl.ca/DocumentViewer/en/%d-%d/bill/%s/first-reading"
-	// LibraryOfParliamentBase is the base URL for professional researcher summaries.
-	// Use these instead of AI-generated summaries where available.
-	LibraryOfParliamentBase = "https://lop.parl.ca/sites/PublicWebsite/default/en_CA/ResearchPublications/LegislativeSummaries"
+	parlBase       = "https://www.parl.ca"
 )
 
 // StageOrder defines the canonical reading order.
@@ -95,7 +92,7 @@ func CrawlBillsRSS(rssURL string, client *http.Client) ([]BillStub, error) {
 		client = utils.NewHTTPClient()
 	}
 
-	log.Printf("[bills] fetching RSS: %s", rssURL)
+	clog.Debugf("[bills] fetching RSS: %s", rssURL)
 
 	fp := gofeed.NewParser()
 	fp.Client = client
@@ -108,7 +105,7 @@ func CrawlBillsRSS(rssURL string, client *http.Client) ([]BillStub, error) {
 	for _, item := range feed.Items {
 		billID := utils.ExtractBillID(item.Link)
 		if billID == "" {
-			log.Printf("[bills] skipping RSS entry with unparseable link: %s", item.Link)
+			clog.Debugf("[bills] skipping RSS entry with unparseable link: %s", item.Link)
 			continue
 		}
 		var lastActivity string
@@ -124,7 +121,7 @@ func CrawlBillsRSS(rssURL string, client *http.Client) ([]BillStub, error) {
 			LastActivityDate: lastActivity,
 		})
 	}
-	log.Printf("[bills] RSS contained %d bills", len(stubs))
+	clog.Debugf("[bills] RSS contained %d bills", len(stubs))
 	return stubs, nil
 }
 
@@ -135,7 +132,7 @@ func CrawlBillDetail(billID, url string, client *http.Client) (BillDetail, error
 	if client == nil {
 		client = utils.NewHTTPClient()
 	}
-	log.Printf("[bills] scraping detail: %s", url)
+	clog.Debugf("[bills] scraping detail: %s", url)
 
 	resp, err := client.Get(url)
 	if err != nil {
@@ -205,13 +202,19 @@ func CrawlBillDetail(billID, url string, client *http.Client) (BillDetail, error
 		}
 	}
 
-	// Full text URL: bill_id = "{parl}-{session}-{billNum}"
-	parl, sess, ok := utils.ParliamentSessionFromBillID(billID)
+	// Full text URL: extracted from the page so we only set it when Parliament
+	// has actually published the document. Speculative construction caused
+	// permanent 404-retry loops for pro-forma bills (S-1, C-1) and bills
+	// whose text hasn't been uploaded yet.
 	var fullTextURL string
-	if ok {
-		billNum := utils.BillNumberFromID(billID)
-		fullTextURL = fmt.Sprintf(DocumentViewer, parl, sess, billNum)
-	}
+	doc.Find("a[href*='DocumentViewer'][href*='first-reading']").Each(func(_ int, s *goquery.Selection) {
+		if href, exists := s.Attr("href"); exists && fullTextURL == "" {
+			if strings.HasPrefix(href, "/") {
+				href = parlBase + href
+			}
+			fullTextURL = href
+		}
+	})
 
 	return BillDetail{
 		CurrentStatus:  currentStatus,
@@ -259,49 +262,6 @@ func sortStages(in []StageRecord) []StageRecord {
 		}
 	}
 	return out
-}
-
-// ── Library of Parliament summary ─────────────────────────────────────────────
-
-// CrawlLibraryOfParliamentSummary attempts to fetch a plain-English bill
-// summary from the Library of Parliament website. Returns an empty string when
-// not available.
-func CrawlLibraryOfParliamentSummary(billNumber string, parliament, session int, client *http.Client) string {
-	if client == nil {
-		client = utils.NewHTTPClient()
-	}
-
-	// URL structure: /LegislativeSummaries?ls=C47&Parl=45&Ses=1
-	slug := regexp.MustCompile(`[^A-Za-z0-9]`).ReplaceAllString(billNumber, "")
-	url := fmt.Sprintf("%s?ls=%s&Parl=%d&Ses=%d", LibraryOfParliamentBase, slug, parliament, session)
-	log.Printf("[bills] fetching Library of Parliament summary: %s", url)
-
-	resp, err := client.Get(url)
-	if err != nil {
-		log.Printf("[bills] Library of Parliament unavailable for %s: %v", billNumber, err)
-		return ""
-	}
-	defer resp.Body.Close()
-
-	if resp.StatusCode != http.StatusOK {
-		return ""
-	}
-
-	doc, err := goquery.NewDocumentFromReader(resp.Body)
-	if err != nil {
-		return ""
-	}
-
-	var paragraphs []string
-	doc.Find(
-		".views-field-body .field-content p, .field-item p, article .field--type-text-with-summary p",
-	).Each(func(i int, s *goquery.Selection) {
-		if i < 3 {
-			paragraphs = append(paragraphs, strings.TrimSpace(s.Text()))
-		}
-	})
-
-	return strings.Join(paragraphs, " ")
 }
 
 // ── Fetching raw HTML (shared helper) ─────────────────────────────────────────

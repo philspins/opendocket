@@ -8,7 +8,6 @@ import (
 	"image"
 	"image/color"
 	"io"
-	"log"
 	"net/http"
 	neturl "net/url"
 	"os"
@@ -21,6 +20,7 @@ import (
 	"time"
 
 	"github.com/PuerkitoBio/goquery"
+	"github.com/philspins/opendocket/internal/clog"
 	"github.com/philspins/opendocket/internal/utils"
 )
 
@@ -44,7 +44,9 @@ const (
 	peiCaptchaSignature    = "captcha.perfdrive.com"
 	peiBotManagerSignature = "perfdrive.com"
 
-	peiDefaultDelay = 1 * time.Second
+	// Keep PE-specific internal delay disabled so bills/votes can be handed off
+	// to summarization as quickly as possible; top-level crawler delay still applies.
+	peiDefaultDelay = 0 * time.Second
 )
 
 const peiGeneralAssembly = 67
@@ -89,6 +91,125 @@ func wdfCollectRows(nodes []wdfNode) []wdfNode {
 	return out
 }
 
+// peBillIDPartsRe matches a PEI bill ID of the form "pe-<legislature>-<session>-<number>".
+var peBillIDPartsRe = regexp.MustCompile(`(?i)^pe-(\d+)-(\d+)-([a-z0-9-]+)$`)
+
+// wdfFindBillDocID searches the WDF response tree for the doc-ID associated with
+// a given bill number. The bill number match is case-insensitive.
+func wdfFindBillDocID(nodes []wdfNode, wantedBillNumber string) string {
+	wantedBillNumber = strings.ToUpper(strings.TrimSpace(wantedBillNumber))
+	for _, row := range wdfCollectRows(nodes) {
+		if len(row.Children) < 2 || len(row.Children[0].Children) == 0 {
+			continue
+		}
+		var number string
+		var cd wdfCellData
+		if json.Unmarshal(row.Children[1].Data, &cd) == nil && cd.Text != nil {
+			number = strings.ToUpper(strings.TrimSpace(*cd.Text))
+		}
+		if number == "" || number != wantedBillNumber {
+			continue
+		}
+		linkNode := row.Children[0].Children[0]
+		if linkNode.Type != "LinkV2" {
+			continue
+		}
+		var ld wdfLinkData
+		if json.Unmarshal(linkNode.Data, &ld) != nil {
+			continue
+		}
+		if id := strings.TrimSpace(ld.QueryParams["id"]); id != "" {
+			return id
+		}
+	}
+	return ""
+}
+
+// IsPEExpiredLinkResponse returns true when the HTTP response indicates that a
+// PEI bill-document link has expired. This happens when the docs.assembly.pe.ca
+// server returns HTTP 500 with an "Error retrieving file / link is expired" body.
+func IsPEExpiredLinkResponse(rawURL string, statusCode int, snippet string) bool {
+	if statusCode != http.StatusInternalServerError {
+		return false
+	}
+	u, err := neturl.Parse(rawURL)
+	if err != nil {
+		return false
+	}
+	host := strings.ToLower(u.Host)
+	if host != "docs.assembly.pe.ca" && !strings.HasPrefix(host, "127.0.0.1") && !strings.HasPrefix(host, "localhost") {
+		return false
+	}
+	if !strings.Contains(strings.ToLower(u.Path), "/download/dms") {
+		return false
+	}
+	lower := strings.ToLower(snippet)
+	return strings.Contains(lower, "error retrieving file") && strings.Contains(lower, "link is expired")
+}
+
+// ResolveFreshPEBillTextURL contacts the PEI WDF workflow API to look up a new
+// download URL for a bill whose stored URL has expired. billID must be a PEI bill
+// ID of the form "pe-<legislature>-<session>-<billNumber>". wdfBase is the root
+// of the WDF API server (e.g. "https://wdf.princeedwardisland.ca"); pass a local
+// test-server URL in tests to avoid network calls.
+func ResolveFreshPEBillTextURL(ctx context.Context, billID, wdfBase string) (string, error) {
+	if strings.TrimSpace(billID) == "" {
+		return "", fmt.Errorf("empty bill id")
+	}
+	matches := peBillIDPartsRe.FindStringSubmatch(strings.TrimSpace(billID))
+	if len(matches) != 4 {
+		return "", fmt.Errorf("not a PE bill id: %s", billID)
+	}
+	legislature, err := strconv.Atoi(matches[1])
+	if err != nil {
+		return "", err
+	}
+	session, err := strconv.Atoi(matches[2])
+	if err != nil {
+		return "", err
+	}
+	billNumber := strings.ToUpper(strings.TrimSpace(matches[3]))
+	if billNumber == "" {
+		return "", fmt.Errorf("missing bill number")
+	}
+
+	searchParams := map[string]string{
+		"search_bills":     "true",
+		"wdf_url_query":    "true",
+		"search":           "assembly",
+		"general_assembly": strconv.Itoa(legislature),
+		"session":          strconv.Itoa(session),
+	}
+	searchBody, err := postPEIWorkflowHTTP(ctx, wdfBase, peiWorkflowBills, peiWDFActivityBills, searchParams, nil, 0)
+	if err != nil {
+		return "", err
+	}
+	if searchBody == nil {
+		return "", fmt.Errorf("PE WDF search returned no data for %s", billID)
+	}
+	var searchResp wdfTreeResponse
+	if err := json.Unmarshal(searchBody, &searchResp); err != nil {
+		return "", err
+	}
+	billDocID := wdfFindBillDocID(searchResp.Data, billNumber)
+	if billDocID == "" {
+		return "", fmt.Errorf("bill doc id not found for %s", billID)
+	}
+
+	viewBody, err := postPEIWorkflowHTTP(ctx, wdfBase, peiWorkflowBills, peiWDFActivityBillView, map[string]string{"id": billDocID}, nil, 0)
+	if err != nil {
+		return "", err
+	}
+	if viewBody == nil {
+		return "", fmt.Errorf("PE WDF view returned no data for %s", billID)
+	}
+	var viewResp wdfTreeResponse
+	if err := json.Unmarshal(viewBody, &viewResp); err != nil {
+		return "", err
+	}
+	return firstWDFLinkHref(viewResp.Data), nil
+}
+
 // ── PEI WDF HTTP helpers ──────────────────────────────────────────────────────
 
 func isPEICaptchaBody(body []byte) bool {
@@ -105,7 +226,7 @@ func postPEIWorkflow(ctx context.Context, wdfBase, workflowName, activityName st
 		// Skip pei_fetch.js in production - it requires puppeteer-extra which may not be installed
 		// and it's slow/unreliable (hangs for 30+ seconds). Use HTTP POST directly instead.
 		if client == nil {
-			log.Printf("[pe-wdf] no HTTP client available for WDF API")
+			clog.Infof("[pe-wdf] no HTTP client available for WDF API")
 			return nil, nil
 		}
 		return postPEIWorkflowHTTP(ctx, wdfBase, workflowName, activityName, queryVars, client, delay)
@@ -136,7 +257,7 @@ func invokePEIFetchJS(ctx context.Context, workflowName, activityName string, qu
 	cmd.Stdout = &stdout
 	cmd.Stderr = &stderr
 	if err := cmd.Run(); err != nil {
-		log.Printf("[pe-wdf] pei_fetch.js: %v stderr=%s", err, stderr.String())
+		clog.Infof("[pe-wdf] pei_fetch.js: %v stderr=%s", err, stderr.String())
 		return nil, nil
 	}
 	return stdout.Bytes(), nil
@@ -192,7 +313,7 @@ func postPEIWorkflowHTTP(ctx context.Context, wdfBase, workflowName, activityNam
 	}
 	defer resp.Body.Close()
 	if resp.StatusCode != http.StatusOK {
-		log.Printf("[pe-wdf] %s returned HTTP %d; will fall back to HTML", workflowName, resp.StatusCode)
+		clog.Infof("[pe-wdf] %s returned HTTP %d; will fall back to HTML", workflowName, resp.StatusCode)
 		return nil, nil
 	}
 	data, err := io.ReadAll(io.LimitReader(resp.Body, 2<<20))
@@ -377,17 +498,17 @@ func crawlPEIBillsFromWorkflow(wdfBase string, year, legislature, session int, c
 
 	var resp wdfTreeResponse
 	if err := json.Unmarshal(body, &resp); err != nil {
-		log.Printf("[pe-bills] wdf tree decode: %v; falling back to HTML", err)
+		clog.Infof("[pe-bills] wdf tree decode: %v; falling back to HTML", err)
 		return nil, nil
 	}
 	if resp.Data == nil {
-		log.Printf("[pe-bills] wdf returned null data; falling back to HTML")
+		clog.Infof("[pe-bills] wdf returned null data; falling back to HTML")
 		return nil, nil
 	}
 
 	rows := wdfCollectRows(resp.Data)
 	if len(rows) == 0 {
-		log.Printf("[pe-bills] wdf returned 0 bill rows; falling back to HTML")
+		clog.Infof("[pe-bills] wdf returned 0 bill rows; falling back to HTML")
 		return nil, nil
 	}
 
@@ -469,7 +590,7 @@ func crawlPEIBillsFromWorkflow(wdfBase string, year, legislature, session int, c
 	}
 
 	sort.Slice(out, func(i, j int) bool { return out[i].ID < out[j].ID })
-	log.Printf("[pe-bills] wdf parsed %d bills", len(out))
+	clog.Debugf("[pe-bills] wdf parsed %d bills", len(out))
 	return out, nil
 }
 
@@ -494,7 +615,7 @@ func crawlPrinceEdwardIslandBills(indexURL string, legislature, session int, cli
 		return bills, nil
 	}
 	if werr != nil {
-		log.Printf("[pe-bills] wdf api: %v; falling back to HTML", werr)
+		clog.Infof("[pe-bills] wdf api: %v; falling back to HTML", werr)
 	}
 
 	return crawlProvincialBillsFromIndexWithMatcher(indexURL, "pe", legislature, session, "pei", client, peiBillLinkRe)
@@ -513,6 +634,7 @@ var peiDivOutcomeRe = regexp.MustCompile(`(?i)(?:Motion\s+(?:was\s+)?(?:CARRIED|
 var peiJournalPageHeaderRe = regexp.MustCompile(`JOURNAL OF THE LEGISLATIVE ASSEMBLY`)
 var peiOctalEscapeRe = regexp.MustCompile(`\\(\d{3})`)
 var peiPremierRe = regexp.MustCompile(`(?i)Hon\.\s+Premier`)
+var peiDivisionBoilerplateRe = regexp.MustCompile(`(?i)^(?:and\s+the\s+question\s+being\s+put.*|the\s+question\s+being\s+put.*|hon\.\s+mr\.\s+speaker\s+put\s+the\s+question.*|motion\s+resolved.*|the\s+motion\s+was.*)$`)
 
 var peiTitlePrefixes = []string{
 	"Hon. Leader of the Opposition",
@@ -600,22 +722,7 @@ func parsePEIJournalDivisions(rawText, pdfURL string, legislature, session, star
 			continue
 		}
 
-		desc := "Recorded division"
-		descStart := trigger[0] - 250
-		if descStart < 0 {
-			descStart = 0
-		}
-		if ctx := strings.TrimSpace(text[descStart:trigger[0]]); ctx != "" {
-			if idx := strings.LastIndexAny(ctx, ".;"); idx >= 0 {
-				ctx = strings.TrimSpace(ctx[idx+1:])
-			}
-			if len(ctx) > 200 {
-				ctx = ctx[:200]
-			}
-			if ctx = strings.Join(strings.Fields(ctx), " "); ctx != "" {
-				desc = ctx
-			}
-		}
+		desc := extractPEIDivisionDescription(text, trigger[0])
 
 		divID := ProvincialDivisionID("pe", legislature, session, divNum, date)
 		result := "Carried"
@@ -643,6 +750,38 @@ func parsePEIJournalDivisions(rawText, pdfURL string, legislature, session, star
 		divNum++
 	}
 	return results
+}
+
+func extractPEIDivisionDescription(text string, triggerStart int) string {
+	const contextWindow = 500
+	const maxDescriptionLen = 240
+
+	start := triggerStart - contextWindow
+	if start < 0 {
+		start = 0
+	}
+	ctx := strings.TrimSpace(strings.Join(strings.Fields(text[start:triggerStart]), " "))
+	if ctx == "" {
+		return "Recorded division"
+	}
+
+	parts := strings.FieldsFunc(ctx, func(r rune) bool {
+		return r == '.' || r == ';'
+	})
+	for i := len(parts) - 1; i >= 0; i-- {
+		candidate := strings.TrimSpace(strings.Trim(parts[i], " ,:-"))
+		if candidate == "" || peiDivisionBoilerplateRe.MatchString(candidate) {
+			continue
+		}
+		if len(candidate) > maxDescriptionLen {
+			candidate = strings.TrimSpace(candidate[:maxDescriptionLen])
+		}
+		if candidate != "" {
+			return candidate
+		}
+	}
+
+	return "Recorded division"
 }
 
 func parsePEIJournalMembers(block string) []string {
@@ -747,33 +886,33 @@ func crawlPEIVotesFromWorkflow(wdfBase string, year, legislature, session int, c
 		queryVars["search"] = "assembly"
 		queryVars["general_assembly"] = strconv.Itoa(legislature)
 		queryVars["session"] = strconv.Itoa(session)
-		log.Printf("[pe-votes] fetching journals for legislature=%d session=%d via WDF", legislature, session)
+		clog.Debugf("[pe-votes] fetching journals for legislature=%d session=%d via WDF", legislature, session)
 	} else {
 		queryVars["year"] = strconv.Itoa(year)
 		queryVars["search"] = "year"
-		log.Printf("[pe-votes] fetching journals for year=%d via WDF", year)
+		clog.Debugf("[pe-votes] fetching journals for year=%d via WDF", year)
 	}
 	body, err := postPEIWorkflow(context.Background(), wdfBase, peiWorkflowJournals, peiWDFActivityJournals, queryVars, client, delay)
 	if err != nil || body == nil {
-		log.Printf("[pe-votes] WDF workflow returned no data: %v", err)
+		clog.Infof("[pe-votes] WDF workflow returned no data: %v", err)
 		return nil, err
 	}
-	log.Printf("[pe-votes] WDF returned %d bytes", len(body))
+	clog.Debugf("[pe-votes] WDF returned %d bytes", len(body))
 
 	var resp wdfTreeResponse
 	if err := json.Unmarshal(body, &resp); err != nil {
-		log.Printf("[pe-votes] wdf tree decode: %v; falling back to HTML", err)
+		clog.Infof("[pe-votes] wdf tree decode: %v; falling back to HTML", err)
 		return nil, nil
 	}
 	if resp.Data == nil {
-		log.Printf("[pe-votes] wdf returned null data; falling back to HTML")
+		clog.Infof("[pe-votes] wdf returned null data; falling back to HTML")
 		return nil, nil
 	}
 
 	rows := wdfCollectRows(resp.Data)
-	log.Printf("[pe-votes] WDF returned %d journal rows", len(rows))
+	clog.Debugf("[pe-votes] WDF returned %d journal rows", len(rows))
 	if len(rows) == 0 {
-		log.Printf("[pe-votes] wdf returned 0 journal rows; falling back to HTML")
+		clog.Infof("[pe-votes] wdf returned 0 journal rows; falling back to HTML")
 		return nil, nil
 	}
 
@@ -815,7 +954,7 @@ func crawlPEIVotesFromWorkflow(wdfBase string, year, legislature, session int, c
 			}
 			text, terr := downloadAndExtractPDFText(safeLink, "pe", client)
 			if terr != nil {
-				log.Printf("[pe-votes] wdf journal %s: %v; skipping", link, terr)
+				clog.Infof("[pe-votes] wdf journal %s: %v; skipping", link, terr)
 				continue
 			}
 			parsed := parsePEIJournalDivisions(text, link, legislature, session, nextDivNum, date)
@@ -828,7 +967,7 @@ func crawlPEIVotesFromWorkflow(wdfBase string, year, legislature, session int, c
 		fullLink := resolveRelativeURL(peiAssemblyBase, link)
 		doc, derr := fetchDoc(fullLink, client)
 		if derr != nil {
-			log.Printf("[pe-votes] wdf journal %s: %v", fullLink, derr)
+			clog.Infof("[pe-votes] wdf journal %s: %v", fullLink, derr)
 			continue
 		}
 		parsed := parseGenericProvincialVotesDoc(doc, "pe", "pei", legislature, session, date)
@@ -837,12 +976,12 @@ func crawlPEIVotesFromWorkflow(wdfBase string, year, legislature, session int, c
 		time.Sleep(delay)
 	}
 
-	log.Printf("[pe-votes] wdf parsed %d divisions from %d journals", len(results), len(rows))
+	clog.Debugf("[pe-votes] wdf parsed %d divisions from %d journals", len(results), len(rows))
 	return results, nil
 }
 
 func crawlPEIVotes(indexURL string, legislature, session int, client *http.Client) ([]ProvincialDivisionResult, error) {
-	log.Printf("[pe-votes] fetching index: %s", indexURL)
+	clog.Debugf("[pe-votes] fetching index: %s", indexURL)
 	resp, err := client.Get(indexURL)
 	if err != nil {
 		return nil, fmt.Errorf("pe votes index: %w", err)
@@ -855,7 +994,7 @@ func crawlPEIVotes(indexURL string, legislature, session int, client *http.Clien
 	}
 
 	if isPEICaptchaBody(body) {
-		log.Printf("[pe-votes] CAPTCHA detected — assembly.pe.ca is protected by Radware bot-manager; returning 0 divisions.")
+		clog.Infof("[pe-votes] CAPTCHA detected — assembly.pe.ca is protected by Radware bot-manager; returning 0 divisions.")
 		return nil, nil
 	}
 
@@ -871,14 +1010,14 @@ func crawlPEIVotes(indexURL string, legislature, session int, client *http.Clien
 	for _, link := range links {
 		dayDoc, derr := fetchDoc(link, client)
 		if derr != nil {
-			log.Printf("[pe-votes] skip day link %s: %v", link, derr)
+			clog.Infof("[pe-votes] skip day link %s: %v", link, derr)
 			continue
 		}
 		date := extractDateFromURL(link)
 		parsed := parseGenericProvincialVotesDoc(dayDoc, "pe", "pei", legislature, session, date)
 		results = append(results, parsed...)
 	}
-	log.Printf("[pe-votes] parsed %d divisions", len(results))
+	clog.Debugf("[pe-votes] parsed %d divisions", len(results))
 	return results, nil
 }
 

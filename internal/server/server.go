@@ -384,13 +384,31 @@ func (s *Server) handleBillDetail(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	stages, _ := s.store.GetBillStages(id)
-	divs, _ := s.store.GetBillDivisions(id)
+	rawDivs, _ := s.store.GetBillDivisions(id)
+	divs := dedupeBillDetailDivisions(rawDivs)
 	reactions, _ := s.store.GetBillReactionCounts(id)
 	var isSubscribed bool
 	if isAuthenticated {
 		isSubscribed, _ = s.store.IsUserSubscribedToBill(user.ID, id)
 	}
 	_ = templates.BillDetail(ps, bill, stages, divs, reactions, isAuthenticated, isSubscribed).Render(r.Context(), w)
+}
+
+func dedupeBillDetailDivisions(divs []store.DivisionRow) []store.DivisionRow {
+	if len(divs) < 2 {
+		return divs
+	}
+	seen := make(map[string]struct{}, len(divs))
+	out := make([]store.DivisionRow, 0, len(divs))
+	for _, d := range divs {
+		key := d.ID
+		if _, ok := seen[key]; ok {
+			continue
+		}
+		seen[key] = struct{}{}
+		out = append(out, d)
+	}
+	return out
 }
 
 func (s *Server) handleVotes(w http.ResponseWriter, r *http.Request) {

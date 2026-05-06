@@ -23,6 +23,9 @@ jobs:
       - name: Install dependencies
         run: go mod vendor
 
+      - name: Check LF line endings
+        run: make eol-check
+
       - name: Build
         run: go build -v ./cmd/...
 

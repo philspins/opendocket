@@ -179,9 +179,7 @@ templ billCard(b store.BillRow, subscribed bool) {
 		if b.SponsorName != "" {
 			<p class="text-sm text-gray-600 mt-1">Sponsor: { b.SponsorName }</p>
 		}
-		if b.SummaryLoP != "" {
-			<p class="text-sm text-gray-600 mt-2">{ truncate(b.SummaryLoP, 120) }</p>
-		} else if b.SummaryAI != "" {
+		if b.SummaryAI != "" {
 			<p class="text-sm text-amber-700 mt-2 italic">{ ParseAISummary(b.SummaryAI).OneSentence }</p>
 		}
 		if b.CurrentStage != "" {

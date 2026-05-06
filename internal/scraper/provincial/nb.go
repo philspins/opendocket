@@ -1,7 +1,6 @@
 package provincial
 
 import (
-	"log"
 	"net/http"
 	"regexp"
 	"sort"
@@ -9,6 +8,7 @@ import (
 	"strings"
 
 	"github.com/PuerkitoBio/goquery"
+	"github.com/philspins/opendocket/internal/clog"
 	"github.com/philspins/opendocket/internal/utils"
 )
 
@@ -54,7 +54,7 @@ func crawlNewBrunswickVotesFromPDF(indexURL string, legislature, session int, cl
 	for _, sessionURL := range sessionLinks {
 		doc, derr := fetchDoc(sessionURL, client)
 		if derr != nil {
-			log.Printf("[nb-votes] skip session %s: %v", sessionURL, derr)
+			clog.Infof("[nb-votes] skip session %s: %v", sessionURL, derr)
 			continue
 		}
 		for _, pdfURL := range discoverNewBrunswickJournalPDFLinks(doc, sessionURL) {
@@ -71,7 +71,7 @@ func crawlNewBrunswickVotesFromPDF(indexURL string, legislature, session int, cl
 		pdfLinks = pdfLinks[len(pdfLinks)-60:]
 	}
 	if len(pdfLinks) == 0 {
-		log.Printf("[nb-votes] no journal PDFs discovered; falling back to generic parser")
+		clog.Infof("[nb-votes] no journal PDFs discovered; falling back to generic parser")
 		return crawlGenericProvincialVotesWithMatcher(indexURL, "nb", "new_brunswick", legislature, session, client, newBrunswickVotesLinkRe)
 	}
 
@@ -80,18 +80,18 @@ func crawlNewBrunswickVotesFromPDF(indexURL string, legislature, session int, cl
 	for _, pdfURL := range pdfLinks {
 		divs, consumed, derr := crawlNewBrunswickJournalPDF(pdfURL, legislature, session, nextDivNum, client)
 		if derr != nil {
-			log.Printf("[nb-votes] skip pdf %s: %v", pdfURL, derr)
+			clog.Infof("[nb-votes] skip pdf %s: %v", pdfURL, derr)
 			continue
 		}
 		results = append(results, divs...)
 		nextDivNum += consumed
 	}
 	if len(results) == 0 {
-		log.Printf("[nb-votes] no divisions parsed from PDFs; falling back to generic parser")
+		clog.Infof("[nb-votes] no divisions parsed from PDFs; falling back to generic parser")
 		return crawlGenericProvincialVotesWithMatcher(indexURL, "nb", "new_brunswick", legislature, session, client, newBrunswickVotesLinkRe)
 	}
 
-	log.Printf("[nb-votes] parsed %d divisions from %d PDFs", len(results), len(pdfLinks))
+	clog.Debugf("[nb-votes] parsed %d divisions from %d PDFs", len(results), len(pdfLinks))
 	return results, nil
 }
 
@@ -142,12 +142,22 @@ func crawlNewBrunswickJournalPDF(pdfURL string, legislature, session, startDivis
 		return nil, 0, err
 	}
 
-	date := extractDateFromURL(pdfURL)
-	if date == "" {
-		date = utils.TodayISO()
-	}
+	date := newBrunswickJournalDate(pdfURL, text)
 	parsed := parseNewBrunswickPDFDivisions(text, pdfURL, legislature, session, startDivisionNumber, date)
 	return parsed, len(parsed), nil
+}
+
+// Prefer date found in the PDF header — NB journal PDF URLs often carry
+// opaque 8-digit document IDs (e.g. "49240606") that the generic URL date
+// extractor misreads as year 4924 instead of 2024.
+func newBrunswickJournalDate(pdfURL, text string) string {
+	if date := utils.FindDateInText(text); date != "" {
+		return date
+	}
+	if date := extractDateFromURL(pdfURL); date != "" {
+		return date
+	}
+	return utils.TodayISO()
 }
 
 func parseNewBrunswickPDFDivisions(text, detailURL string, legislature, session, startDivisionNumber int, date string) []ProvincialDivisionResult {
@@ -302,7 +312,13 @@ func CrawlNewBrunswickVotes(indexURL string, legislature, session int, client *h
 }
 
 // parseNewBrunswickVoteNames extracts names from NB-style vote blocks (Hon. Mr./Ms. prefix format).
-var newBrunswickNameTokenRe = regexp.MustCompile(`(?i)(?:Hon\.\s+)?(?:Mr\.|Ms\.)\s+(?:[A-Z]\.\s+)?[A-Z][A-Za-z\.'\-]+(?:\s*\-\s*[A-Z][A-Za-z\.'\-]+)*`)
+// Title prefix matching is case-sensitive so mid-sentence "ms." artifacts ("ms. On",
+// "ms. Concerning") are not mistaken for name entries. Minimum 3 characters in the
+// name portion avoids matching OCR-split fragments like "Ho" or "Th".
+var newBrunswickNameTokenRe = regexp.MustCompile(`(?:Hon\.\s+)?(?:Mr\.|Ms\.)\s+(?:[A-Z]\.\s+)?[A-Z][A-Za-z\.'\-]{2,}(?:\s*-\s*[A-Z][A-Za-z\.'\-]+)*`)
+
+// nbTitlePrefixes are stripped case-insensitively from each matched token.
+var nbTitlePrefixes = []string{"Hon. Mr. ", "Hon. Ms. ", "Hon. ", "Mr. ", "Ms. ", "Dr. "}
 
 func parseNewBrunswickVoteNames(blockText string) []string {
 	if strings.TrimSpace(blockText) == "" {
@@ -322,10 +338,18 @@ func parseNewBrunswickVoteNames(blockText string) []string {
 			continue
 		}
 		name = strings.ReplaceAll(name, " - ", "-")
-		name = strings.TrimSpace(strings.TrimPrefix(name, "Hon. "))
-		name = strings.TrimSpace(strings.TrimPrefix(name, "Mr. "))
-		name = strings.TrimSpace(strings.TrimPrefix(name, "Ms. "))
-		name = strings.TrimSpace(strings.TrimPrefix(name, "Dr. "))
+		lower := strings.ToLower(name)
+		for _, p := range nbTitlePrefixes {
+			if strings.HasPrefix(lower, strings.ToLower(p)) {
+				name = strings.TrimSpace(name[len(p):])
+				lower = strings.ToLower(name)
+				break
+			}
+		}
+		// Skip procedural non-names that survive prefix stripping.
+		if strings.EqualFold(name, "Speaker") || len(name) < 3 {
+			continue
+		}
 		key := strings.ToLower(name)
 		if seen[key] {
 			continue

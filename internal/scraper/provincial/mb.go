@@ -1,10 +1,10 @@
 package provincial
 
 import (
+	"errors"
 	"fmt"
 	"image"
 	"image/color"
-	"log"
 	"math"
 	"net/http"
 	"regexp"
@@ -14,6 +14,7 @@ import (
 	"time"
 
 	"github.com/PuerkitoBio/goquery"
+	"github.com/philspins/opendocket/internal/clog"
 	"github.com/philspins/opendocket/internal/utils"
 )
 
@@ -400,7 +401,7 @@ func crawlManitobaVotesFromPDF(indexURL string, legislature, session int, client
 	if client == nil {
 		client = utils.NewHTTPClient()
 	}
-	log.Printf("[mb-votes] fetching index: %s", indexURL)
+	clog.Debugf("[mb-votes] fetching index: %s", indexURL)
 	indexDoc, err := fetchDoc(indexURL, client)
 	if err != nil {
 		return nil, fmt.Errorf("mb votes index: %w", err)
@@ -429,7 +430,7 @@ func crawlManitobaVotesFromPDF(indexURL string, legislature, session int, client
 		sessionLinks = matchingSessionLinks
 	}
 	if len(sessionLinks) == 0 {
-		log.Printf("[mb-votes] no session pages discovered; falling back to generic parser")
+		clog.Infof("[mb-votes] no session pages discovered; falling back to generic parser")
 		return crawlGenericProvincialVotesWithMatcher(indexURL, "mb", "manitoba", legislature, session, client, manitobaVotesLinkRe)
 	}
 	sort.Strings(sessionLinks)
@@ -443,7 +444,7 @@ func crawlManitobaVotesFromPDF(indexURL string, legislature, session int, client
 	for _, sessURL := range sessionLinks {
 		sessDoc, serr := fetchDoc(sessURL, client)
 		if serr != nil {
-			log.Printf("[mb-votes] skip session %s: %v", sessURL, serr)
+			clog.Infof("[mb-votes] skip session %s: %v", sessURL, serr)
 			continue
 		}
 		sessDoc.Find("a[href]").Each(func(_ int, a *goquery.Selection) {
@@ -465,7 +466,7 @@ func crawlManitobaVotesFromPDF(indexURL string, legislature, session int, client
 		pdfLinks = pdfLinks[len(pdfLinks)-80:]
 	}
 	if len(pdfLinks) == 0 {
-		log.Printf("[mb-votes] no VP PDFs discovered; falling back to generic parser")
+		clog.Infof("[mb-votes] no VP PDFs discovered; falling back to generic parser")
 		return crawlGenericProvincialVotesWithMatcher(indexURL, "mb", "manitoba", legislature, session, client, manitobaVotesLinkRe)
 	}
 
@@ -474,7 +475,11 @@ func crawlManitobaVotesFromPDF(indexURL string, legislature, session int, client
 	for _, pdfURL := range pdfLinks {
 		text, terr := downloadAndExtractPDFText(pdfURL, "mb", client)
 		if terr != nil {
-			log.Printf("[mb-votes] skip pdf %s: %v", pdfURL, terr)
+			if errors.Is(terr, errNonPDFResponse) {
+				clog.Debugf("[mb-votes] skip non-pdf link %s: %v", pdfURL, terr)
+				continue
+			}
+			clog.Infof("[mb-votes] skip pdf %s: %v", pdfURL, terr)
 			continue
 		}
 		date := extractDateFromURL(pdfURL)
@@ -494,7 +499,7 @@ func crawlManitobaVotesFromPDF(indexURL string, legislature, session int, client
 			nextDivNum++
 		}
 	}
-	log.Printf("[mb-votes] parsed %d divisions from %d PDFs", len(results), len(pdfLinks))
+	clog.Debugf("[mb-votes] parsed %d divisions from %d PDFs", len(results), len(pdfLinks))
 	return results, nil
 }
 

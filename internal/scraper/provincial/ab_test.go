@@ -38,6 +38,9 @@ func TestParseAlbertaVPDivisions_ForAgainstFormat(t *testing.T) {
 	if divs[0].Division.Result != "Carried" {
 		t.Fatalf("result=%q, want Carried", divs[0].Division.Result)
 	}
+	if divs[0].Division.Description != "Bill 37 amendment" {
+		t.Fatalf("description=%q, want %q", divs[0].Division.Description, "Bill 37 amendment")
+	}
 	if len(divs[0].Votes) < 5 {
 		t.Fatalf("len(votes)=%d, want >=5", len(divs[0].Votes))
 	}
@@ -86,8 +89,67 @@ func TestParseAlbertaVPDivisions_QuestionBlocksKeepBillDescription(t *testing.T)
 	if len(divs) != 1 {
 		t.Fatalf("len(divs)=%d, want 1", len(divs))
 	}
-	if !strings.Contains(divs[0].Division.Description, "Bill 27 Financial Statutes Amendment Act") {
-		t.Fatalf("description=%q", divs[0].Division.Description)
+	want := "Bill 27 Financial Statutes Amendment Act, 2026 - Second Reading"
+	if divs[0].Division.Description != want {
+		t.Fatalf("description=%q, want %q", divs[0].Division.Description, want)
+	}
+}
+
+func TestParseAlbertaVPDivisions_FirstReadingDescriptionIsolated(t *testing.T) {
+	text := `DIVISION 1 On the motion that the following Bill be now read a First time: Bill 9 Protecting Alberta's Children Statutes Amendment Act, 2025 -- Hon. Mr. Amery For the motion: 48 A B C Against the motion: 35 D E F`
+	divs := ParseAlbertaVPDivisionsForTest(text, "https://example.com/vp.pdf", 31, 2, 1, "2025-11-18")
+	if len(divs) != 1 {
+		t.Fatalf("len(divs)=%d, want 1", len(divs))
+	}
+	want := "Bill 9 Protecting Alberta's Children Statutes Amendment Act, 2025 - First Reading"
+	if divs[0].Division.Description != want {
+		t.Fatalf("description=%q, want %q", divs[0].Division.Description, want)
+	}
+}
+
+// TestParseAlbertaVPDivisions_NoiseFiltering verifies that riding-name fragments,
+// backslash-contaminated tokens, and procedural boilerplate are not emitted as
+// member names. The fixture text mirrors real AB V&P PDF extraction artifacts seen
+// in production logs: riding names like "Calgary-North", "Cypress-Medicine Hat\",
+// backslash tokens like "Edmonton-Riverview\", and procedural words like
+// "Committee", "Standing", "Motions".
+func TestParseAlbertaVPDivisions_NoiseFiltering(t *testing.T) {
+	// Simulate a PDF block where nayBlock overflows into boilerplate that contains
+	// riding-name fragments and procedural words.
+	text := "DIVISION 1 On the motion For the motion: 3 Smith Jones Brown Against the motion: 2 Davis Wilson " +
+		"ORDERS OF THE DAY Back to Government Motions Committee of the Whole " +
+		"Moved pursuant to Standing Order Calgary-North East\\ Edmonton-Riverview\\ Cypress-Medicine Hat\\"
+	divs := ParseAlbertaVPDivisionsForTest(text, "https://example.com/vp.pdf", 31, 2, 1, "2025-11-18")
+	if len(divs) != 1 {
+		t.Fatalf("len(divs)=%d, want 1", len(divs))
+	}
+	// Count members per vote type
+	yeas := 0
+	nays := 0
+	for _, v := range divs[0].Votes {
+		switch v.Vote {
+		case "Yea":
+			yeas++
+		case "Nay":
+			nays++
+		}
+		// No vote member should be a riding fragment or procedural word
+		noise := []string{
+			"Calgary-North", "Cypress-Medicine", "East", "Edmonton-Riverview",
+			"Committee", "Whole", "Back", "Motions", "Moved", "Pursuant", "Standing",
+			"Orders", "Hat", "Highwood",
+		}
+		for _, n := range noise {
+			if strings.EqualFold(v.MemberName, n) {
+				t.Errorf("noise token %q leaked into votes", v.MemberName)
+			}
+		}
+	}
+	if yeas != 3 {
+		t.Errorf("yeas=%d want 3; yea votes: %v", yeas, divs[0].Votes)
+	}
+	if nays != 2 {
+		t.Errorf("nays=%d want 2; nay votes: %v", nays, divs[0].Votes)
 	}
 }
 

@@ -2,7 +2,6 @@ package provincial
 
 import (
 	"fmt"
-	"log"
 	"net/http"
 	"regexp"
 	"sort"
@@ -10,6 +9,7 @@ import (
 	"strings"
 
 	"github.com/PuerkitoBio/goquery"
+	"github.com/philspins/opendocket/internal/clog"
 	"github.com/philspins/opendocket/internal/utils"
 )
 
@@ -164,6 +164,12 @@ var abForCountRe = regexp.MustCompile(`(?i)For\s+the\s+[^:]{1,60}:\s*(\d+)`)
 var abAgainstCountRe = regexp.MustCompile(`(?i)Against\s+the\s+[^:]{1,60}:\s*(\d+)`)
 var abDivisionSplitRe = regexp.MustCompile(`(?i)DIVISION\s+\d+`)
 var abQuestionVoteMarkerRe = regexp.MustCompile(`(?is)The question being put,.*?names being called for were taken as follows:\s*`)
+var abReadATimeBillRe = regexp.MustCompile(`(?i)read\s+a\s+(first|second|third)\s+time:\s*bill\s+((?:pr?)?\d+[A-Z]?)\s+(.+?)(?:\s+--|\s+hon\.|\s+a\s+debate\b|\s+the\s+question\b|$)`)
+var abReadingBillRe = regexp.MustCompile(`(?i)(first|second|third)\s+reading\s+on\s+bill\s+((?:pr?)?\d+[A-Z]?)\s*[,:-]?\s*(.+?)(?:\s+--|\s+hon\.|\s+the\s+question\b|$)`)
+var abBillAmendmentRe = regexp.MustCompile(`(?i)bill\s+((?:pr?)?\d+[A-Z]?)\s+amendment`)
+var abAmendmentToBillRe = regexp.MustCompile(`(?i)amendment\s+(?:to|on)\s+bill\s+((?:pr?)?\d+[A-Z]?)`)
+var abBillTitleRe = regexp.MustCompile(`(?i)bill\s+((?:pr?)?\d+[A-Z]?)\s+(.+?)(?:\s+--|\s+hon\.|\s+the\s+question\b|$)`)
+var abReadingWordRe = regexp.MustCompile(`(?i)\b(first|second|third)\s+reading\b|\bread\s+a\s+(first|second|third)\s+time\b`)
 
 // parseAlbertaVPDivisions parses recorded vote divisions from normalised AB V&P PDF text.
 // Alberta uses "For the [phrase]: N" / "Against the [phrase]: N" format with plain surname lists.
@@ -213,6 +219,7 @@ func parseAlbertaVPDivisions(text, detailURL string, legislature, session, start
 		if len(desc) > 220 {
 			desc = desc[len(desc)-220:]
 		}
+		desc = cleanAlbertaDivisionDescription(desc)
 		if desc == "" {
 			desc = "Recorded division"
 		}
@@ -223,10 +230,10 @@ func parseAlbertaVPDivisions(text, detailURL string, legislature, session, start
 		}
 
 		votes := make([]ProvincialMemberVote, 0, yeas+nays)
-		for _, name := range extractPlainVoteNames(yeaBlock) {
+		for _, name := range extractPlainVoteNamesN(yeaBlock, yeas) {
 			votes = append(votes, ProvincialMemberVote{DivisionID: divID, MemberName: name, Vote: "Yea"})
 		}
-		for _, name := range extractPlainVoteNames(nayBlock) {
+		for _, name := range extractPlainVoteNamesN(nayBlock, nays) {
 			votes = append(votes, ProvincialMemberVote{DivisionID: divID, MemberName: name, Vote: "Nay"})
 		}
 
@@ -240,7 +247,7 @@ func parseAlbertaVPDivisions(text, detailURL string, legislature, session, start
 			Votes: votes,
 		})
 	}
-	log.Printf("[ab-votes] parsed %d divisions", len(results))
+	clog.Debugf("[ab-votes] parsed %d divisions", len(results))
 	return results
 }
 
@@ -288,10 +295,10 @@ func parseAlbertaQuestionBlocks(text, detailURL string, legislature, session, st
 		}
 
 		votes := make([]ProvincialMemberVote, 0, yeas+nays)
-		for _, name := range extractPlainVoteNames(yeaBlock) {
+		for _, name := range extractPlainVoteNamesN(yeaBlock, yeas) {
 			votes = append(votes, ProvincialMemberVote{DivisionID: divID, MemberName: name, Vote: "Yea"})
 		}
-		for _, name := range extractPlainVoteNames(nayBlock) {
+		for _, name := range extractPlainVoteNamesN(nayBlock, nays) {
 			votes = append(votes, ProvincialMemberVote{DivisionID: divID, MemberName: name, Vote: "Nay"})
 		}
 
@@ -305,7 +312,7 @@ func parseAlbertaQuestionBlocks(text, detailURL string, legislature, session, st
 			Votes: votes,
 		})
 	}
-	log.Printf("[ab-votes] parsed %d divisions", len(results))
+	clog.Debugf("[ab-votes] parsed %d divisions", len(results))
 	return results
 }
 
@@ -336,11 +343,75 @@ func extractAlbertaQuestionDescription(text string, markerStart int) string {
 		context = strings.TrimSpace(context[best:])
 	}
 	context = regexp.MustCompile(`^(?:[A-Z][A-Z\s]{3,}\s+)+`).ReplaceAllString(context, "")
-	if len(context) > 220 {
-		context = context[len(context)-220:]
-	}
+	context = cleanAlbertaDivisionDescription(context)
 	if context == "" {
 		return "Recorded division"
+	}
+	return context
+}
+
+func cleanAlbertaDivisionDescription(context string) string {
+	context = strings.TrimSpace(strings.Join(strings.Fields(strings.ReplaceAll(context, "\u00a0", " ")), " "))
+	if context == "" {
+		return ""
+	}
+
+	if m := abReadATimeBillRe.FindStringSubmatch(context); len(m) == 4 {
+		reading := strings.Title(strings.ToLower(m[1])) + " Reading"
+		bill := strings.TrimSpace(m[2])
+		title := strings.Trim(strings.TrimSpace(m[3]), "-:;, ")
+		if title != "" {
+			return fmt.Sprintf("Bill %s %s - %s", bill, title, reading)
+		}
+		return fmt.Sprintf("Bill %s - %s", bill, reading)
+	}
+
+	if m := abReadingBillRe.FindStringSubmatch(context); len(m) == 4 {
+		reading := strings.Title(strings.ToLower(m[1])) + " Reading"
+		bill := strings.TrimSpace(m[2])
+		title := strings.Trim(strings.TrimSpace(m[3]), "-:;, ")
+		if title != "" {
+			return fmt.Sprintf("Bill %s %s - %s", bill, title, reading)
+		}
+		return fmt.Sprintf("Bill %s - %s", bill, reading)
+	}
+
+	if m := abBillAmendmentRe.FindStringSubmatch(context); len(m) == 2 {
+		return fmt.Sprintf("Bill %s amendment", strings.TrimSpace(m[1]))
+	}
+	if m := abAmendmentToBillRe.FindStringSubmatch(context); len(m) == 2 {
+		return fmt.Sprintf("Bill %s amendment", strings.TrimSpace(m[1]))
+	}
+
+	if m := abBillTitleRe.FindStringSubmatch(context); len(m) == 3 {
+		bill := strings.TrimSpace(m[1])
+		title := strings.Trim(strings.TrimSpace(m[2]), "-:;, ")
+		reading := ""
+		if rm := abReadingWordRe.FindStringSubmatch(context); len(rm) > 0 {
+			word := ""
+			if len(rm) > 1 && rm[1] != "" {
+				word = rm[1]
+			} else if len(rm) > 2 {
+				word = rm[2]
+			}
+			if word != "" {
+				reading = strings.Title(strings.ToLower(word)) + " Reading"
+			}
+		}
+		if title != "" && reading != "" {
+			return fmt.Sprintf("Bill %s %s - %s", bill, title, reading)
+		}
+		if title != "" {
+			return fmt.Sprintf("Bill %s %s", bill, title)
+		}
+		if reading != "" {
+			return fmt.Sprintf("Bill %s - %s", bill, reading)
+		}
+		return fmt.Sprintf("Bill %s", bill)
+	}
+
+	if len(context) > 220 {
+		context = context[len(context)-220:]
 	}
 	return context
 }
@@ -356,7 +427,7 @@ func crawlAlbertaVotesFromPDF(indexURL string, legislature, session int, client 
 	if client == nil {
 		client = utils.NewHTTPClient()
 	}
-	log.Printf("[ab-votes] fetching index: %s", indexURL)
+	clog.Debugf("[ab-votes] fetching index: %s", indexURL)
 	indexDoc, err := fetchDoc(indexURL, client)
 	if err != nil {
 		return nil, fmt.Errorf("ab votes index: %w", err)
@@ -382,7 +453,7 @@ func crawlAlbertaVotesFromPDF(indexURL string, legislature, session int, client 
 		pdfLinks = pdfLinks[len(pdfLinks)-60:]
 	}
 	if len(pdfLinks) == 0 {
-		log.Printf("[ab-votes] no VP PDFs discovered")
+		clog.Infof("[ab-votes] no VP PDFs discovered")
 		return nil, nil
 	}
 
@@ -391,7 +462,7 @@ func crawlAlbertaVotesFromPDF(indexURL string, legislature, session int, client 
 	for _, pdfURL := range pdfLinks {
 		text, terr := downloadAndExtractPDFText(pdfURL, "ab", client)
 		if terr != nil {
-			log.Printf("[ab-votes] skip pdf %s: %v", pdfURL, terr)
+			clog.Debugf("[ab-votes] skip pdf %s: %v", pdfURL, terr)
 			continue
 		}
 		date := extractDateFromURL(pdfURL)
@@ -408,7 +479,7 @@ func crawlAlbertaVotesFromPDF(indexURL string, legislature, session int, client 
 			nextDivNum++
 		}
 	}
-	log.Printf("[ab-votes] parsed %d divisions from %d PDFs", len(results), len(pdfLinks))
+	clog.Debugf("[ab-votes] parsed %d divisions from %d PDFs", len(results), len(pdfLinks))
 	return results, nil
 }
 

@@ -3,9 +3,10 @@ package provincial
 
 import (
 	"bufio"
+	"errors"
 	"fmt"
 	"io"
-	"log"
+	"net"
 	"net/http"
 	"os"
 	"path/filepath"
@@ -13,11 +14,15 @@ import (
 	"sort"
 	"strconv"
 	"strings"
+	"time"
 
 	"github.com/PuerkitoBio/goquery"
 	"github.com/pdfcpu/pdfcpu/pkg/api"
+	"github.com/philspins/opendocket/internal/clog"
 	"github.com/philspins/opendocket/internal/utils"
 )
+
+var errNonPDFResponse = errors.New("non-pdf response")
 
 // ── types ─────────────────────────────────────────────────────────────────────
 
@@ -46,6 +51,27 @@ func ProvincialDivisionID(province string, legislature, session, num int, date s
 // ── PDF extraction ────────────────────────────────────────────────────────────
 
 func downloadAndExtractPDFText(pdfURL, province string, client *http.Client) (string, error) {
+	const attempts = 3
+	var lastErr error
+	for attempt := 1; attempt <= attempts; attempt++ {
+		text, err := downloadAndExtractPDFTextOnce(pdfURL, province, client)
+		if err == nil {
+			return text, nil
+		}
+		lastErr = err
+		if attempt < attempts && isTransientPDFError(err) {
+			time.Sleep(time.Duration(attempt) * 250 * time.Millisecond)
+			continue
+		}
+		return "", err
+	}
+	if lastErr != nil {
+		return "", lastErr
+	}
+	return "", fmt.Errorf("GET %q: unknown PDF extraction error", pdfURL)
+}
+
+func downloadAndExtractPDFTextOnce(pdfURL, province string, client *http.Client) (string, error) {
 	resp, err := client.Get(pdfURL)
 	if err != nil {
 		return "", fmt.Errorf("GET %q: %w", pdfURL, err)
@@ -55,13 +81,22 @@ func downloadAndExtractPDFText(pdfURL, province string, client *http.Client) (st
 		snippet, _ := io.ReadAll(io.LimitReader(resp.Body, 512))
 		return "", fmt.Errorf("GET %q: status %d - %s", pdfURL, resp.StatusCode, strings.TrimSpace(string(snippet)))
 	}
+	peek := make([]byte, 5)
+	n, _ := io.ReadFull(resp.Body, peek)
+	peek = peek[:n]
+	contentType := strings.ToLower(strings.TrimSpace(resp.Header.Get("Content-Type")))
+	isPDFHeader := len(peek) >= 5 && string(peek[:5]) == "%PDF-"
+	if !isPDFHeader && strings.Contains(contentType, "text/html") {
+		return "", fmt.Errorf("%w: GET %q redirected to HTML (status %d, content-type %q)", errNonPDFResponse, pdfURL, resp.StatusCode, contentType)
+	}
+	reader := io.MultiReader(strings.NewReader(string(peek)), resp.Body)
 	tmp, err := os.CreateTemp("", "opendocket-"+province+"-*.pdf")
 	if err != nil {
 		return "", err
 	}
 	tmpPath := tmp.Name()
 	defer func() { _ = tmp.Close(); _ = os.Remove(tmpPath) }()
-	written, err := io.Copy(tmp, io.LimitReader(resp.Body, 32<<20))
+	written, err := io.Copy(tmp, io.LimitReader(reader, 32<<20))
 	if err != nil {
 		return "", err
 	}
@@ -72,6 +107,22 @@ func downloadAndExtractPDFText(pdfURL, province string, client *http.Client) (st
 		return "", err
 	}
 	return extractProvincialPDFText(tmpPath)
+}
+
+func isTransientPDFError(err error) bool {
+	if err == nil {
+		return false
+	}
+	var netErr net.Error
+	if errors.As(err, &netErr) && (netErr.Timeout() || netErr.Temporary()) {
+		return true
+	}
+	msg := strings.ToLower(err.Error())
+	return strings.Contains(msg, "eof") ||
+		strings.Contains(msg, "no header version available") ||
+		strings.Contains(msg, "xreftable failed") ||
+		strings.Contains(msg, "timeout") ||
+		strings.Contains(msg, "connection reset")
 }
 
 func extractProvincialPDFText(pdfPath string) (string, error) {
@@ -159,9 +210,17 @@ func extractDateFromURL(rawURL string) string {
 	}
 	raw := m[1]
 	if len(raw) == 8 && raw[4] != '-' {
-		return fmt.Sprintf("%s-%s-%s", raw[:4], raw[4:6], raw[6:8])
+		raw = fmt.Sprintf("%s-%s-%s", raw[:4], raw[4:6], raw[6:8])
 	}
-	return raw
+	parsed, err := time.Parse("2006-01-02", raw)
+	if err != nil {
+		return ""
+	}
+	year := parsed.Year()
+	if year < 1900 || year > time.Now().UTC().Year()+1 {
+		return ""
+	}
+	return parsed.Format("2006-01-02")
 }
 
 // ── parliamentOrdinal ─────────────────────────────────────────────────────────
@@ -245,6 +304,67 @@ var voteKeywords = map[string]bool{
 	"JOURNALS": true, "JOURNAL": true, "SITTING": true,
 	"RECORDED": true, "CHAIR": true, "SPEAKER": true, "DEPUTY": true,
 	"MINUTES": true, "REPORT": true, "PAGE": true,
+	// Month and day names that appear in AB/MB V&P PDF text blocks.
+	"JANUARY": true, "FEBRUARY": true, "MARCH": true, "APRIL": true,
+	"MAY": true, "JUNE": true, "JULY": true, "AUGUST": true,
+	"SEPTEMBER": true, "OCTOBER": true, "NOVEMBER": true, "DECEMBER": true,
+	"MONDAY": true, "TUESDAY": true, "WEDNESDAY": true, "THURSDAY": true, "FRIDAY": true,
+	// Parliamentary and government titles/abbreviations.
+	"MLA": true, "MLC": true, "PREMIER": true, "MINISTER": true, "MEMBER": true,
+	"GOVERNMENT": true, "OPPOSITION": true, "LEADER": true,
+	// Alberta-specific boilerplate that bleeds into name blocks from PDF extraction.
+	"APPROPRIATION": true, "SUPPLEMENTARY": true, "FISCAL": true,
+	"BUDGET": true, "ESTIMATES": true, "SUPPLY": true, "LOAN": true,
+	"ALBERTA": true, "PROVINCE": true, "PROVINCIAL": true,
+	// Parliamentary procedural words that appear after the name list in AB/MB PDFs.
+	"COMMITTEE": true, "COMMITTEES": true, "WHOLE": true, "BACK": true, "WITH": true,
+	"TABLE": true, "TABLING": true, "TABLINGS": true, "PROGRESS": true,
+	"ORDERS": true, "DAY": true, "MOTIONS": true, "MOVED": true,
+	"PURSUANT": true, "STANDING": true, "ACCORDING": true, "CERTAIN": true,
+	"PAPER": true, "BILLS": true, "PASSED": true, "REJECTED": true,
+	"REFERRED": true, "TABLED": true, "DEFERRED": true, "DEFEATED": true,
+	"AGREED": true, "SESSIONAL": true,
+	// Debate/procedural flow words.
+	"ADJOURNMENT": true, "DEBATE": true, "ORAL": true, "ROUTINE": true,
+	"STATEMENTS": true, "URGENT": true, "WRITTEN": true, "DAILY": true,
+	"FALL": true, "THRONE": true, "ADDRESS": true,
+	"NOTICES": true, "QUESTIONS": true, "PETITIONS": true, "REPLIES": true,
+	"DIVISIONS": true, "INTRODUCTION": true,
+	// Officers/titles that appear in AB V&P PDF bodies.
+	"AUDITOR": true, "CLERK": true, "LIEUTENANT": true, "GOVERNOR": true,
+	"GAZETTE": true, "PRESIDENT": true, "TREASURER": true, "BOARD": true,
+	"BUREAU": true, "COMMISSION": true, "COUNCIL": true, "OMBUDSMAN": true,
+	// Government/ministry subject nouns.
+	"ANNUAL": true, "SPECIAL": true, "FEDERAL": true, "MUNICIPAL": true,
+	"NATIONAL": true, "REGIONAL": true, "SOCIAL": true, "HEALTH": true,
+	"EDUCATION": true, "LABOUR": true, "JUSTICE": true, "PUBLIC": true,
+	"GENERAL": true, "REVIEW": true, "GOVERNANCE": true, "AUDIT": true,
+	"SERVICES": true, "AFFAIRS": true, "FINANCE": true, "TREASURY": true,
+	"UTILITIES": true, "INFRASTRUCTURE": true, "TOURISM": true, "ENERGY": true,
+	"ENVIRONMENT": true, "AGRICULTURE": true, "FAMILIES": true, "CHILDREN": true,
+	"SENIORS": true, "MENTAL": true, "COMMUNITY": true, "HOUSING": true,
+	"INDIGENOUS": true, "PARKS": true, "FORESTRY": true,
+	// Direction/geographic words that appear in AB riding names but not as surnames.
+	"NORTH": true, "SOUTH": true, "EAST": true, "WEST": true,
+	"CENTRAL": true, "CENTRE": true, "RURAL": true,
+	// Common English words observed as AB V&P noise.
+	"TITLE": true, "SPEECH": true, "REPLY": true,
+	"PRIVATE": true, "INTERGOVERNMENTAL": true, "INTERSESSIONAL": true,
+	"MEASURES": true, "DEPOSITS": true, "STATUTES": true,
+}
+
+// abRidingPrefixSet is the set of Alberta city/region names that begin
+// hyphenated riding names (e.g. "Calgary-North", "Edmonton-Riverview").
+// These tokens are never valid member surnames.
+var abRidingPrefixSet = map[string]bool{
+	"CALGARY": true, "EDMONTON": true, "AIRDRIE": true, "CHESTERMERE": true,
+	"COCHRANE": true, "BONNYVILLE": true, "BANFF": true, "CAMROSE": true,
+	"LETHBRIDGE": true, "CYPRESS": true, "LIVINGSTONE": true,
+	"STRATHMORE": true, "OLDS": true, "LACOMBE": true,
+	"SHERWOOD": true, "INNISFAIL": true, "STETTLER": true,
+	"VEGREVILLE": true, "WAINWRIGHT": true, "VERMILION": true,
+	"CARDSTON": true, "PINCHER": true, "CROWFOOT": true,
+	"HIGHWOOD": true, "MACLEOD": true,
 }
 
 var voteNamePrefixTokens = map[string]bool{
@@ -252,6 +372,9 @@ var voteNamePrefixTokens = map[string]bool{
 	"LA": true, "LE": true, "MAC": true, "MC": true, "SAINT": true,
 	"ST": true, "VAN": true, "VON": true,
 }
+
+var newBrunswickDescRecordedDivisionTailRe = regexp.MustCompile(`(?is)\bRECORDED\s+DIVISION\b.*$`)
+var newBrunswickDescBoilerplateRe = regexp.MustCompile(`(?is)\b(?:and\s+the\s+debate\s+being\s+ended|the\s+debate\s+being\s+ended|and\s+the\s+question\s+being\s+put|the\s+question\s+being\s+put|leave\s+was\s+granted\s+to\s+dispense\s+with\s+the\s+ten\s*-?\s*minute\s+time\s+allotted\s+for\s+the\s+ringing\s+of\s+the\s+bells|on\s+the\s+following\s+recorded\s+division)\b`)
 
 var splitUppercaseNameTokenRe = regexp.MustCompile(`\b([A-Z])\s+([A-Z][A-Z][A-Z''\-]*)\b`)
 
@@ -266,7 +389,7 @@ func collapseSplitUppercaseNameTokens(text string) string {
 }
 
 func cleanPlainVoteToken(tok string) string {
-	tok = strings.TrimRight(tok, ".,;:)'\"")
+	tok = strings.TrimRight(tok, ".,;:)'\"\\")
 	tok = strings.TrimLeft(tok, "('\"")
 	return tok
 }
@@ -281,6 +404,13 @@ func isPlainVoteNameToken(tok string) bool {
 	if voteKeywords[strings.ToUpper(tok)] {
 		return false
 	}
+	// Reject hyphenated tokens whose first part is a known AB riding-name city
+	// (e.g. "Calgary-North", "Edmonton-Riverview"). These are never surnames.
+	if idx := strings.IndexByte(tok, '-'); idx > 0 {
+		if abRidingPrefixSet[strings.ToUpper(tok[:idx])] {
+			return false
+		}
+	}
 	allDigit := true
 	for _, c := range tok {
 		if c < '0' || c > '9' {
@@ -291,14 +421,24 @@ func isPlainVoteNameToken(tok string) bool {
 	return !allDigit
 }
 
-// extractPlainVoteNames extracts member surnames from a vote-block text where
+// extractPlainVoteNamesN extracts member surnames from a vote-block text where
 // names appear as plain capitalized tokens without "Mr./Ms." prefixes (AB, MB, NS).
-func extractPlainVoteNames(blockText string) []string {
+// max > 0 caps the number of names returned, preventing overflow into boilerplate
+// that follows the name list in AB/MB PDF documents.
+func extractPlainVoteNamesN(blockText string, max int) []string {
 	blockText = collapseSplitUppercaseNameTokens(strings.ReplaceAll(blockText, "\u00a0", " "))
 	rawTokens := strings.Fields(blockText)
 	seen := make(map[string]bool)
 	names := make([]string, 0)
 	for i := 0; i < len(rawTokens); i++ {
+		if max > 0 && len(names) >= max {
+			break
+		}
+		// Skip raw tokens with backslash (PDF path artifacts, Windows-1252 curly
+		// quotes encoded as 0x92/0x94, corrupted bill/section references, etc.).
+		if strings.ContainsAny(rawTokens[i], "\\\x91\x92\x93\x94") {
+			continue
+		}
 		tok := cleanPlainVoteToken(rawTokens[i])
 		if !isPlainVoteNameToken(tok) {
 			continue
@@ -320,10 +460,16 @@ func extractPlainVoteNames(blockText string) []string {
 	return names
 }
 
+// extractPlainVoteNames extracts member surnames from a vote-block text where
+// names appear as plain capitalized tokens without "Mr./Ms." prefixes (AB, MB, NS).
+func extractPlainVoteNames(blockText string) []string {
+	return extractPlainVoteNamesN(blockText, 0)
+}
+
 // newBrunswickDescriptionFromContext extracts a description from context text before
 // a match position. Used by NB, MB, and generic parsers.
 func newBrunswickDescriptionFromContext(text string, matchStart int) string {
-	start := matchStart - 260
+	start := matchStart - 700
 	if start < 0 {
 		start = 0
 	}
@@ -331,12 +477,25 @@ func newBrunswickDescriptionFromContext(text string, matchStart int) string {
 	if snippet == "" {
 		return ""
 	}
-	parts := strings.Split(snippet, ".")
-	desc := strings.TrimSpace(parts[len(parts)-1])
-	if len(desc) > 220 {
-		desc = desc[len(desc)-220:]
+
+	snippet = strings.TrimSpace(newBrunswickDescRecordedDivisionTailRe.ReplaceAllString(snippet, ""))
+	parts := strings.FieldsFunc(snippet, func(r rune) bool {
+		return r == '.' || r == ';' || r == ':'
+	})
+	for i := len(parts) - 1; i >= 0; i-- {
+		desc := strings.TrimSpace(parts[i])
+		if desc == "" || newBrunswickDescBoilerplateRe.MatchString(desc) {
+			continue
+		}
+		if len(desc) > 220 {
+			desc = strings.TrimSpace(desc[len(desc)-220:])
+		}
+		if desc != "" {
+			return desc
+		}
 	}
-	return strings.TrimSpace(desc)
+
+	return ""
 }
 
 // parsePDFDivisionsYeasNays parses recorded vote divisions from normalised PDF text
@@ -460,7 +619,7 @@ func crawlGenericProvincialVotesWithMatcher(indexURL, provinceCode, chamber stri
 	if client == nil {
 		client = utils.NewHTTPClient()
 	}
-	log.Printf("[%s-votes] fetching index: %s", provinceCode, indexURL)
+	clog.Debugf("[%s-votes] fetching index: %s", provinceCode, indexURL)
 
 	doc, err := fetchDoc(indexURL, client)
 	if err != nil {
@@ -476,7 +635,7 @@ func crawlGenericProvincialVotesWithMatcher(indexURL, provinceCode, chamber stri
 	for _, link := range links {
 		dayDoc, derr := fetchDoc(link, client)
 		if derr != nil {
-			log.Printf("[%s-votes] skip day link %s: %v", provinceCode, link, derr)
+			clog.Infof("[%s-votes] skip day link %s: %v", provinceCode, link, derr)
 			continue
 		}
 		date := extractDateFromURL(link)
@@ -484,7 +643,7 @@ func crawlGenericProvincialVotesWithMatcher(indexURL, provinceCode, chamber stri
 		results = append(results, parsed...)
 	}
 
-	log.Printf("[%s-votes] parsed %d divisions", provinceCode, len(results))
+	clog.Debugf("[%s-votes] parsed %d divisions", provinceCode, len(results))
 	return results, nil
 }
 

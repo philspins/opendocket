@@ -1,7 +1,13 @@
 package utils_test
 
 import (
+	"net/http"
+	"net/http/httptest"
+	"os"
+	"path/filepath"
+	"strings"
 	"testing"
+	"time"
 
 	"github.com/philspins/opendocket/internal/utils"
 )
@@ -184,5 +190,227 @@ func TestFindDateInText(t *testing.T) {
 		if got != c.want {
 			t.Errorf("FindDateInText(%q) = %q, want %q", c.text, got, c.want)
 		}
+	}
+}
+
+// ── TodayISO / NowISO ────────────────────────────────────────────────────────
+
+func TestTodayISO_ReturnsISODateFormat(t *testing.T) {
+	got := utils.TodayISO()
+	if len(got) != 10 || got[4] != '-' || got[7] != '-' {
+		t.Errorf("TodayISO() = %q, want YYYY-MM-DD", got)
+	}
+	if _, err := time.Parse("2006-01-02", got); err != nil {
+		t.Errorf("TodayISO() = %q is not a valid ISO date: %v", got, err)
+	}
+}
+
+func TestNowISO_ReturnsISODateTimeFormat(t *testing.T) {
+	got := utils.NowISO()
+	if len(got) != 19 || got[4] != '-' || got[10] != 'T' || got[13] != ':' {
+		t.Errorf("NowISO() = %q, want YYYY-MM-DDTHH:MM:SS", got)
+	}
+	if _, err := time.Parse("2006-01-02T15:04:05", got); err != nil {
+		t.Errorf("NowISO() = %q is not valid: %v", got, err)
+	}
+}
+
+// ── NewHTTPClient / uaTransport ───────────────────────────────────────────────
+
+func TestNewHTTPClient_SetsUserAgentHeader(t *testing.T) {
+	var gotUA string
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		gotUA = r.Header.Get("User-Agent")
+		w.WriteHeader(http.StatusOK)
+	}))
+	defer srv.Close()
+
+	client := utils.NewHTTPClient()
+	resp, err := client.Get(srv.URL)
+	if err != nil {
+		t.Fatalf("request failed: %v", err)
+	}
+	resp.Body.Close()
+
+	if gotUA != utils.AppUserAgent {
+		t.Errorf("User-Agent = %q, want %q", gotUA, utils.AppUserAgent)
+	}
+}
+
+func TestNewHTTPClientWithTimeout_SetsUserAgentHeader(t *testing.T) {
+	var gotUA string
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		gotUA = r.Header.Get("User-Agent")
+		w.WriteHeader(http.StatusOK)
+	}))
+	defer srv.Close()
+
+	client := utils.NewHTTPClientWithTimeout(5 * time.Second)
+	resp, err := client.Get(srv.URL)
+	if err != nil {
+		t.Fatalf("request failed: %v", err)
+	}
+	resp.Body.Close()
+
+	if gotUA != utils.AppUserAgent {
+		t.Errorf("User-Agent = %q, want %q", gotUA, utils.AppUserAgent)
+	}
+}
+
+func TestUATransport_SetsAcceptHeaderWhenAbsent(t *testing.T) {
+	var gotAccept string
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		gotAccept = r.Header.Get("Accept")
+		w.WriteHeader(http.StatusOK)
+	}))
+	defer srv.Close()
+
+	client := utils.NewHTTPClient()
+	resp, err := client.Get(srv.URL)
+	if err != nil {
+		t.Fatalf("request failed: %v", err)
+	}
+	resp.Body.Close()
+
+	if gotAccept == "" {
+		t.Error("uaTransport should set Accept header when not already present")
+	}
+	if !strings.Contains(gotAccept, "text/html") {
+		t.Errorf("Accept = %q, expected to contain text/html", gotAccept)
+	}
+}
+
+func TestUATransport_PreservesExistingAcceptHeader(t *testing.T) {
+	var gotAccept string
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		gotAccept = r.Header.Get("Accept")
+		w.WriteHeader(http.StatusOK)
+	}))
+	defer srv.Close()
+
+	client := utils.NewHTTPClient()
+	req, _ := http.NewRequest(http.MethodGet, srv.URL, nil)
+	req.Header.Set("Accept", "application/json")
+	resp, err := client.Do(req)
+	if err != nil {
+		t.Fatalf("request failed: %v", err)
+	}
+	resp.Body.Close()
+
+	if gotAccept != "application/json" {
+		t.Errorf("Accept = %q, want application/json (pre-set header should not be overwritten)", gotAccept)
+	}
+}
+
+// ── ParliamentSessionFromBillID (additional branches) ─────────────────────────
+
+func TestParliamentSessionFromBillID_NonNumericParliament(t *testing.T) {
+	_, _, ok := utils.ParliamentSessionFromBillID("abc-1-c-47")
+	if ok {
+		t.Error("expected ok=false when parliament is non-numeric")
+	}
+}
+
+func TestParliamentSessionFromBillID_NonNumericSession(t *testing.T) {
+	_, _, ok := utils.ParliamentSessionFromBillID("45-xyz-c-47")
+	if ok {
+		t.Error("expected ok=false when session is non-numeric")
+	}
+}
+
+// ── LoadDotEnv ────────────────────────────────────────────────────────────────
+
+func writeDotEnv(t *testing.T, content string) string {
+	t.Helper()
+	dir := t.TempDir()
+	path := filepath.Join(dir, ".env")
+	if err := os.WriteFile(path, []byte(content), 0600); err != nil {
+		t.Fatalf("WriteFile: %v", err)
+	}
+	return path
+}
+
+func TestLoadDotEnv_FileNotFound(t *testing.T) {
+	err := utils.LoadDotEnv("/tmp/nonexistent-opendocket-test-dotenv-xyz.env")
+	if err != nil {
+		t.Errorf("LoadDotEnv(missing file) = %v, want nil", err)
+	}
+}
+
+func TestLoadDotEnv_SetsKeyValuePairs(t *testing.T) {
+	path := writeDotEnv(t, "DOTENV_TEST_KEY1=hello\nDOTENV_TEST_KEY2=world\n")
+	t.Cleanup(func() {
+		os.Unsetenv("DOTENV_TEST_KEY1")
+		os.Unsetenv("DOTENV_TEST_KEY2")
+	})
+	if err := utils.LoadDotEnv(path); err != nil {
+		t.Fatalf("LoadDotEnv: %v", err)
+	}
+	if got := os.Getenv("DOTENV_TEST_KEY1"); got != "hello" {
+		t.Errorf("DOTENV_TEST_KEY1 = %q, want hello", got)
+	}
+	if got := os.Getenv("DOTENV_TEST_KEY2"); got != "world" {
+		t.Errorf("DOTENV_TEST_KEY2 = %q, want world", got)
+	}
+}
+
+func TestLoadDotEnv_SkipsBlankLinesAndComments(t *testing.T) {
+	path := writeDotEnv(t, "\n# This is a comment\nDOTENV_TEST_SKIP=set\n")
+	t.Cleanup(func() { os.Unsetenv("DOTENV_TEST_SKIP") })
+	if err := utils.LoadDotEnv(path); err != nil {
+		t.Fatalf("LoadDotEnv: %v", err)
+	}
+	if got := os.Getenv("DOTENV_TEST_SKIP"); got != "set" {
+		t.Errorf("DOTENV_TEST_SKIP = %q, want set", got)
+	}
+}
+
+func TestLoadDotEnv_DoesNotOverwriteExisting(t *testing.T) {
+	t.Setenv("DOTENV_TEST_EXISTING", "original")
+	path := writeDotEnv(t, "DOTENV_TEST_EXISTING=overwritten\n")
+	if err := utils.LoadDotEnv(path); err != nil {
+		t.Fatalf("LoadDotEnv: %v", err)
+	}
+	if got := os.Getenv("DOTENV_TEST_EXISTING"); got != "original" {
+		t.Errorf("DOTENV_TEST_EXISTING = %q, want original (existing vars must not be overwritten)", got)
+	}
+}
+
+func TestLoadDotEnv_StripsInlineComments(t *testing.T) {
+	path := writeDotEnv(t, "DOTENV_TEST_INLINE=value # inline comment\n")
+	t.Cleanup(func() { os.Unsetenv("DOTENV_TEST_INLINE") })
+	if err := utils.LoadDotEnv(path); err != nil {
+		t.Fatalf("LoadDotEnv: %v", err)
+	}
+	if got := os.Getenv("DOTENV_TEST_INLINE"); got != "value" {
+		t.Errorf("DOTENV_TEST_INLINE = %q, want value (inline comment not stripped)", got)
+	}
+}
+
+func TestLoadDotEnv_StripsQuotes(t *testing.T) {
+	path := writeDotEnv(t, "DOTENV_TEST_DQ=\"double quoted\"\nDOTENV_TEST_SQ='single quoted'\n")
+	t.Cleanup(func() {
+		os.Unsetenv("DOTENV_TEST_DQ")
+		os.Unsetenv("DOTENV_TEST_SQ")
+	})
+	if err := utils.LoadDotEnv(path); err != nil {
+		t.Fatalf("LoadDotEnv: %v", err)
+	}
+	if got := os.Getenv("DOTENV_TEST_DQ"); got != "double quoted" {
+		t.Errorf("DOTENV_TEST_DQ = %q, want double quoted", got)
+	}
+	if got := os.Getenv("DOTENV_TEST_SQ"); got != "single quoted" {
+		t.Errorf("DOTENV_TEST_SQ = %q, want single quoted", got)
+	}
+}
+
+func TestLoadDotEnv_SkipsLinesWithoutEquals(t *testing.T) {
+	path := writeDotEnv(t, "NOEQUALS\nDOTENV_TEST_AFTER=ok\n")
+	t.Cleanup(func() { os.Unsetenv("DOTENV_TEST_AFTER") })
+	if err := utils.LoadDotEnv(path); err != nil {
+		t.Fatalf("LoadDotEnv: %v", err)
+	}
+	if got := os.Getenv("DOTENV_TEST_AFTER"); got != "ok" {
+		t.Errorf("DOTENV_TEST_AFTER = %q, want ok", got)
 	}
 }

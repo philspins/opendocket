@@ -428,11 +428,56 @@ func TestParsePEIJournalDivisions_CountsWithoutParentheses(t *testing.T) {
 	}
 }
 
+func TestParsePEIJournalDivisions_PrefersMeaningfulContextOverBoilerplate(t *testing.T) {
+	meaningful := `Bill 8, An Act Respecting Health Services, after extended debate and detailed clause-by-clause review and further amendment and further debate and additional remarks from members across the chamber, was read the second time`
+	text := strings.Join(strings.Fields(meaningful+`. And the question being put on the motion. A Recorded Division being sought, the names were recorded by the Clerk as follows: Yeas 14 \ Member One \ Nays 6 \ Member Two \ Motion resolved in the Negative.`), " ")
+
+	divs := ParsePEIJournalDivisionsForTest(text, "https://docs.assembly.pe.ca/test.pdf", 67, 3, 1, "2026-04-07")
+	if len(divs) != 1 {
+		t.Fatalf("len(divs)=%d, want 1", len(divs))
+	}
+	if !strings.Contains(divs[0].Division.Description, "Bill 8") {
+		t.Fatalf("expected bill context in description, got %q", divs[0].Division.Description)
+	}
+	if strings.Contains(strings.ToLower(divs[0].Division.Description), "question being put") {
+		t.Fatalf("expected boilerplate to be stripped, got %q", divs[0].Division.Description)
+	}
+}
+
 func TestIsPEICaptchaBody_CaseInsensitive(t *testing.T) {
 	if !isPEICaptchaBody([]byte(`<html><head><link href="HTTPS://CAPTCHA.PERFDRIVE.COM/challenge.css"></head></html>`)) {
 		t.Fatal("expected captcha signature to be detected case-insensitively")
 	}
 	if !isPEICaptchaBody([]byte(`<script src="https://cdn.perfdrive.com/aperture/aperture.js"></script>`)) {
 		t.Fatal("expected generic perfdrive bot-manager signature to be detected")
+	}
+}
+
+// ── IsPEExpiredLinkResponse ───────────────────────────────────────────────────
+
+func TestIsPEExpiredLinkResponse(t *testing.T) {
+	base := "http://docs.assembly.pe.ca/download/dms/pe-123"
+	tests := []struct {
+		name       string
+		url        string
+		statusCode int
+		snippet    string
+		want       bool
+	}{
+		{"matches expired link", base, 500, "Error retrieving file: link is expired", true},
+		{"wrong status code", base, 404, "Error retrieving file: link is expired", false},
+		{"wrong host", "http://other.example.com/download/dms/pe-123", 500, "Error retrieving file: link is expired", false},
+		{"missing /download/dms in path", "http://docs.assembly.pe.ca/other/path", 500, "Error retrieving file: link is expired", false},
+		{"snippet lacks error retrieving", base, 500, "link is expired", false},
+		{"snippet lacks link is expired", base, 500, "Error retrieving file", false},
+		{"invalid URL", ":/bad", 500, "Error retrieving file: link is expired", false},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			got := IsPEExpiredLinkResponse(tt.url, tt.statusCode, tt.snippet)
+			if got != tt.want {
+				t.Errorf("IsPEExpiredLinkResponse() = %v, want %v", got, tt.want)
+			}
+		})
 	}
 }

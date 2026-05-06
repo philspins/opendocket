@@ -2,13 +2,13 @@ package provincial
 
 import (
 	"fmt"
-	"log"
 	"net/http"
 	"regexp"
 	"sort"
 	"strings"
 
 	"github.com/PuerkitoBio/goquery"
+	"github.com/philspins/opendocket/internal/clog"
 	"github.com/philspins/opendocket/internal/utils"
 )
 
@@ -105,6 +105,10 @@ var nlNegativedRe = regexp.MustCompile(`(?i)(?:motion|amendment|bill|resolution)
 
 // nlMotionDescRe captures the motion text for NL journal divisions.
 var nlMotionDescRe = regexp.MustCompile(`(?i)on\s+the\s+(?:motion|amendment|question)\s+(?:that\s+)?(.{0,180}?)(?:,\s+the\s+question\s+was\s+put|was\s+(?:agreed|carried|defeated|negatived))`)
+var nlAyesNaysHeadingRe = regexp.MustCompile(`(?i)(?:the\s+house\s+divided\.?\s*)?AYES?\s+NAYS?`)
+var nlDeclaredResultRe = regexp.MustCompile(`(?i)The\s+(?:Speaker|Chair)\s+declared\s+.{0,80}?(carried|defeated|negatived)`)
+var nlInitialNameRe = regexp.MustCompile(`(?:[A-Z]\.\s*)+[A-Z][A-Za-z']+(?:\s+[A-Z][A-Za-z']+){0,2}(?:\s*-\s*[A-Z][A-Za-z']+)?`)
+var nlSpacedInitialRe = regexp.MustCompile(`\b([A-Z])\s*\.\s*`)
 var newfoundlandVotesLinkRe = regexp.MustCompile(`(?i)(/business/votes|housebusiness|ga\d+session\d+|votes\.aspx|/votes(?:/|$))`)
 
 // expandNLShortDate converts an NL journal filename date "YY-MM-DD" to ISO "20YY-MM-DD".
@@ -120,6 +124,9 @@ func parseNLJournalDivisions(text, detailURL string, legislature, session, start
 	// Try YEAS/AYES member-level data first.
 	if genericYeasNaysVoteSectionRe.MatchString(text) {
 		return parsePDFDivisionsYeasNays(text, detailURL, "nl", "newfoundland_labrador", legislature, session, startDivisionNumber, date, parseNewBrunswickVoteNames)
+	}
+	if divs := parseNLAyesNaysDivisionsWithoutCounts(text, detailURL, legislature, session, startDivisionNumber, date); len(divs) > 0 {
+		return divs
 	}
 
 	// Outcome-only: find "agreed to" / "defeated" patterns.
@@ -182,7 +189,106 @@ func parseNLJournalDivisions(text, detailURL string, legislature, session, start
 			},
 		})
 	}
-	log.Printf("[nl-votes] %s: parsed %d divisions (outcome-only)", date, len(results))
+	clog.Debugf("[nl-votes] %s: parsed %d divisions (outcome-only)", date, len(results))
+	return results
+}
+
+func parseNLAyesNaysDivisionsWithoutCounts(text, detailURL string, legislature, session, startDivisionNumber int, date string) []ProvincialDivisionResult {
+	matchIdx := nlAyesNaysHeadingRe.FindAllStringIndex(text, -1)
+	if len(matchIdx) == 0 {
+		return nil
+	}
+
+	results := make([]ProvincialDivisionResult, 0, len(matchIdx))
+	for i, m := range matchIdx {
+		blockStart := m[1]
+		blockEnd := len(text)
+		if i+1 < len(matchIdx) {
+			blockEnd = matchIdx[i+1][0]
+		}
+		if blockEnd <= blockStart {
+			continue
+		}
+		block := text[blockStart:blockEnd]
+
+		result := ""
+		nameBlock := block
+		if rm := nlDeclaredResultRe.FindStringSubmatchIndex(block); len(rm) >= 4 {
+			nameBlock = block[:rm[0]]
+			raw := strings.ToLower(strings.TrimSpace(block[rm[2]:rm[3]]))
+			switch raw {
+			case "carried":
+				result = "Carried"
+			case "defeated", "negatived":
+				result = "Negatived"
+			}
+		}
+
+		clean := strings.ReplaceAll(nameBlock, `\222`, "'")
+		clean = strings.ReplaceAll(clean, `\\`, "")
+		clean = nlSpacedInitialRe.ReplaceAllString(clean, `$1. `)
+		clean = strings.ReplaceAll(clean, " - ", "-")
+		nameMatches := nlInitialNameRe.FindAllString(clean, -1)
+		if len(nameMatches) < 4 {
+			continue
+		}
+
+		// NL journals render two columns (Ayes/Nays). In extracted text, rows become
+		// alternating names: aye1, nay1, aye2, nay2, ...
+		ayeNames := make([]string, 0, (len(nameMatches)+1)/2)
+		nayNames := make([]string, 0, len(nameMatches)/2)
+		for j, raw := range nameMatches {
+			name := strings.Join(strings.Fields(strings.TrimSpace(raw)), " ")
+			if name == "" {
+				continue
+			}
+			if j%2 == 0 {
+				ayeNames = append(ayeNames, name)
+			} else {
+				nayNames = append(nayNames, name)
+			}
+		}
+		if len(ayeNames) == 0 || len(nayNames) == 0 {
+			continue
+		}
+
+		// If declaration conflicts with inferred side sizes, columns were likely
+		// read in reverse order for this block.
+		if (result == "Carried" && len(ayeNames) < len(nayNames)) || (result == "Negatived" && len(ayeNames) > len(nayNames)) {
+			ayeNames, nayNames = nayNames, ayeNames
+		}
+		if result == "" {
+			result = "Carried"
+			if len(nayNames) > len(ayeNames) {
+				result = "Negatived"
+			}
+		}
+
+		divNum := startDivisionNumber + len(results)
+		divID := ProvincialDivisionID("nl", legislature, session, divNum, date)
+		desc := newBrunswickDescriptionFromContext(text, m[0])
+		if desc == "" {
+			desc = "Recorded division"
+		}
+
+		votes := make([]ProvincialMemberVote, 0, len(ayeNames)+len(nayNames))
+		for _, name := range ayeNames {
+			votes = append(votes, ProvincialMemberVote{DivisionID: divID, MemberName: name, Vote: "Yea"})
+		}
+		for _, name := range nayNames {
+			votes = append(votes, ProvincialMemberVote{DivisionID: divID, MemberName: name, Vote: "Nay"})
+		}
+
+		results = append(results, ProvincialDivisionResult{
+			Division: DivisionStub{
+				ID: divID, Parliament: legislature, Session: session,
+				Number: divNum, Date: date, Description: desc,
+				Yeas: len(ayeNames), Nays: len(nayNames), Result: result,
+				Chamber: "newfoundland_labrador", DetailURL: detailURL, LastScraped: utils.NowISO(),
+			},
+			Votes: votes,
+		})
+	}
 	return results
 }
 
@@ -198,7 +304,7 @@ func crawlNLVotesFromPDF(indexURL string, legislature, session int, client *http
 	if client == nil {
 		client = utils.NewHTTPClient()
 	}
-	log.Printf("[nl-votes] fetching journals index: %s", indexURL)
+	clog.Debugf("[nl-votes] fetching journals index: %s", indexURL)
 	indexDoc, err := fetchDoc(indexURL, client)
 	if err != nil {
 		return nil, fmt.Errorf("nl journals index: %w", err)
@@ -223,7 +329,7 @@ func crawlNLVotesFromPDF(indexURL string, legislature, session int, client *http
 		sessionDirs = append(sessionDirs, full)
 	})
 	if len(sessionDirs) == 0 {
-		log.Printf("[nl-votes] no session directories found; falling back to generic parser")
+		clog.Infof("[nl-votes] no session directories found; falling back to generic parser")
 		return crawlGenericProvincialVotesWithMatcher(indexURL, "nl", "newfoundland_labrador", legislature, session, client, newfoundlandVotesLinkRe)
 	}
 	sort.Strings(sessionDirs)
@@ -237,7 +343,7 @@ func crawlNLVotesFromPDF(indexURL string, legislature, session int, client *http
 	for _, dirURL := range sessionDirs {
 		dirDoc, derr := fetchDoc(dirURL, client)
 		if derr != nil {
-			log.Printf("[nl-votes] skip session dir %s: %v", dirURL, derr)
+			clog.Infof("[nl-votes] skip session dir %s: %v", dirURL, derr)
 			continue
 		}
 		dirDoc.Find("a[href]").Each(func(_ int, a *goquery.Selection) {
@@ -259,7 +365,7 @@ func crawlNLVotesFromPDF(indexURL string, legislature, session int, client *http
 		pdfLinks = pdfLinks[len(pdfLinks)-80:]
 	}
 	if len(pdfLinks) == 0 {
-		log.Printf("[nl-votes] no journal PDFs discovered")
+		clog.Infof("[nl-votes] no journal PDFs discovered")
 		return nil, nil
 	}
 
@@ -268,7 +374,7 @@ func crawlNLVotesFromPDF(indexURL string, legislature, session int, client *http
 	for _, pdfURL := range pdfLinks {
 		text, terr := downloadAndExtractPDFText(pdfURL, "nl", client)
 		if terr != nil {
-			log.Printf("[nl-votes] skip pdf %s: %v", pdfURL, terr)
+			clog.Infof("[nl-votes] skip pdf %s: %v", pdfURL, terr)
 			continue
 		}
 		date := ""
@@ -291,7 +397,7 @@ func crawlNLVotesFromPDF(indexURL string, legislature, session int, client *http
 			nextDivNum++
 		}
 	}
-	log.Printf("[nl-votes] parsed %d divisions from %d PDFs", len(results), len(pdfLinks))
+	clog.Debugf("[nl-votes] parsed %d divisions from %d PDFs", len(results), len(pdfLinks))
 	return results, nil
 }
 

@@ -10,7 +10,6 @@ import (
 	"errors"
 	"fmt"
 	"io"
-	"log"
 	"net/http"
 	neturl "net/url"
 	"os"
@@ -26,6 +25,8 @@ import (
 
 	"github.com/PuerkitoBio/goquery"
 	"github.com/pdfcpu/pdfcpu/pkg/api"
+	"github.com/philspins/opendocket/internal/clog"
+	"github.com/philspins/opendocket/internal/scraper/provincial"
 	"github.com/philspins/opendocket/internal/utils"
 	"golang.org/x/net/html"
 )
@@ -40,7 +41,93 @@ const (
 	claudeModel              = "claude-sonnet-4-6"
 	claudeURL                = "https://api.anthropic.com/v1/messages"
 	maxBillTextResponseBytes = 8 * 1024 * 1024
+	defaultAnthropicRPM      = 15
+	claudeMaxAttempts        = 5
 )
+
+var (
+	anthropicMessagesURL = claudeURL
+	claudeInitialBackoff = 5 * time.Second
+	// peiWDFAPIBase is the root of the PEI WDF API. Overridden in tests to
+	// point at a local server.
+	peiWDFAPIBase    = "https://wdf.princeedwardisland.ca"
+	claudeHTTPClient = func() *http.Client {
+		client := utils.NewHTTPClient()
+		client.Timeout = 60 * time.Second
+		return client
+	}
+	claudeRateLimiter = newTokenBucket(summarizerEnvInt("ANTHROPIC_REQUESTS_PER_MINUTE", defaultAnthropicRPM))
+)
+
+type tokenBucket struct {
+	tokens chan struct{}
+	stop   chan struct{}
+	once   sync.Once
+}
+
+func newTokenBucket(rate int) *tokenBucket {
+	if rate <= 0 {
+		return nil
+	}
+	bucket := &tokenBucket{
+		tokens: make(chan struct{}, rate),
+		stop:   make(chan struct{}),
+	}
+	// Seed with one token so the very first request proceeds immediately,
+	// then let the ticker refill at the configured rate. Pre-filling all
+	// rate tokens (the previous behaviour) caused a burst equal to the
+	// full capacity on startup, defeating the purpose of rate limiting.
+	bucket.tokens <- struct{}{}
+	interval := time.Minute / time.Duration(rate)
+	go func() {
+		ticker := time.NewTicker(interval)
+		defer ticker.Stop()
+		for {
+			select {
+			case <-bucket.stop:
+				return
+			case <-ticker.C:
+				select {
+				case bucket.tokens <- struct{}{}:
+				default:
+				}
+			}
+		}
+	}()
+	return bucket
+}
+
+// Stop terminates the background refill goroutine. Safe to call more than once.
+func (bucket *tokenBucket) Stop() {
+	if bucket == nil {
+		return
+	}
+	bucket.once.Do(func() { close(bucket.stop) })
+}
+
+func (bucket *tokenBucket) wait(ctx context.Context) error {
+	if bucket == nil {
+		return nil
+	}
+	select {
+	case <-ctx.Done():
+		return ctx.Err()
+	case <-bucket.tokens:
+		return nil
+	}
+}
+
+func summarizerEnvInt(name string, fallback int) int {
+	raw := strings.TrimSpace(os.Getenv(name))
+	if raw == "" {
+		return fallback
+	}
+	value, err := strconv.Atoi(raw)
+	if err != nil || value <= 0 {
+		return fallback
+	}
+	return value
+}
 
 var pdfParenTextRe = regexp.MustCompile(`\(([^()]*)\)`)
 
@@ -179,6 +266,37 @@ func parseSummaryJSON(raw string) (SummaryResult, error) {
 	return SummaryResult{}, fmt.Errorf("invalid summary payload")
 }
 
+func parseRetryAfter(header string, now time.Time) time.Duration {
+	header = strings.TrimSpace(header)
+	if header == "" {
+		return 0
+	}
+	if seconds, err := strconv.Atoi(header); err == nil && seconds > 0 {
+		return time.Duration(seconds) * time.Second
+	}
+	if retryTime, err := http.ParseTime(header); err == nil {
+		delay := retryTime.Sub(now)
+		if delay > 0 {
+			return delay
+		}
+	}
+	return 0
+}
+
+func waitForRetry(ctx context.Context, delay time.Duration) error {
+	if delay <= 0 {
+		return nil
+	}
+	timer := time.NewTimer(delay)
+	defer timer.Stop()
+	select {
+	case <-ctx.Done():
+		return ctx.Err()
+	case <-timer.C:
+		return nil
+	}
+}
+
 func summarizerParallelism() int {
 	v := strings.TrimSpace(os.Getenv("SUMMARIZER_PARALLELISM"))
 	if v == "" {
@@ -194,20 +312,17 @@ func summarizerParallelism() int {
 var systemPrompt = `You are a non-partisan Canadian civic education assistant.
 Your job is to summarize bills from the Parliament of Canada in plain English.
 You must be accurate, neutral, and clear. Never editorialize or express opinions.
-Always write for a Canadian high school student, or an adult who dropped out of high 
-school and has limited reading skills — no legal jargon.
+Always write so a 13-year-old could follow it. Use short, plain sentences and avoid legal jargon.
 
-In addition to the main summary, identify any notable considerations, gotchas
-or other 'hidden shit': provisions, exceptions, side effects, carve-outs, enforcement 
-details, or hidden trade-offs that may not be obvious at first read. Highlight any
-clauses unrelated to the bill such as a civil rights issue in a Trade or Health bill.
-Describe these neutrally and factually. If no notable considerations are found, explicitly 
-state that.
+In addition to the main summary, identify any notable considerations: exceptions,
+side effects, carve-outs, enforcement details, trade-offs, or unrelated clauses that
+may not be obvious at first read. Describe these neutrally and factually. If there are
+no notable considerations, say so clearly.
 
 Provide your response as valid JSON only (no markdown or extra text):
 {
   "one_sentence": "One sentence (max 25 words) describing what this bill does.",
-  "plain_summary": "2–3 paragraph plain-English explanation. What does it do? Who does it affect? Why was it introduced?",
+	"plain_summary": "2 short paragraphs in plain English. Explain what the bill does, who it affects, and why it was introduced.",
   "key_changes": ["List of 3–6 specific things this bill would change or create"],
   "who_is_affected": ["List of groups, industries, or people most affected"],
   "notable_considerations": ["List of 0–5 potential caveats, non-obvious trade-offs, or implementation considerations in neutral language"],
@@ -275,20 +390,15 @@ func shouldSummarizeBill(ctx context.Context, db *sql.DB, billID, incomingLastAc
 
 	var (
 		summaryAI        string
-		summaryLoP       string
 		lastActivityDate string
 	)
 	err := db.QueryRowContext(ctx,
-		`SELECT COALESCE(summary_ai,''), COALESCE(summary_lop,''), COALESCE(last_activity_date,'')
+		`SELECT COALESCE(summary_ai,''), COALESCE(last_activity_date,'')
 		 FROM bills WHERE id = ?`,
 		billID,
-	).Scan(&summaryAI, &summaryLoP, &lastActivityDate)
+	).Scan(&summaryAI, &lastActivityDate)
 	if err != nil {
 		return true, fmt.Errorf("lookup bill %q: %w", billID, err)
-	}
-
-	if strings.TrimSpace(summaryLoP) != "" {
-		return false, nil
 	}
 
 	if strings.TrimSpace(summaryAI) == "" {
@@ -375,46 +485,7 @@ Respond with only valid JSON, no markdown or extra text.`, billID, billTitle, bi
 
 	callClaude := func(model string) (*claudeResponse, error) {
 		req.Model = model
-		body, err := json.Marshal(req)
-		if err != nil {
-			return nil, fmt.Errorf("marshal request: %w", err)
-		}
-
-		httpReq, err := http.NewRequestWithContext(ctx, http.MethodPost, claudeURL, bytes.NewReader(body))
-		if err != nil {
-			return nil, fmt.Errorf("create request: %w", err)
-		}
-
-		httpReq.Header.Set("x-api-key", apiKey)
-		httpReq.Header.Set("anthropic-version", "2023-06-01")
-		httpReq.Header.Set("content-type", "application/json")
-
-		client := utils.NewHTTPClient()
-		client.Timeout = 60 * time.Second
-		resp, err := client.Do(httpReq)
-		if err != nil {
-			return nil, fmt.Errorf("api call: %w", err)
-		}
-		defer resp.Body.Close()
-
-		respBody, err := io.ReadAll(resp.Body)
-		if err != nil {
-			return nil, fmt.Errorf("read response: %w", err)
-		}
-
-		if resp.StatusCode != http.StatusOK {
-			var apiErr claudeResponse
-			if json.Unmarshal(respBody, &apiErr) == nil && apiErr.Error != nil {
-				return nil, fmt.Errorf("api returned %d (%s): %s", resp.StatusCode, apiErr.Error.Type, apiErr.Error.Message)
-			}
-			return nil, fmt.Errorf("api returned %d: %s", resp.StatusCode, string(respBody))
-		}
-
-		var apiResp claudeResponse
-		if err := json.Unmarshal(respBody, &apiResp); err != nil {
-			return nil, fmt.Errorf("unmarshal response: %w", err)
-		}
-		return &apiResp, nil
+		return callClaudeAPI(ctx, apiKey, req)
 	}
 
 	var (
@@ -431,7 +502,7 @@ Respond with only valid JSON, no markdown or extra text.`, billID, billTitle, bi
 			return nil, lastErr
 		}
 		if i < len(models)-1 {
-			log.Printf("[summarizer] model %q unavailable; retrying with %q", candidate, models[i+1])
+			clog.Infof("[summarizer] model %q unavailable; retrying with %q", candidate, models[i+1])
 		}
 	}
 	if lastErr != nil {
@@ -459,12 +530,101 @@ Respond with only valid JSON, no markdown or extra text.`, billID, billTitle, bi
 	return &result, nil
 }
 
+// shouldRetryHTTPStatus reports whether the given HTTP status code warrants an
+// automatic retry. Rate-limit (429) and server errors (5xx) are both transient.
+func shouldRetryHTTPStatus(code int) bool {
+	return code == http.StatusTooManyRequests || code >= http.StatusInternalServerError
+}
+
+func callClaudeAPI(ctx context.Context, apiKey string, req claudeRequest) (*claudeResponse, error) {
+	body, err := json.Marshal(req)
+	if err != nil {
+		return nil, fmt.Errorf("marshal request: %w", err)
+	}
+
+	client := claudeHTTPClient()
+	backoff := claudeInitialBackoff
+	for attempt := 1; attempt <= claudeMaxAttempts; attempt++ {
+		if err := claudeRateLimiter.wait(ctx); err != nil {
+			return nil, fmt.Errorf("wait for rate limiter: %w", err)
+		}
+
+		httpReq, err := http.NewRequestWithContext(ctx, http.MethodPost, anthropicMessagesURL, bytes.NewReader(body))
+		if err != nil {
+			return nil, fmt.Errorf("create request: %w", err)
+		}
+		httpReq.Header.Set("x-api-key", apiKey)
+		httpReq.Header.Set("anthropic-version", "2023-06-01")
+		httpReq.Header.Set("content-type", "application/json")
+
+		resp, err := client.Do(httpReq)
+		if err != nil {
+			if attempt == claudeMaxAttempts {
+				return nil, fmt.Errorf("api call attempt %d: %w", attempt, err)
+			}
+			if waitErr := waitForRetry(ctx, backoff); waitErr != nil {
+				return nil, waitErr
+			}
+			backoff *= 2
+			continue
+		}
+
+		respBody, readErr := io.ReadAll(resp.Body)
+		resp.Body.Close()
+		if readErr != nil {
+			return nil, fmt.Errorf("read response: %w", readErr)
+		}
+
+		if resp.StatusCode == http.StatusOK {
+			var apiResp claudeResponse
+			if err := json.Unmarshal(respBody, &apiResp); err != nil {
+				return nil, fmt.Errorf("unmarshal response: %w", err)
+			}
+			return &apiResp, nil
+		}
+
+		// Try to parse a structured error from the response body; used for
+		// both the retry decision and the terminal error message.
+		var apiErr claudeResponse
+		hasAPIErr := json.Unmarshal(respBody, &apiErr) == nil && apiErr.Error != nil
+
+		errMsg := func() string {
+			if hasAPIErr {
+				return fmt.Sprintf("api returned %d (%s): %s", resp.StatusCode, apiErr.Error.Type, apiErr.Error.Message)
+			}
+			return fmt.Sprintf("api returned %d: %s", resp.StatusCode, strings.TrimSpace(string(respBody)))
+		}
+
+		if shouldRetryHTTPStatus(resp.StatusCode) {
+			delay := parseRetryAfter(resp.Header.Get("Retry-After"), time.Now().UTC())
+			if delay <= 0 {
+				delay = backoff
+			}
+			if resp.StatusCode == http.StatusTooManyRequests {
+				clog.Infof("[summarizer] claude rate limited; retrying in %s (attempt %d/%d)", delay, attempt, claudeMaxAttempts)
+			}
+			if attempt == claudeMaxAttempts {
+				return nil, fmt.Errorf("%s", errMsg())
+			}
+			if waitErr := waitForRetry(ctx, delay); waitErr != nil {
+				return nil, waitErr
+			}
+			backoff *= 2
+			continue
+		}
+
+		return nil, fmt.Errorf("%s", errMsg())
+	}
+
+	return nil, fmt.Errorf("claude api retry loop exhausted")
+}
+
 // SummarizeBillsFromChannel reads bill summary requests from a channel and
 // pipes each request into SummarizeBill.
 func SummarizeBillsFromChannel(ctx context.Context, db *sql.DB, requests <-chan BillSummaryRequest) (int, error) {
 	workers := summarizerParallelism()
 	if workers > 1 {
-		log.Printf("[summarizer] parallel workers: %d", workers)
+		clog.Infof("[summarizer] parallel workers: %d", workers)
 	}
 
 	var processed int64
@@ -483,43 +643,43 @@ func SummarizeBillsFromChannel(ctx context.Context, db *sql.DB, requests <-chan 
 			// Fetch the bill text first: this validates the URL and lets us
 			// clear full_text_url immediately on 404 regardless of whether
 			// an API key is configured.
-			billText, err := fetchBillText(ctx, req.FullTextURL)
+			billText, err := fetchBillText(ctx, req.BillID, req.FullTextURL)
 			if err != nil {
 				if errors.Is(err, ErrBillTextNotFound) {
 					// The bill text doesn't exist at the stored URL (e.g. pro-forma
 					// Senate bills like S-1).  Clear full_text_url so we don't
 					// retry on every future crawl run.
-					log.Printf("[summarizer] bill text unavailable (404) for %q; clearing full_text_url", req.BillID)
+					clog.Infof("[summarizer] bill text unavailable (404) for %q at %q; clearing full_text_url", req.BillID, req.FullTextURL)
 					db.ExecContext(ctx, `UPDATE bills SET full_text_url = '' WHERE id = ?`, req.BillID)
 				} else {
-					log.Printf("[summarizer] fetch bill text %q: %v", req.BillID, err)
+					clog.Infof("[summarizer] fetch bill text %q: %v", req.BillID, err)
 				}
 				continue
 			}
 
 			// Gate summarization on the API key and staleness check.
 			if os.Getenv("ANTHROPIC_API_KEY") == "" {
-				log.Printf("[summarizer] ANTHROPIC_API_KEY not set; skipping %q", req.BillID)
+				clog.Infof("[summarizer] ANTHROPIC_API_KEY not set; skipping %q", req.BillID)
 				continue
 			}
 			needed, err := shouldSummarizeBill(ctx, db, req.BillID, req.LastActivityDate)
 			if err != nil {
-				log.Printf("[summarizer] check bill %q: %v", req.BillID, err)
+				clog.Infof("[summarizer] check bill %q: %v", req.BillID, err)
 				continue
 			}
 			if !needed {
-				log.Printf("[summarizer] skip unchanged bill %q", req.BillID)
+				clog.Debugf("[summarizer] skip unchanged bill %q", req.BillID)
 				continue
 			}
 
-			log.Printf("[summarizer] summarizing bill %q (%s)...", req.BillID, req.BillTitle)
+			clog.Infof("[summarizer] summarizing bill %q (%s)...", req.BillID, req.BillTitle)
 			summary, err := SummarizeBill(ctx, db, req.BillID, req.BillTitle, billText, req.LastActivityDate)
 			if err != nil {
-				log.Printf("[summarizer] summarize error %q: %v", req.BillID, err)
+				clog.Infof("[summarizer] summarize error %q: %v", req.BillID, err)
 				continue
 			}
 			if summary == nil {
-				log.Printf("[summarizer] skip unchanged bill %q", req.BillID)
+				clog.Debugf("[summarizer] skip unchanged bill %q", req.BillID)
 				continue
 			}
 
@@ -528,12 +688,12 @@ func SummarizeBillsFromChannel(ctx context.Context, db *sql.DB, requests <-chan 
 				`UPDATE bills SET summary_ai = ?, category = ? WHERE id = ?`,
 				string(summaryJSON), summary.Category, req.BillID)
 			if err != nil {
-				log.Printf("[summarizer] store summary %q: %v", req.BillID, err)
+				clog.Infof("[summarizer] store summary %q: %v", req.BillID, err)
 				continue
 			}
 
 			atomic.AddInt64(&processed, 1)
-			log.Printf("[summarizer] ✓ stored summary for %q", req.BillID)
+			clog.Infof("[summarizer] ✓ stored summary for %q", req.BillID)
 
 			select {
 			case <-time.After(1 * time.Second):
@@ -555,16 +715,14 @@ func SummarizeBillsFromChannel(ctx context.Context, db *sql.DB, requests <-chan 
 	return int(atomic.LoadInt64(&processed)), nil
 }
 
-// SummarizeNewBills processes all bills that still lack summaries.
-// Priority: LoP > AI fallback.
+// SummarizeNewBills processes all bills that still lack AI summaries.
 // This is meant to be called by a robfig/cron scheduler job.
 func SummarizeNewBills(ctx context.Context, db *sql.DB, onlyMissing bool) (int, error) {
-	// Find bills without summaries (neither LoP nor AI).
+	// Find bills without AI summaries.
 	query := `
 		SELECT id, number, title, full_text_url
 		FROM bills
-		WHERE (summary_lop IS NULL OR summary_lop = '')
-		  AND (summary_ai IS NULL OR summary_ai = '')
+		WHERE (summary_ai IS NULL OR summary_ai = '')
 		ORDER BY introduced_date DESC
 		LIMIT 50  -- Batch size to avoid API overload
 	`
@@ -589,7 +747,7 @@ func SummarizeNewBills(ctx context.Context, db *sql.DB, onlyMissing bool) (int, 
 		for rows.Next() {
 			var billID, number, title, fullTextURL string
 			if err := rows.Scan(&billID, &number, &title, &fullTextURL); err != nil {
-				log.Printf("[summarizer] scan error: %v", err)
+				clog.Infof("[summarizer] scan error: %v", err)
 				continue
 			}
 
@@ -605,7 +763,7 @@ func SummarizeNewBills(ctx context.Context, db *sql.DB, onlyMissing bool) (int, 
 				FullTextURL: fullTextURL,
 			}:
 			case <-ctx.Done():
-				log.Printf("[summarizer] producer shutting down: %v", ctx.Err())
+				clog.Infof("[summarizer] producer shutting down: %v", ctx.Err())
 				return
 			}
 		}
@@ -622,7 +780,11 @@ func SummarizeNewBills(ctx context.Context, db *sql.DB, onlyMissing bool) (int, 
 }
 
 // fetchBillText fetches and extracts plain text from a bill's HTML document using goquery.
-func fetchBillText(ctx context.Context, url string) (string, error) {
+func fetchBillText(ctx context.Context, billID, url string) (string, error) {
+	return fetchBillTextWithFallback(ctx, billID, url, true)
+}
+
+func fetchBillTextWithFallback(ctx context.Context, billID, url string, allowPERefresh bool) (string, error) {
 	client := utils.NewHTTPClient()
 	req, err := http.NewRequestWithContext(ctx, http.MethodGet, url, nil)
 	if err != nil {
@@ -642,6 +804,12 @@ func fetchBillText(ctx context.Context, url string) (string, error) {
 	if resp.StatusCode != http.StatusOK {
 		preview, _ := io.ReadAll(io.LimitReader(resp.Body, 512))
 		snippet := strings.TrimSpace(collapseWhitespace(string(preview)))
+		if allowPERefresh && provincial.IsPEExpiredLinkResponse(url, resp.StatusCode, snippet) {
+			if freshURL, ferr := provincial.ResolveFreshPEBillTextURL(ctx, billID, peiWDFAPIBase); ferr == nil && strings.TrimSpace(freshURL) != "" && freshURL != url {
+				clog.Infof("[summarizer] refreshed expired PE bill link for %q", billID)
+				return fetchBillTextWithFallback(ctx, billID, freshURL, false)
+			}
+		}
 		if len(snippet) > 220 {
 			snippet = snippet[:220] + "..."
 		}
@@ -678,7 +846,7 @@ func fetchBillText(ctx context.Context, url string) (string, error) {
 	// Use goquery to parse HTML and extract text.
 	doc, err := goquery.NewDocumentFromReader(bytes.NewReader(body))
 	if err != nil {
-		log.Printf("[summarizer] goquery parse failed for %s: %v; falling back to tokenizer extraction", sanitizeLogURL(url), err)
+		clog.Infof("[summarizer] goquery parse failed for %s: %v; falling back to tokenizer extraction", sanitizeLogURL(url), err)
 		fallbackText := extractTextWithTokenizer(body)
 		return strings.TrimSpace(collapseWhitespace(fallbackText)), nil
 	}

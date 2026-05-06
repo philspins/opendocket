@@ -268,6 +268,20 @@ func TestResolveProvincialMemberID_StripsTitlesAndMatchesInitialPlusSurname(t *t
 	}
 }
 
+func TestResolveProvincialMemberIDFromCandidatesAtDate(t *testing.T) {
+	list := []provincialMemberCandidate{
+		{ID: "on-historical-smith-jane", Name: "Jane Smith", Riding: "Toronto Centre", TermStart: "2018-01-01", TermEnd: "2022-12-31"},
+		{ID: "on-historical-smith-jordan", Name: "Jordan Smith", Riding: "Toronto Centre", TermStart: "2023-01-01", TermEnd: ""},
+	}
+
+	if got := resolveProvincialMemberIDFromCandidatesAtDate(list, "Smith", "2021-06-01"); got != "on-historical-smith-jane" {
+		t.Fatalf("resolve 2021 Smith = %q, want %q", got, "on-historical-smith-jane")
+	}
+	if got := resolveProvincialMemberIDFromCandidatesAtDate(list, "Smith", "2024-06-01"); got != "on-historical-smith-jordan" {
+		t.Fatalf("resolve 2024 Smith = %q, want %q", got, "on-historical-smith-jordan")
+	}
+}
+
 const noDelay = 0 * time.Millisecond
 
 func newProvinceDB(t *testing.T) *sql.DB {
@@ -283,7 +297,8 @@ func newProvinceDB(t *testing.T) *sql.DB {
 
 func TestCrawlProvinceSource_PersistsBillsAndDivisions(t *testing.T) {
 	vpHTML := `<!DOCTYPE html><html><body>
-<p>Bill 12 second reading carried on the following division:</p>
+<p>On the motion that Bill (No. 12) intituled Test Act be now read a second time, the House divided.</p>
+<p>Motion carried on the following division:</p>
 <table class="division">
 <tr><td class="head" colspan="4">Yeas &#8212; 8</td></tr>
 <tr><td>Smith <br>Jones <br></td><td>Brown <br>Davis <br></td><td>Wilson <br>Taylor <br></td><td>Allen <br>Foster <br></td></tr>
@@ -341,6 +356,17 @@ func TestCrawlProvinceSource_PersistsBillsAndDivisions(t *testing.T) {
 	}
 	if divCount == 0 {
 		t.Fatal("expected at least one british_columbia division")
+	}
+
+	var description string
+	if err := conn.QueryRow(`SELECT description FROM divisions WHERE chamber='british_columbia' LIMIT 1`).Scan(&description); err != nil {
+		t.Fatalf("division description query: %v", err)
+	}
+	if !strings.Contains(strings.ToLower(description), "read a second time") {
+		t.Fatalf("expected stored division description to preserve vote context, got %q", description)
+	}
+	if description == "Test Act" {
+		t.Fatalf("expected division description not to be overwritten by bill title, got %q", description)
 	}
 }
 
@@ -417,6 +443,30 @@ func TestParliamentOrdinal(t *testing.T) {
 		got := ParliamentOrdinalForTest(c.n)
 		if got != c.want {
 			t.Errorf("parliamentOrdinal(%d)=%q, want %q", c.n, got, c.want)
+		}
+	}
+}
+
+// ── NormalisePersonName ───────────────────────────────────────────────────────
+
+func TestNormalisePersonName(t *testing.T) {
+	tests := []struct {
+		in   string
+		want string
+	}{
+		{"Hon. Mr. John Smith", "john smith"},
+		{"Ms. Jane Doe", "jane doe"},
+		{"Dr. A. Brown", "a brown"},
+		{"MR. JONES", "jones"},
+		{"O'Brien", "obrien"},
+		{"Dela Cruz, Maria", "dela cruz maria"},
+		{"Smith-Johnson", "smith johnson"},
+		{"  Extra  Spaces  ", "extra spaces"},
+		{"K.C. Wilson", "wilson"}, // "k" and "c" are filtered as title abbreviations
+	}
+	for _, tt := range tests {
+		if got := NormalisePersonName(tt.in); got != tt.want {
+			t.Errorf("NormalisePersonName(%q) = %q, want %q", tt.in, got, tt.want)
 		}
 	}
 }

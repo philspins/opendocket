@@ -3,9 +3,10 @@ package store
 import (
 	"database/sql"
 	"fmt"
-	"log"
 	"strings"
 	"time"
+
+	"github.com/philspins/opendocket/internal/clog"
 )
 
 // ── write-side record types ────────────────────────────────────────────────────
@@ -27,6 +28,8 @@ type MemberRecord struct {
 	Active          bool
 	LastScraped     string
 	GovernmentLevel string // "federal" | "provincial"
+	TermStart       string // ISO-8601 date (YYYY-MM-DD)
+	TermEnd         string // ISO-8601 date (YYYY-MM-DD), empty means open-ended
 }
 
 // BillRecord is the write-side representation of a bill, used by scrapers.
@@ -44,7 +47,6 @@ type BillRecord struct {
 	CurrentStatus    string
 	Category         string
 	SummaryAI        string
-	SummaryLoP       string
 	FullTextURL      string
 	LegisInfoURL     string
 	IntroducedDate   string
@@ -98,8 +100,8 @@ func UpsertMember(db *sql.DB, m MemberRecord) error {
 	_, err := db.Exec(`
 		INSERT INTO members
 			(id, name, party, riding, province, role, photo_url, email, website,
-			 chamber, active, last_scraped, government_level)
-		VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?)
+			 chamber, active, last_scraped, government_level, term_start, term_end)
+		VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)
 		ON CONFLICT(id) DO UPDATE SET
 			name             = excluded.name,
 			party            = excluded.party,
@@ -112,9 +114,11 @@ func UpsertMember(db *sql.DB, m MemberRecord) error {
 			chamber          = excluded.chamber,
 			active           = excluded.active,
 			last_scraped     = excluded.last_scraped,
-			government_level = excluded.government_level`,
+			government_level = excluded.government_level,
+			term_start       = excluded.term_start,
+			term_end         = excluded.term_end`,
 		m.ID, m.Name, m.Party, m.Riding, m.Province, m.Role, m.PhotoURL,
-		m.Email, m.Website, chamber, active, m.LastScraped, govLevel,
+		m.Email, m.Website, chamber, active, m.LastScraped, govLevel, m.TermStart, m.TermEnd,
 	)
 	return err
 }
@@ -124,22 +128,22 @@ func UpsertMember(db *sql.DB, m MemberRecord) error {
 func UpsertProfiles(db *sql.DB, members []MemberRecord, delay time.Duration) {
 	for _, m := range members {
 		if err := UpsertMember(db, m); err != nil {
-			log.Printf("[members] upsert %s: %v", m.ID, err)
+			clog.Infof("[members] upsert %s: %v", m.ID, err)
 		}
 		time.Sleep(delay)
 	}
 }
 
 // UpsertBill inserts or updates a bill record.
-// Existing AI/LoP summaries are preserved when the incoming value is empty.
+// Existing AI summaries are preserved when the incoming value is empty.
 func UpsertBill(db *sql.DB, b BillRecord) error {
 	_, err := db.Exec(`
 		INSERT INTO bills
 			(id, parliament, session, number, title, short_title, bill_type,
 			 chamber, sponsor_id, current_stage, current_status, category,
-			 summary_ai, summary_lop, full_text_url, legisinfo_url,
+			 summary_ai, full_text_url, legisinfo_url,
 			 introduced_date, last_activity_date, last_scraped)
-		VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)
+		VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)
 		ON CONFLICT(id) DO UPDATE SET
 			parliament         = excluded.parliament,
 			session            = excluded.session,
@@ -153,7 +157,6 @@ func UpsertBill(db *sql.DB, b BillRecord) error {
 			current_status     = excluded.current_status,
 			category           = COALESCE(NULLIF(excluded.category,''), bills.category),
 			summary_ai         = COALESCE(NULLIF(excluded.summary_ai,''), bills.summary_ai),
-			summary_lop        = COALESCE(NULLIF(excluded.summary_lop,''), bills.summary_lop),
 			full_text_url      = excluded.full_text_url,
 			legisinfo_url      = excluded.legisinfo_url,
 			introduced_date    = excluded.introduced_date,
@@ -161,7 +164,7 @@ func UpsertBill(db *sql.DB, b BillRecord) error {
 			last_scraped       = excluded.last_scraped`,
 		b.ID, b.Parliament, b.Session, b.Number, b.Title, b.ShortTitle,
 		b.BillType, b.Chamber, nullStr(b.SponsorID), b.CurrentStage, b.CurrentStatus,
-		b.Category, b.SummaryAI, b.SummaryLoP, b.FullTextURL, b.LegisInfoURL,
+		b.Category, b.SummaryAI, b.FullTextURL, b.LegisInfoURL,
 		b.IntroducedDate, b.LastActivityDate, b.LastScraped,
 	)
 	return err

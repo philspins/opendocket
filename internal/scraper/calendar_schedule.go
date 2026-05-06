@@ -8,7 +8,6 @@ import (
 	"image/color"
 	_ "image/png"
 	"io"
-	"log"
 	"math"
 	"net/http"
 	"net/url"
@@ -20,8 +19,9 @@ import (
 	"strings"
 	"time"
 
-	"github.com/philspins/opendocket/internal/store"
+	"github.com/philspins/opendocket/internal/clog"
 	"github.com/philspins/opendocket/internal/scraper/provincial"
+	"github.com/philspins/opendocket/internal/store"
 	"github.com/philspins/opendocket/internal/utils"
 )
 
@@ -61,7 +61,7 @@ func CrawlAndPersistLegislatureCalendars(conn *sql.DB, client *http.Client) erro
 			}
 			continue
 		}
-		log.Printf("[calendar] detected %d dates for %s", len(dates), jurisdiction)
+		clog.Debugf("[calendar] detected %d dates for %s", len(dates), jurisdiction)
 		if len(dates) == 0 {
 			continue
 		}

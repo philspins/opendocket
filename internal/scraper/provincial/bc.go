@@ -4,13 +4,13 @@ import (
 	"bytes"
 	"encoding/json"
 	"fmt"
-	"log"
 	"net/http"
 	"regexp"
 	"strconv"
 	"strings"
 
 	"github.com/PuerkitoBio/goquery"
+	"github.com/philspins/opendocket/internal/clog"
 	"github.com/philspins/opendocket/internal/utils"
 )
 
@@ -367,7 +367,7 @@ func parseBCVotesDivisions(doc *goquery.Document, sourceURL, date, province stri
 // Each file is at:  {limsBase}/pdms/ldp/{parl}{sess}/votes/{fileName}
 func crawlBritishColumbiaVotesFromLIMS(limsBase, parliament, session string, legislature, sessionNum int, client *http.Client) ([]ProvincialDivisionResult, error) {
 	indexURL := fmt.Sprintf("%s/pdms/votes-and-proceedings/%s%s", limsBase, parliament, session)
-	log.Printf("[bc-votes] fetching LIMS index: %s", indexURL)
+	clog.Debugf("[bc-votes] fetching LIMS index: %s", indexURL)
 
 	req, err := http.NewRequest("GET", indexURL, nil)
 	if err != nil {
@@ -390,7 +390,7 @@ func crawlBritishColumbiaVotesFromLIMS(limsBase, parliament, session string, leg
 	}
 
 	files := apiResp.AllParliamentaryFileAttributes.Nodes
-	log.Printf("[bc-votes] LIMS index: %d VP files for %s%s", len(files), parliament, session)
+	clog.Debugf("[bc-votes] LIMS index: %d VP files for %s%s", len(files), parliament, session)
 
 	var results []ProvincialDivisionResult
 	nextDivNum := 1
@@ -413,25 +413,25 @@ func crawlBritishColumbiaVotesFromLIMS(limsBase, parliament, session string, leg
 
 		fileResp, ferr := client.Get(fileURL)
 		if ferr != nil {
-			log.Printf("[bc-votes] skip %s: %v", fileURL, ferr)
+			clog.Debugf("[bc-votes] skip %s: %v", fileURL, ferr)
 			continue
 		}
 		fileDoc, derr := goquery.NewDocumentFromReader(fileResp.Body)
 		fileResp.Body.Close()
 		if derr != nil {
-			log.Printf("[bc-votes] parse error %s: %v", fileURL, derr)
+			clog.Infof("[bc-votes] parse error %s: %v", fileURL, derr)
 			continue
 		}
 
 		divs := parseBCVotesDivisions(fileDoc, fileURL, date, "british_columbia", legislature, sessionNum, nextDivNum)
 		if len(divs) > 0 {
-			log.Printf("[bc-votes] %s: parsed %d divisions", date, len(divs))
+			clog.Debugf("[bc-votes] %s: parsed %d divisions", date, len(divs))
 			results = append(results, divs...)
 			nextDivNum += len(divs)
 		}
 	}
 
-	log.Printf("[bc-votes] parsed %d divisions from %d files", len(results), len(files))
+	clog.Debugf("[bc-votes] parsed %d divisions from %d files", len(results), len(files))
 	return results, nil
 }
 

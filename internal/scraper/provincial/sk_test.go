@@ -1,6 +1,9 @@
 package provincial
 
-import "testing"
+import (
+	"image/color"
+	"testing"
+)
 
 func TestNormalizeSaskatchewanBillsURL(t *testing.T) {
 	tests := []struct {
@@ -49,5 +52,34 @@ func TestParseSaskatchewanBillsFromProgressText_CurrentLayout(t *testing.T) {
 	}
 	if bills[4].Number != "50" || bills[4].Title != "The Financial Administration Amendment Act, 2026" {
 		t.Fatalf("last bill=%+v", bills[4])
+	}
+}
+
+// ── IsSaskatchewanSittingLike ─────────────────────────────────────────────────
+
+func TestIsSaskatchewanSittingLike(t *testing.T) {
+	tests := []struct {
+		name string
+		r, g, b uint8
+		want    bool
+	}{
+		// Neutral grey (sitting day)
+		{"neutral grey", 180, 180, 178, true},
+		// Warm tan (alternate sitting day highlight)
+		{"warm tan", 210, 185, 150, true},
+		// Pure white passes isNeutralGreyLike (all channels ≥130, spread ≤20)
+		{"white", 255, 255, 255, true},
+		// Pure black
+		{"black", 0, 0, 0, false},
+		// Vivid red
+		{"red", 220, 60, 60, false},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			c := color.NRGBA{R: tt.r, G: tt.g, B: tt.b, A: 255}
+			if got := IsSaskatchewanSittingLike(c); got != tt.want {
+				t.Errorf("IsSaskatchewanSittingLike(%d,%d,%d) = %v, want %v", tt.r, tt.g, tt.b, got, tt.want)
+			}
+		})
 	}
 }

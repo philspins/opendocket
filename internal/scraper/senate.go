@@ -3,13 +3,13 @@ package scraper
 
 import (
 	"fmt"
-	"log"
 	"net/http"
 	"regexp"
 	"strconv"
 	"strings"
 
 	"github.com/PuerkitoBio/goquery"
+	"github.com/philspins/opendocket/internal/clog"
 	"github.com/philspins/opendocket/internal/utils"
 )
 
@@ -35,7 +35,7 @@ func CrawlSenateVotesIndex(
 	if client == nil {
 		client = utils.NewHTTPClient()
 	}
-	log.Printf("[senate] fetching votes index: %s", url)
+	clog.Debugf("[senate] fetching votes index: %s", url)
 
 	doc, err := fetchDoc(url, client)
 	if err != nil {
@@ -129,7 +129,7 @@ func CrawlSenateVotesIndex(
 		})
 	})
 
-	log.Printf("[senate] found %d divisions", len(divs))
+	clog.Infof("[senate] found %d divisions", len(divs))
 	return divs, nil
 }
 
@@ -155,12 +155,38 @@ var senateVoteSelectors = map[string][]string{
 	},
 }
 
+var senateVotesSenatorHrefRe = regexp.MustCompile(`(?i)/votes/senator/(\d+)/`)
+
+func senateMemberIDFromHref(href string) string {
+	if id := utils.ExtractMemberID(href); id != "" {
+		return id
+	}
+	if m := senateVotesSenatorHrefRe.FindStringSubmatch(href); len(m) == 2 {
+		return m[1]
+	}
+	return ""
+}
+
+func senateCellHasVoteMark(cell *goquery.Selection) bool {
+	if cell.Length() == 0 {
+		return false
+	}
+	if strings.EqualFold(strings.TrimSpace(cell.AttrOr("data-order", "")), "aaa") {
+		return true
+	}
+	if cell.Find(".fa-times").Length() > 0 {
+		return true
+	}
+	text := strings.TrimSpace(cell.Text())
+	return text == "×" || text == "X"
+}
+
 // CrawlSenateDivisionDetail scrapes how each senator voted on a single division.
 func CrawlSenateDivisionDetail(divisionID, url string, client *http.Client) ([]MemberVote, error) {
 	if client == nil {
 		client = utils.NewHTTPClient()
 	}
-	log.Printf("[senate] scraping division detail: %s", url)
+	clog.Debugf("[senate] scraping division detail: %s", url)
 
 	doc, err := fetchDoc(url, client)
 	if err != nil {
@@ -168,6 +194,47 @@ func CrawlSenateDivisionDetail(divisionID, url string, client *http.Client) ([]M
 	}
 
 	var votes []MemberVote
+
+	// Modern sencanada.ca layout: table#sc-vote-details-table with columns:
+	// [Senator, Affiliation, Province/Territory, Yea, Nay, Abstention]
+	if table := doc.Find("#sc-vote-details-table"); table.Length() > 0 {
+		table.Find("tbody tr").Each(func(_ int, row *goquery.Selection) {
+			cols := row.Find("td")
+			if cols.Length() < 6 {
+				return
+			}
+
+			href, _ := cols.Eq(0).Find("a").First().Attr("href")
+			memberID := senateMemberIDFromHref(href)
+			if memberID == "" {
+				return
+			}
+
+			voteType := ""
+			switch {
+			case senateCellHasVoteMark(cols.Eq(3)):
+				voteType = "Yea"
+			case senateCellHasVoteMark(cols.Eq(4)):
+				voteType = "Nay"
+			case senateCellHasVoteMark(cols.Eq(5)):
+				voteType = "Abstain"
+			default:
+				return
+			}
+
+			votes = append(votes, MemberVote{
+				DivisionID: divisionID,
+				MemberID:   memberID,
+				Vote:       voteType,
+			})
+		})
+		if len(votes) > 0 {
+			clog.Debugf("[senate] division %s: %d votes", divisionID, len(votes))
+			return votes, nil
+		}
+	}
+
+	// Legacy fallback layout: separate yea/nay/abstain member lists.
 	for voteType, selectors := range senateVoteSelectors {
 		for _, sel := range selectors {
 			members := doc.Find(sel)
@@ -176,7 +243,7 @@ func CrawlSenateDivisionDetail(divisionID, url string, client *http.Client) ([]M
 			}
 			members.Each(func(_ int, a *goquery.Selection) {
 				href, _ := a.Attr("href")
-				memberID := utils.ExtractMemberID(href)
+				memberID := senateMemberIDFromHref(href)
 				if memberID != "" {
 					votes = append(votes, MemberVote{
 						DivisionID: divisionID,
@@ -189,6 +256,6 @@ func CrawlSenateDivisionDetail(divisionID, url string, client *http.Client) ([]M
 		}
 	}
 
-	log.Printf("[senate] division %s: %d votes", divisionID, len(votes))
+	clog.Debugf("[senate] division %s: %d votes", divisionID, len(votes))
 	return votes, nil
 }

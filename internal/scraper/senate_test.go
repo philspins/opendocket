@@ -202,6 +202,55 @@ const sampleSenateDivisionHTML = `<html><body>
   </div>
 </body></html>`
 
+const sampleSenateDivisionModernHTML = `<html><body>
+	<section class="container sc-vote-details votes-module">
+		<div class="table-responsive">
+			<table class="table sc-table" id="sc-vote-details-table">
+				<thead>
+					<tr>
+						<th class="vote-senator">Senator</th>
+						<th class="vote-affiliation">Affiliation</th>
+						<th class="vote-province">Province/Territory</th>
+						<th class="vote-yea min-desktop">Yea</th>
+						<th class="vote-nay min-desktop">Nay</th>
+						<th class="vote-abstention min-desktop">Abstention</th>
+					</tr>
+				</thead>
+				<tbody>
+					<tr>
+						<td data-order="Ringuette, Pierrette"><a href="/en/in-the-chamber/votes/senator/2753/45-1">Ringuette, Pierrette</a></td>
+						<td>ISG</td><td>New Brunswick</td>
+						<td data-order="aaa"><i class="fa-solid fa-times"></i></td>
+						<td data-order="zzz"></td>
+						<td data-order="zzz"></td>
+					</tr>
+					<tr>
+						<td data-order="Anderson, Dawn"><a href="/en/in-the-chamber/votes/senator/3001/45-1">Anderson, Dawn</a></td>
+						<td>PSG</td><td>Northwest Territories</td>
+						<td data-order="zzz"></td>
+						<td data-order="aaa"><i class="fa-solid fa-times"></i></td>
+						<td data-order="zzz"></td>
+					</tr>
+					<tr>
+						<td data-order="Wallin, Pamela"><a href="/en/in-the-chamber/votes/senator/4123/45-1">Wallin, Pamela</a></td>
+						<td>C</td><td>Saskatchewan</td>
+						<td data-order="zzz"></td>
+						<td data-order="zzz"></td>
+						<td data-order="aaa"><i class="fa-solid fa-times"></i></td>
+					</tr>
+					<tr>
+						<td data-order="No Vote, Senator"><a href="/en/in-the-chamber/votes/senator/4999/45-1">No Vote, Senator</a></td>
+						<td>C</td><td>Ontario</td>
+						<td data-order="zzz"></td>
+						<td data-order="zzz"></td>
+						<td data-order="zzz"></td>
+					</tr>
+				</tbody>
+			</table>
+		</div>
+	</section>
+</body></html>`
+
 func TestCrawlSenateDivisionDetail_ParsesYeaVotes(t *testing.T) {
 	srv := newTestServer(sampleSenateDivisionHTML)
 	defer srv.Close()
@@ -250,6 +299,36 @@ func TestCrawlSenateDivisionDetail_ParsesAbstainVotes(t *testing.T) {
 	}
 	if len(abstains) != 1 || abstains[0].MemberID != "444" {
 		t.Errorf("abstain votes mismatch: %+v", abstains)
+	}
+}
+
+func TestCrawlSenateDivisionDetail_ParsesModernTable(t *testing.T) {
+	srv := newTestServer(sampleSenateDivisionModernHTML)
+	defer srv.Close()
+
+	votes, err := scraper.CrawlSenateDivisionDetail("senate-45-1-1", srv.URL, srv.Client())
+	if err != nil {
+		t.Fatalf("CrawlSenateDivisionDetail: %v", err)
+	}
+	if len(votes) != 3 {
+		t.Fatalf("len(votes)=%d, want 3", len(votes))
+	}
+
+	got := map[string]string{}
+	for _, v := range votes {
+		got[v.MemberID] = v.Vote
+	}
+	if got["2753"] != "Yea" {
+		t.Errorf("member 2753 vote=%q, want Yea", got["2753"])
+	}
+	if got["3001"] != "Nay" {
+		t.Errorf("member 3001 vote=%q, want Nay", got["3001"])
+	}
+	if got["4123"] != "Abstain" {
+		t.Errorf("member 4123 vote=%q, want Abstain", got["4123"])
+	}
+	if _, exists := got["4999"]; exists {
+		t.Errorf("member 4999 should not be present; got vote=%q", got["4999"])
 	}
 }
 

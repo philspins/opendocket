@@ -4,7 +4,6 @@ import (
 	"database/sql"
 	"errors"
 	"fmt"
-	"log"
 	"net/http"
 	"os"
 	"sort"
@@ -13,6 +12,7 @@ import (
 	"sync"
 	"time"
 
+	"github.com/philspins/opendocket/internal/clog"
 	"github.com/philspins/opendocket/internal/scraper/provincial"
 	"github.com/philspins/opendocket/internal/store"
 	"github.com/philspins/opendocket/internal/utils"
@@ -34,19 +34,11 @@ func CrawlBills(conn *sql.DB, client *http.Client, delay time.Duration, rssURL s
 	for _, stub := range stubs {
 		detail, err := CrawlBillDetail(stub.ID, stub.LegisInfoURL, client)
 		if err != nil {
-			log.Printf("[bills] detail error for %s: %v", stub.ID, err)
+			clog.Debugf("[bills] detail error for %s: %v", stub.ID, err)
 		}
 		time.Sleep(delay)
 
 		parl, sess, ok := utils.ParliamentSessionFromBillID(stub.ID)
-		var lopSummary string
-		if ok {
-			lopSummary = CrawlLibraryOfParliamentSummary(
-				utils.BillNumberFromID(stub.ID), parl, sess, client,
-			)
-			time.Sleep(delay)
-		}
-
 		bill := store.BillRecord{
 			ID:               stub.ID,
 			Parliament:       parl,
@@ -62,7 +54,6 @@ func CrawlBills(conn *sql.DB, client *http.Client, delay time.Duration, rssURL s
 			BillType:         detail.BillType,
 			FullTextURL:      detail.FullTextURL,
 			IntroducedDate:   detail.IntroducedDate,
-			SummaryLoP:       lopSummary,
 			LastScraped:      utils.NowISO(),
 		}
 		if !ok {
@@ -70,7 +61,7 @@ func CrawlBills(conn *sql.DB, client *http.Client, delay time.Duration, rssURL s
 			bill.Session = 0
 		}
 		if err := store.UpsertBill(conn, bill); err != nil {
-			log.Printf("[bills] upsert %s: %v", stub.ID, err)
+			clog.Debugf("[bills] upsert %s: %v", stub.ID, err)
 		}
 		for _, stage := range detail.Stages {
 			store.UpsertBillStage(conn, store.BillStageRecord{
@@ -90,37 +81,100 @@ func CrawlBills(conn *sql.DB, client *http.Client, delay time.Duration, rssURL s
 
 // CrawlMembers fetches federal + provincial members and upserts to DB.
 func CrawlMembers(conn *sql.DB, client *http.Client, delay time.Duration, apiURL string) error {
+	_ = delay // Member crawls are OpenNorth/API-backed; avoid per-row crawl delay for performance.
+
 	profiles, err := CrawlMembersFromAPI(apiURL, client)
 	if err != nil {
 		return err
 	}
-	store.UpsertProfiles(conn, toDBMembers(profiles), delay)
+	store.UpsertProfiles(conn, toDBMembers(profiles), 0)
 
-	setSlugsSorted := make([]string, 0, len(ProvincialLegislatureAPIs))
-	for slug := range ProvincialLegislatureAPIs {
-		setSlugsSorted = append(setSlugsSorted, slug)
+	type provincialMembersResult struct {
+		setSlug  string
+		profiles []MemberProfile
 	}
-	sort.Strings(setSlugsSorted)
-	for _, setSlug := range setSlugsSorted {
-		provProfiles, perr := CrawlProvincialMembersFromAPI(setSlug, "", client)
-		if perr != nil {
-			log.Printf("[members] provincial set %s: %v", setSlug, perr)
+
+	results := make(chan provincialMembersResult, len(ProvincialLegislatureAPIs))
+	g := new(errgroup.Group)
+	for setSlug := range ProvincialLegislatureAPIs {
+		setSlug := setSlug
+		g.Go(func() error {
+			provProfiles, perr := CrawlProvincialMembersFromAPI(setSlug, "", client)
+			if perr != nil {
+				clog.Debugf("[members] provincial set %s: %v", setSlug, perr)
+				return nil
+			}
+			// The Represent API for nb-legislature currently returns 0 members.
+			// Fall back to scraping the NB legislature website directly.
+			if len(provProfiles) == 0 && setSlug == "nb-legislature" {
+				clog.Debugf("[members] nb-legislature: Represent API returned 0 members; falling back to NB website scraper")
+				nbProfiles, nberr := CrawlNewBrunswickMembersFromWebsite("", client)
+				if nberr != nil {
+					clog.Debugf("[members] nb-legislature website fallback: %v", nberr)
+				} else {
+					provProfiles = nbProfiles
+				}
+			}
+			results <- provincialMembersResult{setSlug: setSlug, profiles: provProfiles}
+			return nil
+		})
+	}
+
+	if err := g.Wait(); err != nil {
+		return err
+	}
+	close(results)
+	allProvincialProfiles := make([]MemberProfile, 0)
+
+	for result := range results {
+		if len(result.profiles) == 0 {
 			continue
 		}
-		// The Represent API for nb-legislature currently returns 0 members.
-		// Fall back to scraping the NB legislature website directly.
-		if len(provProfiles) == 0 && setSlug == "nb-legislature" {
-			log.Printf("[members] nb-legislature: Represent API returned 0 members; falling back to NB website scraper")
-			nbProfiles, nberr := CrawlNewBrunswickMembersFromWebsite("", client)
-			if nberr != nil {
-				log.Printf("[members] nb-legislature website fallback: %v", nberr)
-			} else {
-				provProfiles = nbProfiles
-			}
-		}
-		store.UpsertProfiles(conn, toDBMembers(provProfiles), delay)
+		allProvincialProfiles = append(allProvincialProfiles, result.profiles...)
+		store.UpsertProfiles(conn, toDBMembers(result.profiles), 0)
 	}
+	clog.Infof("[members] summary by province (federal/provincial): %s", federalProvincialMembersByProvinceSummary(profiles, allProvincialProfiles))
 	return nil
+}
+
+func federalProvincialMembersByProvinceSummary(federalProfiles, provincialProfiles []MemberProfile) string {
+	if len(federalProfiles) == 0 && len(provincialProfiles) == 0 {
+		return "none"
+	}
+	type counts struct {
+		federal    int
+		provincial int
+	}
+	byProvince := make(map[string]counts)
+	for _, profile := range federalProfiles {
+		province := strings.TrimSpace(profile.Province)
+		if province == "" {
+			province = "Unknown"
+		}
+		entry := byProvince[province]
+		entry.federal++
+		byProvince[province] = entry
+	}
+	for _, profile := range provincialProfiles {
+		province := strings.TrimSpace(profile.Province)
+		if province == "" {
+			province = "Unknown"
+		}
+		entry := byProvince[province]
+		entry.provincial++
+		byProvince[province] = entry
+	}
+	keys := make([]string, 0, len(byProvince))
+	for province := range byProvince {
+		keys = append(keys, province)
+	}
+	sort.Strings(keys)
+	parts := make([]string, 0, len(keys))
+	for _, province := range keys {
+		entry := byProvince[province]
+		parts = append(parts, fmt.Sprintf("%s federal=%d provincial=%d", province, entry.federal, entry.provincial))
+	}
+	return strings.Join(parts, "; ")
 }
 
 func toDBMembers(profiles []MemberProfile) []store.MemberRecord {
@@ -153,11 +207,11 @@ func CrawlCalendar(conn *sql.DB, client *http.Client, _ time.Duration, sourceURL
 	}
 	for _, d := range dates {
 		if err := store.UpsertSittingDate(conn, CurrentParliament, CurrentSession, d); err != nil {
-			log.Printf("[calendar] upsert %s: %v", d, err)
+			clog.Debugf("[calendar] upsert %s: %v", d, err)
 		}
 	}
 	if err := CrawlAndPersistLegislatureCalendars(conn, client); err != nil {
-		log.Printf("[calendar] legislature schedule crawl warning: %v", err)
+		clog.Infof("[calendar] legislature schedule crawl warning: %v", err)
 	}
 	return nil
 }
@@ -166,12 +220,17 @@ func CrawlCalendar(conn *sql.DB, client *http.Client, _ time.Duration, sourceURL
 func CrawlVotes(conn *sql.DB, client *http.Client, delay time.Duration, indexURL string) error {
 	divs, err := CrawlVotesIndex(indexURL, CurrentParliament, CurrentSession, client)
 	if err != nil {
+		clog.Infof("[votes] crawl failed: %v", err)
 		return err
 	}
+
+	processed := 0
+	detailScraped := 0
 	for _, div := range divs {
+		processed++
 		existed, err := store.DivisionExists(conn, div.ID)
 		if err != nil {
-			log.Printf("[votes] exists check %s: %v", div.ID, err)
+			clog.Debugf("[votes] exists check %s: %v", div.ID, err)
 		}
 
 		if err := store.UpsertDivision(conn, store.DivisionRecord{
@@ -189,21 +248,22 @@ func CrawlVotes(conn *sql.DB, client *http.Client, delay time.Duration, indexURL
 			Chamber:     div.Chamber,
 			LastScraped: div.LastScraped,
 		}); err != nil {
-			log.Printf("[votes] upsert %s: %v", div.ID, err)
+			clog.Debugf("[votes] upsert %s: %v", div.ID, err)
 		}
 
 		needsDetail := !existed
 		if existed && div.DetailURL != "" {
 			hasVotes, err := store.DivisionHasVotes(conn, div.ID)
 			if err != nil {
-				log.Printf("[votes] has-votes check %s: %v", div.ID, err)
+				clog.Debugf("[votes] has-votes check %s: %v", div.ID, err)
 			}
 			needsDetail = !hasVotes
 		}
 		if needsDetail && div.DetailURL != "" {
+			detailScraped++
 			votes, err := CrawlDivisionDetail(div.ID, div.DetailURL, client)
 			if err != nil {
-				log.Printf("[votes] detail error %s: %v", div.ID, err)
+				clog.Debugf("[votes] detail error %s: %v", div.ID, err)
 			}
 			for _, v := range votes {
 				store.UpsertMemberVote(conn, v.DivisionID, v.MemberID, v.Vote)
@@ -211,6 +271,8 @@ func CrawlVotes(conn *sql.DB, client *http.Client, delay time.Duration, indexURL
 			time.Sleep(delay)
 		}
 	}
+
+	clog.Infof("[votes] crawl complete: divisions=%d detailed=%d", processed, detailScraped)
 	return nil
 }
 
@@ -223,7 +285,7 @@ func CrawlSenate(conn *sql.DB, client *http.Client, delay time.Duration, indexUR
 	for _, div := range divs {
 		existed, err := store.DivisionExists(conn, div.ID)
 		if err != nil {
-			log.Printf("[senate] exists check %s: %v", div.ID, err)
+			clog.Debugf("[senate] exists check %s: %v", div.ID, err)
 		}
 
 		if err := store.UpsertDivision(conn, store.DivisionRecord{
@@ -241,21 +303,21 @@ func CrawlSenate(conn *sql.DB, client *http.Client, delay time.Duration, indexUR
 			Chamber:     div.Chamber,
 			LastScraped: div.LastScraped,
 		}); err != nil {
-			log.Printf("[senate] upsert %s: %v", div.ID, err)
+			clog.Debugf("[senate] upsert %s: %v", div.ID, err)
 		}
 
 		needsDetail := !existed
 		if existed && div.DetailURL != "" {
 			hasVotes, err := store.DivisionHasVotes(conn, div.ID)
 			if err != nil {
-				log.Printf("[senate] has-votes check %s: %v", div.ID, err)
+				clog.Debugf("[senate] has-votes check %s: %v", div.ID, err)
 			}
 			needsDetail = !hasVotes
 		}
 		if needsDetail && div.DetailURL != "" {
 			votes, err := CrawlSenateDivisionDetail(div.ID, div.DetailURL, client)
 			if err != nil {
-				log.Printf("[senate] detail error %s: %v", div.ID, err)
+				clog.Debugf("[senate] detail error %s: %v", div.ID, err)
 			}
 			for _, v := range votes {
 				store.UpsertMemberVote(conn, v.DivisionID, v.MemberID, v.Vote)
@@ -270,6 +332,7 @@ func CrawlSenate(conn *sql.DB, client *http.Client, delay time.Duration, indexUR
 // If codes is non-empty only the named province codes (e.g. "pe", "on") are
 // crawled; otherwise all sources in ProvincialSources run.
 func CrawlProvincial(conn *sql.DB, client *http.Client, delay time.Duration, parallelism int, codes []string, enqueueSummary BillSummaryEnqueue) error {
+	clog.Infof("[provincial] crawling provincial sources")
 	sources := provincial.ProvincialSources
 	if len(codes) > 0 {
 		set := make(map[string]bool, len(codes))
@@ -298,7 +361,7 @@ func CrawlProvincial(conn *sql.DB, client *http.Client, delay time.Duration, par
 				_ = ensureProvincialMembersForSource(conn, c, d, ProvincialSource{Code: code, Province: province})
 			}
 			if err := provincial.CrawlProvinceSource(conn, client, delay, src, enqueueSummary, seeder); err != nil {
-				log.Printf("[provincial] %s: %v", src.Code, err)
+				clog.Infof("[provincial] %s: %v", src.Code, err)
 				errMu.Lock()
 				errs = append(errs, fmt.Errorf("%s: %w", src.Code, err))
 				errMu.Unlock()
