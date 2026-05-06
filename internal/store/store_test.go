@@ -3,6 +3,7 @@ package store_test
 import (
 	"database/sql"
 	"fmt"
+	"strings"
 	"testing"
 	"time"
 
@@ -1515,23 +1516,10 @@ func TestOrdinal(t *testing.T) {
 		if err != nil {
 			t.Fatalf("GetParliamentStatus(%d): %v", tc.parl, err)
 		}
-		if !containsStr(ps.Label, tc.want) {
+		if !strings.Contains(ps.Label, tc.want) {
 			t.Errorf("parliament=%d label=%q, want ordinal %q", tc.parl, ps.Label, tc.want)
 		}
 	}
-}
-
-func containsStr(s, sub string) bool {
-	return len(s) >= len(sub) && (s == sub || len(s) > 0 && stringContains(s, sub))
-}
-
-func stringContains(s, sub string) bool {
-	for i := 0; i <= len(s)-len(sub); i++ {
-		if s[i:i+len(sub)] == sub {
-			return true
-		}
-	}
-	return false
 }
 
 func TestReplaceLegislatureCalendarDates(t *testing.T) {
