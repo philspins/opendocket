@@ -9,11 +9,19 @@ on:
   pull_request:
     branches: ["main"]
 
+env:
+  # Minimum filtered coverage percentage (excludes auto-generated *_templ.go).
+  # Bump this value as each coverage issue in the #72-#79 series merges.
+  COVERAGE_THRESHOLD: 55
+
 jobs:
   build:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
+        with:
+          # Fetch full history so we can find the merge-base for delta computation.
+          fetch-depth: 0
 
       - name: Set up Go
         uses: actions/setup-go@v4
@@ -29,5 +37,99 @@ jobs:
       - name: Build
         run: go build -v ./cmd/...
 
-      - name: Test
-        run: go test -v ./...
+      - name: Test (with coverage)
+        run: make test
+
+      - name: Extract filtered coverage percentage
+        id: coverage
+        run: |
+          pct=$(go tool cover -func=coverage_filtered.out | tail -1 | awk '{print $NF}' | tr -d '%')
+          echo "pct=$pct" >> "$GITHUB_OUTPUT"
+          echo "Filtered coverage: ${pct}%"
+
+      - name: Enforce minimum coverage
+        env:
+          COVERAGE_PCT: ${{ steps.coverage.outputs.pct }}
+          COVERAGE_THRESHOLD: ${{ env.COVERAGE_THRESHOLD }}
+        run: |
+          if awk "BEGIN { exit !($COVERAGE_PCT < $COVERAGE_THRESHOLD) }"; then
+            echo "Coverage ${COVERAGE_PCT}% is below the minimum threshold of ${COVERAGE_THRESHOLD}%"
+            exit 1
+          fi
+          echo "Coverage ${COVERAGE_PCT}% meets the minimum threshold of ${COVERAGE_THRESHOLD}%"
+
+      - name: Compute base branch coverage (PR only)
+        if: github.event_name == 'pull_request'
+        id: base_coverage
+        run: |
+          # Use the merge-base SHA — a fixed commit, not a user-supplied value.
+          base_sha=$(git merge-base HEAD origin/main)
+          git worktree add /tmp/base-worktree "$base_sha"
+          cd /tmp/base-worktree
+          go mod vendor 2>/dev/null || true
+          go test -coverprofile=/tmp/coverage_base.out ./... 2>/dev/null || true
+          grep -v "_templ\.go:" /tmp/coverage_base.out > /tmp/coverage_base_filtered.out 2>/dev/null || true
+          base_pct=$(go tool cover -func=/tmp/coverage_base_filtered.out 2>/dev/null | tail -1 | awk '{print $NF}' | tr -d '%')
+          echo "base_pct=${base_pct:-0}" >> "$GITHUB_OUTPUT"
+          git worktree remove /tmp/base-worktree 2>/dev/null || true
+
+      - name: Post coverage comment (PR only)
+        if: github.event_name == 'pull_request'
+        uses: actions/github-script@v7
+        with:
+          script: |
+            const pct = '${{ steps.coverage.outputs.pct }}';
+            const basePct = '${{ steps.base_coverage.outputs.base_pct }}';
+            const threshold = process.env.COVERAGE_THRESHOLD;
+
+            let delta = '';
+            const basePctNum = parseFloat(basePct);
+            if (!isNaN(basePctNum) && basePctNum > 0) {
+              const diff = (parseFloat(pct) - basePctNum).toFixed(1);
+              const sign = parseFloat(diff) >= 0 ? '+' : '';
+              delta = ` (${sign}${diff}% vs base ${basePct}%)`;
+            }
+
+            const status = parseFloat(pct) >= parseFloat(threshold) ? '✅' : '❌';
+            const runUrl = `https://github.com/${context.repo.owner}/${context.repo.repo}/actions/runs/${context.runId}`;
+            const body = [
+              `## Coverage report`,
+              ``,
+              `${status} Filtered coverage (excludes \`*_templ.go\`): **${pct}%**${delta}`,
+              `Minimum threshold: **${threshold}%**`,
+              ``,
+              `_Full report available in the [coverage artifact](${runUrl})._`,
+            ].join('\n');
+
+            const { data: comments } = await github.rest.issues.listComments({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              issue_number: context.issue.number,
+            });
+            const existing = comments.find(c => c.body.startsWith('## Coverage report'));
+            if (existing) {
+              await github.rest.issues.updateComment({
+                owner: context.repo.owner,
+                repo: context.repo.repo,
+                comment_id: existing.id,
+                body,
+              });
+            } else {
+              await github.rest.issues.createComment({
+                owner: context.repo.owner,
+                repo: context.repo.repo,
+                issue_number: context.issue.number,
+                body,
+              });
+            }
+        env:
+          COVERAGE_THRESHOLD: ${{ env.COVERAGE_THRESHOLD }}
+
+      - name: Upload coverage artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: coverage-report
+          path: |
+            coverage.out
+            coverage_filtered.out
+          retention-days: 14
