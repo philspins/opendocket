@@ -389,7 +389,10 @@ func TestHandleRequestVerification_RequiresValidReCAPTCHAWhenConfigured(t *testi
 	var sentBody string
 	svc.SetHTTPClient(&http.Client{
 		Transport: roundTripFunc(func(req *http.Request) (*http.Response, error) {
-			b, _ := io.ReadAll(req.Body)
+			b, err := io.ReadAll(req.Body)
+			if err != nil {
+				t.Errorf("ReadAll: %v", err)
+			}
 			sentBody = string(b)
 			return &http.Response{
 				StatusCode: http.StatusOK,
@@ -427,7 +430,10 @@ func TestHandleVerifyRecaptcha_RequiresValidTokenWhenConfigured(t *testing.T) {
 	var sentBody string
 	svc.SetHTTPClient(&http.Client{
 		Transport: roundTripFunc(func(req *http.Request) (*http.Response, error) {
-			b, _ := io.ReadAll(req.Body)
+			b, err := io.ReadAll(req.Body)
+			if err != nil {
+				t.Errorf("ReadAll: %v", err)
+			}
 			sentBody = string(b)
 			return &http.Response{
 				StatusCode: http.StatusOK,
@@ -690,6 +696,69 @@ func TestHandleGoogleCallback_HappyPath(t *testing.T) {
 	}
 	if !found {
 		t.Fatal("expected od_session cookie after google oauth callback")
+	}
+}
+
+// ── HandleFacebookCallback ────────────────────────────────────────────────────
+
+func TestHandleFacebookCallback_InvalidState(t *testing.T) {
+	svc, _ := newTestService(t)
+	t.Setenv("FACEBOOK_CLIENT_ID", "fb-client")
+
+	req := httptest.NewRequest(http.MethodGet, "/auth/facebook/callback?state=bad&code=abc", nil)
+	rr := httptest.NewRecorder()
+
+	svc.HandleFacebookCallback(rr, req)
+
+	if rr.Code != http.StatusBadRequest {
+		t.Fatalf("status=%d want %d", rr.Code, http.StatusBadRequest)
+	}
+}
+
+func TestHandleFacebookCallback_HappyPath(t *testing.T) {
+	svc, _ := newTestService(t)
+	t.Setenv("FACEBOOK_CLIENT_ID", "fb-client")
+	t.Setenv("FACEBOOK_CLIENT_SECRET", "fb-secret")
+
+	// Single test server handles both token exchange and userinfo.
+	oauthServer := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		switch r.URL.Path {
+		case "/v19.0/oauth/access_token":
+			_, _ = fmt.Fprint(w, `{"access_token":"fb-test-tok"}`)
+		default:
+			_, _ = fmt.Fprint(w, `{"id":"fb-user-1","email":"fb@example.com"}`)
+		}
+	}))
+	defer oauthServer.Close()
+
+	// Redirect all outbound calls to the mock server.
+	svc.SetHTTPClient(&http.Client{
+		Transport: roundTripFunc(func(req *http.Request) (*http.Response, error) {
+			req.URL.Host = strings.TrimPrefix(oauthServer.URL, "http://")
+			req.URL.Scheme = "http"
+			return http.DefaultTransport.RoundTrip(req)
+		}),
+	})
+
+	state := "test-fb-state"
+	req := httptest.NewRequest(http.MethodGet, "/auth/facebook/callback?state="+state+"&code=test-code", nil)
+	req.AddCookie(&http.Cookie{Name: "od_oauth_state", Value: state})
+	rr := httptest.NewRecorder()
+
+	svc.HandleFacebookCallback(rr, req)
+
+	if rr.Code != http.StatusSeeOther {
+		t.Fatalf("status=%d want %d; body=%s", rr.Code, http.StatusSeeOther, rr.Body.String())
+	}
+	found := false
+	for _, c := range rr.Result().Cookies() {
+		if c.Name == "od_session" && c.Value != "" {
+			found = true
+		}
+	}
+	if !found {
+		t.Fatal("expected od_session cookie after facebook oauth callback")
 	}
 }
 
