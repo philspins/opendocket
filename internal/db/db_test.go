@@ -1,26 +1,14 @@
 package db_test
 
 import (
-	"database/sql"
-	"path/filepath"
 	"testing"
 
-	"github.com/philspins/opendocket/internal/db"
 	"github.com/philspins/opendocket/internal/store"
+	"github.com/philspins/opendocket/internal/testutil"
 )
 
-func tempDB(t *testing.T) *sql.DB {
-	t.Helper()
-	d, err := db.Open(filepath.Join(t.TempDir(), "test.db"))
-	if err != nil {
-		t.Fatalf("db.Open: %v", err)
-	}
-	t.Cleanup(func() { d.Close() })
-	return d
-}
-
 func TestMigrate_CreatesAllTables(t *testing.T) {
-	d := tempDB(t)
+	d := testutil.OpenDB(t)
 
 	tables := []string{
 		"members", "bills", "divisions",
@@ -40,7 +28,7 @@ func TestMigrate_CreatesAllTables(t *testing.T) {
 }
 
 func TestMigrate_CreatesIndices(t *testing.T) {
-	d := tempDB(t)
+	d := testutil.OpenDB(t)
 
 	indices := []string{
 		"idx_divisions_bill",
@@ -65,7 +53,7 @@ func TestMigrate_CreatesIndices(t *testing.T) {
 }
 
 func TestUpsertMember(t *testing.T) {
-	d := tempDB(t)
+	d := testutil.OpenDB(t)
 
 	m := store.MemberRecord{
 		ID:              "123006",
@@ -100,7 +88,7 @@ func TestUpsertMember(t *testing.T) {
 }
 
 func TestUpsertMember_Updates(t *testing.T) {
-	d := tempDB(t)
+	d := testutil.OpenDB(t)
 
 	base := store.MemberRecord{ID: "123006", Name: "Jane Doe", Party: "Liberal", Active: true, LastScraped: "2024-04-03"}
 	store.UpsertMember(d, base)
@@ -117,7 +105,7 @@ func TestUpsertMember_Updates(t *testing.T) {
 }
 
 func TestUpsertBill(t *testing.T) {
-	d := tempDB(t)
+	d := testutil.OpenDB(t)
 
 	b := store.BillRecord{
 		ID:           "45-1-c-47",
@@ -146,7 +134,7 @@ func TestUpsertBill(t *testing.T) {
 }
 
 func TestUpsertBill_PreservesSummaries(t *testing.T) {
-	d := tempDB(t)
+	d := testutil.OpenDB(t)
 
 	// Insert with AI summary
 	b := store.BillRecord{ID: "45-1-c-47", Title: "Budget", SummaryAI: `{"one_sentence":"A bill."}`, LastScraped: "2024-04-03"}
@@ -164,7 +152,7 @@ func TestUpsertBill_PreservesSummaries(t *testing.T) {
 }
 
 func TestUpsertBill_PreservesChamberAndCategory(t *testing.T) {
-	d := tempDB(t)
+	d := testutil.OpenDB(t)
 
 	// Insert with chamber and category set
 	b := store.BillRecord{ID: "45-1-c-47", Title: "Housing Bill", Chamber: "commons", Category: "Housing", LastScraped: "2024-04-03"}
@@ -185,7 +173,7 @@ func TestUpsertBill_PreservesChamberAndCategory(t *testing.T) {
 }
 
 func TestUpsertDivision(t *testing.T) {
-	d := tempDB(t)
+	d := testutil.OpenDB(t)
 
 	div := store.DivisionRecord{
 		ID:          "45-1-892",
@@ -214,7 +202,7 @@ func TestUpsertDivision(t *testing.T) {
 }
 
 func TestUpsertMemberVote(t *testing.T) {
-	d := tempDB(t)
+	d := testutil.OpenDB(t)
 
 	// Insert prerequisites
 	store.UpsertMember(d, store.MemberRecord{ID: "123006", Name: "Jane", Active: true, LastScraped: "2024"})
@@ -232,7 +220,7 @@ func TestUpsertMemberVote(t *testing.T) {
 }
 
 func TestUpsertMemberVote_Updates(t *testing.T) {
-	d := tempDB(t)
+	d := testutil.OpenDB(t)
 
 	store.UpsertMember(d, store.MemberRecord{ID: "123006", Name: "Jane", Active: true, LastScraped: "2024"})
 	store.UpsertDivision(d, store.DivisionRecord{ID: "45-1-892", Parliament: 45, Session: 1, Number: 892, LastScraped: "2024"})
@@ -248,7 +236,7 @@ func TestUpsertMemberVote_Updates(t *testing.T) {
 }
 
 func TestUpsertSittingDate_Idempotent(t *testing.T) {
-	d := tempDB(t)
+	d := testutil.OpenDB(t)
 
 	store.UpsertSittingDate(d, 45, 1, "2024-04-03")
 	store.UpsertSittingDate(d, 45, 1, "2024-04-03") // duplicate — should be ignored
@@ -261,7 +249,7 @@ func TestUpsertSittingDate_Idempotent(t *testing.T) {
 }
 
 func TestDivisionExists(t *testing.T) {
-	d := tempDB(t)
+	d := testutil.OpenDB(t)
 
 	exists, err := store.DivisionExists(d, "45-1-999")
 	if err != nil || exists {
@@ -277,7 +265,7 @@ func TestDivisionExists(t *testing.T) {
 }
 
 func TestSittingDates(t *testing.T) {
-	d := tempDB(t)
+	d := testutil.OpenDB(t)
 
 	for _, date := range []string{"2024-04-03", "2024-04-04", "2024-04-10"} {
 		store.UpsertSittingDate(d, 45, 1, date)
