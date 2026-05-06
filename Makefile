@@ -45,7 +45,10 @@ server:
 	go run ./cmd/server -db $(DB) -addr $(ADDR)
 
 test: eol-check
-	go test ./...
+	go test -coverprofile=coverage.out ./...
+	@grep -v "_templ\.go:" coverage.out > coverage_filtered.out
+	@echo "=== Coverage excluding auto-generated *_templ.go files ==="
+	@go tool cover -func=coverage_filtered.out | tail -1
 
 eol-check:
 	@cr="$$(printf '\r')"; \

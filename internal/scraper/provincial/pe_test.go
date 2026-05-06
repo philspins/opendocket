@@ -452,3 +452,32 @@ func TestIsPEICaptchaBody_CaseInsensitive(t *testing.T) {
 		t.Fatal("expected generic perfdrive bot-manager signature to be detected")
 	}
 }
+
+// ── IsPEExpiredLinkResponse ───────────────────────────────────────────────────
+
+func TestIsPEExpiredLinkResponse(t *testing.T) {
+	base := "http://docs.assembly.pe.ca/download/dms/pe-123"
+	tests := []struct {
+		name       string
+		url        string
+		statusCode int
+		snippet    string
+		want       bool
+	}{
+		{"matches expired link", base, 500, "Error retrieving file: link is expired", true},
+		{"wrong status code", base, 404, "Error retrieving file: link is expired", false},
+		{"wrong host", "http://other.example.com/download/dms/pe-123", 500, "Error retrieving file: link is expired", false},
+		{"missing /download/dms in path", "http://docs.assembly.pe.ca/other/path", 500, "Error retrieving file: link is expired", false},
+		{"snippet lacks error retrieving", base, 500, "link is expired", false},
+		{"snippet lacks link is expired", base, 500, "Error retrieving file", false},
+		{"invalid URL", ":/bad", 500, "Error retrieving file: link is expired", false},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			got := IsPEExpiredLinkResponse(tt.url, tt.statusCode, tt.snippet)
+			if got != tt.want {
+				t.Errorf("IsPEExpiredLinkResponse() = %v, want %v", got, tt.want)
+			}
+		})
+	}
+}

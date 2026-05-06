@@ -142,3 +142,13 @@ func TestOntarioCalendarDates_SelectsCurrentYearBlock(t *testing.T) {
 		t.Fatalf("expected 2026-04-22 to be generated as in-session date")
 	}
 }
+
+// ── OntarioVPDayURL ───────────────────────────────────────────────────────────
+
+func TestOntarioVPDayURL(t *testing.T) {
+	got := OntarioVPDayURL(43, 1, "2024-04-03")
+	want := "https://www.ola.org/en/legislative-business/house-documents/parliament-43/session-1/2024-04-03/votes-proceedings"
+	if got != want {
+		t.Errorf("OntarioVPDayURL(43,1,2024-04-03) = %q, want %q", got, want)
+	}
+}

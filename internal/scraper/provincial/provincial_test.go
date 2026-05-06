@@ -446,3 +446,27 @@ func TestParliamentOrdinal(t *testing.T) {
 		}
 	}
 }
+
+// ── NormalisePersonName ───────────────────────────────────────────────────────
+
+func TestNormalisePersonName(t *testing.T) {
+	tests := []struct {
+		in   string
+		want string
+	}{
+		{"Hon. Mr. John Smith", "john smith"},
+		{"Ms. Jane Doe", "jane doe"},
+		{"Dr. A. Brown", "a brown"},
+		{"MR. JONES", "jones"},
+		{"O'Brien", "obrien"},
+		{"Dela Cruz, Maria", "dela cruz maria"},
+		{"Smith-Johnson", "smith johnson"},
+		{"  Extra  Spaces  ", "extra spaces"},
+		{"K.C. Wilson", "wilson"}, // "k" and "c" are filtered as title abbreviations
+	}
+	for _, tt := range tests {
+		if got := NormalisePersonName(tt.in); got != tt.want {
+			t.Errorf("NormalisePersonName(%q) = %q, want %q", tt.in, got, tt.want)
+		}
+	}
+}

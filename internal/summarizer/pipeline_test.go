@@ -383,3 +383,137 @@ func TestCallClaudeAPI_RetriesAfterRateLimit(t *testing.T) {
 		t.Fatalf("unexpected response text: %q", resp.Content[0].Text)
 	}
 }
+
+// ── summarizerEnvInt ──────────────────────────────────────────────────────────
+
+func TestSummarizerEnvInt_NoEnvFallsBack(t *testing.T) {
+	t.Setenv("TEST_ENV_INT_X", "")
+	if got := summarizerEnvInt("TEST_ENV_INT_X", 42); got != 42 {
+		t.Errorf("got %d, want 42", got)
+	}
+}
+
+func TestSummarizerEnvInt_ValidEnv(t *testing.T) {
+	t.Setenv("TEST_ENV_INT_X", "7")
+	if got := summarizerEnvInt("TEST_ENV_INT_X", 42); got != 7 {
+		t.Errorf("got %d, want 7", got)
+	}
+}
+
+func TestSummarizerEnvInt_InvalidEnvFallsBack(t *testing.T) {
+	t.Setenv("TEST_ENV_INT_X", "notanumber")
+	if got := summarizerEnvInt("TEST_ENV_INT_X", 42); got != 42 {
+		t.Errorf("got %d, want 42", got)
+	}
+}
+
+func TestSummarizerEnvInt_ZeroFallsBack(t *testing.T) {
+	t.Setenv("TEST_ENV_INT_X", "0")
+	if got := summarizerEnvInt("TEST_ENV_INT_X", 42); got != 42 {
+		t.Errorf("got %d, want 42 for zero value", got)
+	}
+}
+
+// ── summarizerParallelism ─────────────────────────────────────────────────────
+
+func TestSummarizerParallelism_DefaultIsOne(t *testing.T) {
+	t.Setenv("SUMMARIZER_PARALLELISM", "")
+	if got := summarizerParallelism(); got != 1 {
+		t.Errorf("got %d, want 1", got)
+	}
+}
+
+func TestSummarizerParallelism_ValidEnv(t *testing.T) {
+	t.Setenv("SUMMARIZER_PARALLELISM", "4")
+	if got := summarizerParallelism(); got != 4 {
+		t.Errorf("got %d, want 4", got)
+	}
+}
+
+func TestSummarizerParallelism_NegativeFallsBack(t *testing.T) {
+	t.Setenv("SUMMARIZER_PARALLELISM", "-1")
+	if got := summarizerParallelism(); got != 1 {
+		t.Errorf("got %d, want 1 for negative value", got)
+	}
+}
+
+// ── selectedClaudeModels ──────────────────────────────────────────────────────
+
+func TestSelectedClaudeModels_NoEnvReturnsDefault(t *testing.T) {
+	t.Setenv("ANTHROPIC_MODEL", "")
+	models := selectedClaudeModels()
+	if len(models) == 0 {
+		t.Error("expected at least one model (the package-level claudeModel constant)")
+	}
+}
+
+func TestSelectedClaudeModels_EnvPrependsAndDeduplicates(t *testing.T) {
+	t.Setenv("ANTHROPIC_MODEL", claudeModel)
+	models := selectedClaudeModels()
+	// claudeModel appears in both env and the fallback list — should be deduplicated.
+	for i, m := range models {
+		for j, n := range models {
+			if i != j && m == n {
+				t.Errorf("duplicate model %q in list %v", m, models)
+			}
+		}
+	}
+}
+
+func TestSelectedClaudeModels_CustomEnvPrepends(t *testing.T) {
+	t.Setenv("ANTHROPIC_MODEL", "claude-custom-9-9")
+	models := selectedClaudeModels()
+	if len(models) == 0 || models[0] != "claude-custom-9-9" {
+		t.Errorf("expected custom model first, got %v", models)
+	}
+}
+
+// ── isModelNotFoundError ──────────────────────────────────────────────────────
+
+func TestIsModelNotFoundError_Nil(t *testing.T) {
+	if isModelNotFoundError(nil) {
+		t.Error("nil error should not be a model-not-found error")
+	}
+}
+
+func TestIsModelNotFoundError_NotFoundError(t *testing.T) {
+	if !isModelNotFoundError(fmt.Errorf("anthropic returned not_found_error")) {
+		t.Error("error containing not_found_error should match")
+	}
+}
+
+func TestIsModelNotFoundError_ModelColon(t *testing.T) {
+	if !isModelNotFoundError(fmt.Errorf("invalid model: claude-old-1-0")) {
+		t.Error("error containing 'model:' should match")
+	}
+}
+
+func TestIsModelNotFoundError_UnrelatedError(t *testing.T) {
+	if isModelNotFoundError(fmt.Errorf("network timeout")) {
+		t.Error("unrelated error should not match")
+	}
+}
+
+// ── sanitizeLogURL ────────────────────────────────────────────────────────────
+
+func TestSanitizeLogURL_StripsQueryAndFragment(t *testing.T) {
+	got := sanitizeLogURL("https://example.com/path?key=secret#anchor")
+	if got != "https://example.com/path" {
+		t.Errorf("sanitizeLogURL() = %q, want https://example.com/path", got)
+	}
+}
+
+func TestSanitizeLogURL_PreservesSchemeHostPath(t *testing.T) {
+	got := sanitizeLogURL("https://api.example.com/v1/resource")
+	if got != "https://api.example.com/v1/resource" {
+		t.Errorf("sanitizeLogURL() = %q, want https://api.example.com/v1/resource", got)
+	}
+}
+
+func TestSanitizeLogURL_InvalidURLPassthrough(t *testing.T) {
+	raw := ":/not-valid"
+	got := sanitizeLogURL(raw)
+	if got != raw {
+		t.Errorf("sanitizeLogURL(invalid) = %q, want passthrough %q", got, raw)
+	}
+}

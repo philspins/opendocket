@@ -35,7 +35,6 @@ import (
 
 	"github.com/philspins/opendocket/internal/clog"
 	"github.com/philspins/opendocket/internal/db"
-	"github.com/philspins/opendocket/internal/scheduler"
 	"github.com/philspins/opendocket/internal/scraper"
 	"github.com/philspins/opendocket/internal/store"
 	"github.com/philspins/opendocket/internal/summarizer"
@@ -54,7 +53,6 @@ func main() {
 	provinceCodes := flag.String("province", "", "Comma-separated province codes to crawl (e.g. pe,on,bc); implies --provincial")
 	membersFlag := flag.Bool("members", false, "Crawl MP profiles only")
 	calendarFlag := flag.Bool("calendar", false, "Crawl sitting calendar only")
-	scheduleFlag := flag.Bool("schedule", false, "Run the background scheduler (blocks indefinitely)")
 	dbPath := flag.String("db", db.DefaultPath, "Path to SQLite database file")
 	delayMS := flag.Int("delay", 500, "Milliseconds between HTTP requests")
 	parallelism := flag.Int("parallelism", scraper.DefaultParallelism(), "Max domain crawlers to run concurrently (env: CRAWLER_PARALLELISM)")
@@ -86,24 +84,6 @@ func main() {
 
 	delay := time.Duration(*delayMS) * time.Millisecond
 	client := utils.NewHTTPClient()
-
-	// ── Scheduler mode ───────────────────────────────────────────────────────
-	if *scheduleFlag {
-		p := *parallelism
-		scheduler.Start(scheduler.Config{
-			DB: conn,
-			FullCrawlFn: func(sdb *sql.DB) error {
-				return runAll(sdb, client, delay, p)
-			},
-			FrequentVoteCheck: func(sdb *sql.DB) error {
-				return runFrequentVoteCheck(sdb, client, delay, "")
-			},
-			AISummarizationFn: func(ctx context.Context, sdb *sql.DB) (int, error) {
-				return summarizer.SummarizeNewBills(ctx, sdb, true)
-			},
-		})
-		return // never reached
-	}
 
 	// ── One-shot mode ────────────────────────────────────────────────────────
 	shouldRunAll := !(*billsFlag || *votesFlag || *senateFlag || *provincialFlag || *membersFlag || *calendarFlag)
