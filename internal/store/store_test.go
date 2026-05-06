@@ -410,6 +410,51 @@ func TestGetMemberStats_SolePartyMemberCountsAsPartyLine(t *testing.T) {
 	}
 }
 
+func TestGetMemberStats_MissedPct_UsesTermDates(t *testing.T) {
+	conn := tempDB(t)
+
+	// term_start is 2024-02-01, so d-before (2024-01-15) must NOT count.
+	_, err := conn.Exec(`INSERT INTO members (id, name, party, riding, province, chamber, active, term_start)
+		VALUES ('m-term', 'Term MP', 'Liberal', 'Ottawa Centre', 'ON', 'commons', 1, '2024-02-01'),
+		       ('m-lib2', 'Lib Colleague', 'Liberal', 'Ottawa West', 'ON', 'commons', 1, NULL)`)
+	if err != nil {
+		t.Fatalf("insert members: %v", err)
+	}
+
+	for _, row := range []struct {
+		id   string
+		date string
+		num  int
+	}{
+		{"d-before", "2024-01-15", 1}, // before term — must NOT count toward denominator
+		{"d-in1", "2024-02-05", 2},
+		{"d-in2", "2024-02-10", 3},
+	} {
+		_, err = conn.Exec(`INSERT INTO divisions (id, parliament, session, number, date, yeas, nays, result, chamber)
+			VALUES (?, 45, 1, ?, ?, 100, 50, 'Carried', 'commons')`,
+			row.id, row.num, row.date)
+		if err != nil {
+			t.Fatalf("insert division %s: %v", row.id, err)
+		}
+	}
+
+	// m-term votes only on d-in1; d-in2 is missed; d-before must be excluded
+	_, err = conn.Exec(`INSERT INTO member_votes (division_id, member_id, vote) VALUES ('d-in1', 'm-term', 'Yea')`)
+	if err != nil {
+		t.Fatalf("insert vote: %v", err)
+	}
+
+	st := store.New(conn)
+	stats, err := st.GetMemberStats("m-term")
+	if err != nil {
+		t.Fatalf("GetMemberStats: %v", err)
+	}
+	// 2 divisions in term, 1 voted, 1 missed → MissedPct = 50
+	if stats.MissedPct != 50 {
+		t.Errorf("want MissedPct=50, got %d", stats.MissedPct)
+	}
+}
+
 func TestCompareMemberVotes(t *testing.T) {
 	conn := tempDB(t)
 	st := store.New(conn)

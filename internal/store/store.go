@@ -806,33 +806,26 @@ func (s *Store) GetMemberStats(id string) (MemberStats, error) {
 		}
 	}
 
-	// Derive the current parliament/session from the member's most recent votes
-	// so that provincial members (who use different parliament numbers) get the
-	// right denominator rather than being compared against federal divisions.
-	var currentParliament, currentSession int
-	_ = s.db.QueryRow(`
-		SELECT d.parliament, d.session
-		FROM member_votes mv
-		JOIN divisions d ON d.id = mv.division_id
-		WHERE mv.member_id = ?
-		ORDER BY d.parliament DESC, d.session DESC
-		LIMIT 1`, id).Scan(&currentParliament, &currentSession)
+	var termStart, termEnd string
+	_ = s.db.QueryRow(
+		"SELECT COALESCE(term_start,''), COALESCE(term_end,'') FROM members WHERE id = ?", id,
+	).Scan(&termStart, &termEnd)
 
 	var totalDivisions int
-	if currentParliament > 0 {
+	if termStart != "" {
 		_ = s.db.QueryRow(`
 			SELECT COUNT(*) FROM divisions
-			WHERE parliament = ? AND session = ?`,
-			currentParliament, currentSession).Scan(&totalDivisions)
+			WHERE date >= ? AND (? = '' OR date <= ?)`,
+			termStart, termEnd, termEnd).Scan(&totalDivisions)
 	}
 
 	var voted int
-	if currentParliament > 0 {
+	if termStart != "" {
 		_ = s.db.QueryRow(`
 			SELECT COUNT(*) FROM member_votes mv
 			JOIN divisions d ON d.id = mv.division_id
-			WHERE mv.member_id = ? AND d.parliament = ? AND d.session = ?`,
-			id, currentParliament, currentSession).Scan(&voted)
+			WHERE mv.member_id = ? AND d.date >= ? AND (? = '' OR d.date <= ?)`,
+			id, termStart, termEnd, termEnd).Scan(&voted)
 	}
 
 	missed := totalDivisions - voted
