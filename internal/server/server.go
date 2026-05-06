@@ -452,7 +452,8 @@ func (s *Server) handleMemberProfile(w http.ResponseWriter, r *http.Request) {
 	votes, _ := s.store.GetMemberVotes(id, 500)
 	stats, _ := s.store.GetMemberStats(id)
 	catScores, _ := s.store.GetMemberCategoryScores(id)
-	_ = templates.MemberProfile(ps, member, votes, stats, catScores).Render(r.Context(), w)
+	missedVotes, _ := s.store.GetMissedVotes(id, 500)
+	_ = templates.MemberProfile(ps, member, votes, stats, catScores, missedVotes).Render(r.Context(), w)
 }
 
 func (s *Server) handleCompare(w http.ResponseWriter, r *http.Request) {

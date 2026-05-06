@@ -5,7 +5,7 @@ import (
 	"github.com/philspins/opendocket/internal/store"
 )
 
-templ MemberProfile(ps store.ParliamentStatus, member store.MemberRow, votes []store.VoteRow, stats store.MemberStats, catScores []store.CategoryScore) {
+templ MemberProfile(ps store.ParliamentStatus, member store.MemberRow, votes []store.VoteRow, stats store.MemberStats, catScores []store.CategoryScore, missedVotes []store.MissedVoteRow) {
 	@Layout(member.Name, ps) {
 		<div class="space-y-6">
 			<a href="/members" class="text-sm text-blue-600 hover:underline">← Members</a>
@@ -138,6 +138,48 @@ templ MemberProfile(ps store.ParliamentStatus, member store.MemberRow, votes []s
 					</table>
 				</div>
 				@VotesPagination("member-votes", "[data-vote-row]", MemberVotesPerPage)
+			</section>
+
+			<!-- Missed Votes -->
+			<section id="missed-votes-section">
+				<h2 class="text-lg font-semibold text-gray-800 mb-3">Missed Votes</h2>
+				<div class="table-shell vote-table-shell">
+					<table class="vote-table member-vote-table min-w-full text-sm">
+						<thead>
+							<tr>
+								<th class="px-4 py-2.5 col-date">Date</th>
+								<th class="px-4 py-2.5">Bill</th>
+								<th class="px-4 py-2.5">Description</th>
+								<th class="px-4 py-2.5">Party Vote</th>
+								<th class="px-4 py-2.5">Result</th>
+							</tr>
+						</thead>
+						<tbody>
+							for i, mv := range missedVotes {
+								<tr
+									class={ templ.KV("hidden", i >= MemberVotesPerPage) }
+									data-missed-vote-row=""
+								>
+									<td class="px-4 py-2.5 col-date">{ FormatDate(mv.Date) }</td>
+									<td class="px-4 py-2.5 col-bill">
+										if mv.BillNumber != "" {
+											<a href={ templ.SafeURL("/bills/" + mv.BillID) } class="hover:underline">{ mv.BillNumber }</a>
+										}
+									</td>
+									<td class="px-4 py-2.5 col-description">{ mv.Description }</td>
+									<td class={ "px-4 py-2.5 col-vote", VoteBadgeClass(mv.PartyMajority) }>{ mv.PartyMajority }</td>
+									<td class="px-4 py-2.5 col-meta">{ mv.Result }</td>
+								</tr>
+							}
+							if len(missedVotes) == 0 {
+								<tr>
+									<td colspan="5" class="px-4 py-8 text-center text-gray-500">No missed votes recorded.</td>
+								</tr>
+							}
+						</tbody>
+					</table>
+				</div>
+				@VotesPagination("missed-votes", "[data-missed-vote-row]", MemberVotesPerPage)
 			</section>
 
 			<!-- Follow + policy actions -->
