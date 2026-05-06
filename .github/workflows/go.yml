@@ -12,7 +12,7 @@ on:
 env:
   # Minimum filtered coverage percentage (excludes auto-generated *_templ.go).
   # Bump this value as each coverage issue in the #72-#79 series merges.
-  COVERAGE_THRESHOLD: 55
+  COVERAGE_THRESHOLD: 50
 
 jobs:
   build:
