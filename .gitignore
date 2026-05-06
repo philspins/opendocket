@@ -8,8 +8,7 @@
 *.test
 *.out
 
-# Go & Node.js caches (do not commit)
-vendor/
+# Node.js caches (do not commit)
 node_modules/
 
 # Open Democracy runtime files
