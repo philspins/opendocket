@@ -111,3 +111,138 @@ func TestExtractSenateCalendarPDFURL_FallsBackToFirstMatch(t *testing.T) {
 		t.Fatalf("extractSenateCalendarPDFURL()=%q want %q", got, want)
 	}
 }
+
+func TestExtractSenateCalendarPDFURL_ReturnsEmptyWhenNoMatch(t *testing.T) {
+	got := extractSenateCalendarPDFURL(`<a href="/about">About</a>`, 2026)
+	if got != "" {
+		t.Fatalf("expected empty, got %q", got)
+	}
+}
+
+// ── isSenateOpenDayLike ───────────────────────────────────────────────────────
+
+func TestIsSenateOpenDayLike(t *testing.T) {
+	tests := []struct {
+		name    string
+		r, g, b uint8
+		want    bool
+	}{
+		// Red open-day cell (r >= 145, g/b low, r dominates)
+		{"red open day", 200, 80, 80, true},
+		// Pink open-day cell
+		{"pink open day", 220, 150, 160, true},
+		// Neutral grey — not a sitting day
+		{"grey", 180, 180, 180, false},
+		// White — not a sitting day
+		{"white", 255, 255, 255, false},
+		// Vivid green — not a sitting day
+		{"green", 60, 200, 60, false},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			c := color.NRGBA{R: tt.r, G: tt.g, B: tt.b, A: 255}
+			if got := isSenateOpenDayLike(c); got != tt.want {
+				t.Errorf("isSenateOpenDayLike(%d,%d,%d) = %v, want %v", tt.r, tt.g, tt.b, got, tt.want)
+			}
+		})
+	}
+}
+
+// ── isGreenLike ───────────────────────────────────────────────────────────────
+
+func TestIsGreenLike(t *testing.T) {
+	tests := []struct {
+		name    string
+		r, g, b uint8
+		want    bool
+	}{
+		{"sitting green", 100, 190, 130, true},
+		{"vivid green", 50, 200, 50, true},
+		{"white", 255, 255, 255, false},
+		{"red", 220, 60, 60, false},
+		{"dark grey", 80, 80, 80, false},
+		// g=94 is just below the threshold
+		{"g just under threshold", 60, 94, 60, false},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			c := color.NRGBA{R: tt.r, G: tt.g, B: tt.b, A: 255}
+			if got := isGreenLike(c); got != tt.want {
+				t.Errorf("isGreenLike(%d,%d,%d) = %v, want %v", tt.r, tt.g, tt.b, got, tt.want)
+			}
+		})
+	}
+}
+
+// ── nearestClusterIndex ───────────────────────────────────────────────────────
+
+func TestNearestClusterIndex(t *testing.T) {
+	centers := []float64{10.0, 50.0, 90.0}
+	tests := []struct {
+		value float64
+		want  int
+	}{
+		{8.0, 0},   // clearly closest to 10
+		{33.0, 1},  // 17 from 50, 23 from 10
+		{75.0, 2},  // 15 from 90, 25 from 50
+		{50.0, 1},  // exact centre
+		{49.9, 1},  // just below centre
+	}
+	for _, tt := range tests {
+		got := nearestClusterIndex(tt.value, centers)
+		if got != tt.want {
+			t.Errorf("nearestClusterIndex(%v, %v) = %d, want %d", tt.value, centers, got, tt.want)
+		}
+	}
+}
+
+// ── parseTesseractTSVWords ────────────────────────────────────────────────────
+
+func TestParseTesseractTSVWords_ParsesValidRows(t *testing.T) {
+	// TSV header + two data rows (12 tab-separated columns, col 11 is the word text)
+	tsv := "level\tpage_num\tblock_num\tpar_num\tline_num\tword_num\tleft\ttop\twidth\theight\tconf\ttext\n" +
+		"5\t1\t1\t1\t1\t1\t10\t20\t30\t15\t95.5\tApril\n" +
+		"5\t1\t1\t1\t1\t2\t50\t20\t25\t15\t88.0\t2026\n"
+
+	words := parseTesseractTSVWords(tsv)
+	if len(words) != 2 {
+		t.Fatalf("expected 2 words, got %d", len(words))
+	}
+	if words[0].Text != "April" || words[0].Left != 10 || words[0].Top != 20 {
+		t.Errorf("words[0]=%+v", words[0])
+	}
+	if words[1].Text != "2026" || words[1].Confidence != 88.0 {
+		t.Errorf("words[1]=%+v", words[1])
+	}
+}
+
+func TestParseTesseractTSVWords_SkipsMalformedAndEmpty(t *testing.T) {
+	tsv := "header\n" +
+		// too few columns
+		"5\t1\t1\n" +
+		// empty text (col 11 is empty)
+		"5\t1\t1\t1\t1\t1\t10\t20\t30\t15\t90.0\t\n" +
+		// non-numeric coordinate
+		"5\t1\t1\t1\t1\t1\tX\t20\t30\t15\t90.0\tWord\n" +
+		// valid
+		"5\t1\t1\t1\t1\t1\t5\t5\t20\t12\t99.0\tOK\n"
+
+	words := parseTesseractTSVWords(tsv)
+	if len(words) != 1 || words[0].Text != "OK" {
+		t.Fatalf("expected 1 valid word 'OK', got %v", words)
+	}
+}
+
+func TestCluster1D_FailsWithFewerValuesThanClusters(t *testing.T) {
+	_, ok := cluster1D([]float64{1.0, 2.0}, 5)
+	if ok {
+		t.Fatal("expected cluster1D to fail when len(values) < k")
+	}
+}
+
+func TestCluster1D_FailsWithZeroClusters(t *testing.T) {
+	_, ok := cluster1D([]float64{1.0, 2.0, 3.0}, 0)
+	if ok {
+		t.Fatal("expected cluster1D to fail with k=0")
+	}
+}
