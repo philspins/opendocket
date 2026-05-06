@@ -875,3 +875,132 @@ func TestHandleVerifyEmail_ByTokenJSON(t *testing.T) {
 		t.Fatalf("status=%d want %d; body=%s", rr.Code, http.StatusSeeOther, rr.Body.String())
 	}
 }
+
+// ── HandleFacebookLogin ───────────────────────────────────────────────────────
+
+func TestHandleFacebookLogin_SetsStateCookieAndRedirect(t *testing.T) {
+	svc, _ := newTestService(t)
+	t.Setenv("FACEBOOK_CLIENT_ID", "fb-client-id")
+
+	req := httptest.NewRequest(http.MethodGet, "/auth/facebook/login", nil)
+	rr := httptest.NewRecorder()
+
+	svc.HandleFacebookLogin(rr, req)
+
+	if rr.Code != http.StatusFound {
+		t.Fatalf("status=%d want %d", rr.Code, http.StatusFound)
+	}
+	loc := rr.Header().Get("Location")
+	if !strings.Contains(loc, "facebook.com") {
+		t.Fatalf("unexpected redirect location: %s", loc)
+	}
+	u, err := url.Parse(loc)
+	if err != nil {
+		t.Fatalf("parse location: %v", err)
+	}
+	state := u.Query().Get("state")
+	if state == "" {
+		t.Fatalf("missing state in redirect")
+	}
+	found := false
+	for _, c := range rr.Result().Cookies() {
+		if c.Name == "od_oauth_state" && c.Value == state {
+			found = true
+			break
+		}
+	}
+	if !found {
+		t.Fatalf("expected od_oauth_state cookie matching redirect state")
+	}
+}
+
+// ── HandleFacebookCallback error paths ───────────────────────────────────────
+
+func TestHandleFacebookCallback_TokenExchangeFails(t *testing.T) {
+	svc, _ := newTestService(t)
+
+	ts := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		http.Error(w, "bad credentials", http.StatusBadRequest)
+	}))
+	defer ts.Close()
+	svc.SetHTTPClient(&http.Client{
+		Transport: roundTripFunc(func(req *http.Request) (*http.Response, error) {
+			req.URL.Host = strings.TrimPrefix(ts.URL, "http://")
+			req.URL.Scheme = "http"
+			return http.DefaultTransport.RoundTrip(req)
+		}),
+	})
+
+	state := "fb-state-err"
+	req := httptest.NewRequest(http.MethodGet, "/auth/facebook/callback?state="+state+"&code=bad", nil)
+	req.AddCookie(&http.Cookie{Name: "od_oauth_state", Value: state})
+	rr := httptest.NewRecorder()
+
+	svc.HandleFacebookCallback(rr, req)
+
+	if rr.Code != http.StatusBadRequest {
+		t.Fatalf("status=%d want %d", rr.Code, http.StatusBadRequest)
+	}
+}
+
+func TestHandleFacebookCallback_EmptyAccessToken(t *testing.T) {
+	svc, _ := newTestService(t)
+
+	ts := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		_, _ = fmt.Fprint(w, `{"access_token":""}`)
+	}))
+	defer ts.Close()
+	svc.SetHTTPClient(&http.Client{
+		Transport: roundTripFunc(func(req *http.Request) (*http.Response, error) {
+			req.URL.Host = strings.TrimPrefix(ts.URL, "http://")
+			req.URL.Scheme = "http"
+			return http.DefaultTransport.RoundTrip(req)
+		}),
+	})
+
+	state := "fb-state-empty-tok"
+	req := httptest.NewRequest(http.MethodGet, "/auth/facebook/callback?state="+state+"&code=any", nil)
+	req.AddCookie(&http.Cookie{Name: "od_oauth_state", Value: state})
+	rr := httptest.NewRecorder()
+
+	svc.HandleFacebookCallback(rr, req)
+
+	if rr.Code != http.StatusBadRequest {
+		t.Fatalf("status=%d want %d", rr.Code, http.StatusBadRequest)
+	}
+}
+
+func TestHandleFacebookCallback_MissingUserEmail(t *testing.T) {
+	svc, _ := newTestService(t)
+
+	ts := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		switch r.URL.Path {
+		case "/v19.0/oauth/access_token":
+			_, _ = fmt.Fprint(w, `{"access_token":"fb-tok"}`)
+		default:
+			_, _ = fmt.Fprint(w, `{"id":"fb-user-999","email":""}`)
+		}
+	}))
+	defer ts.Close()
+	svc.SetHTTPClient(&http.Client{
+		Transport: roundTripFunc(func(req *http.Request) (*http.Response, error) {
+			req.URL.Host = strings.TrimPrefix(ts.URL, "http://")
+			req.URL.Scheme = "http"
+			return http.DefaultTransport.RoundTrip(req)
+		}),
+	})
+
+	state := "fb-state-no-email"
+	req := httptest.NewRequest(http.MethodGet, "/auth/facebook/callback?state="+state+"&code=any", nil)
+	req.AddCookie(&http.Cookie{Name: "od_oauth_state", Value: state})
+	rr := httptest.NewRecorder()
+
+	svc.HandleFacebookCallback(rr, req)
+
+	if rr.Code != http.StatusBadGateway {
+		t.Fatalf("status=%d want %d", rr.Code, http.StatusBadGateway)
+	}
+}
+
