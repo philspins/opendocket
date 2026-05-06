@@ -7,6 +7,7 @@ import (
 	"database/sql"
 	"encoding/base64"
 	"encoding/json"
+	"fmt"
 	"net/http"
 	"net/http/httptest"
 	"net/url"
@@ -1468,5 +1469,618 @@ func TestHandleProfileInterests_SavesPreferences(t *testing.T) {
 	}
 	if len(cats) != 2 {
 		t.Errorf("expected 2 saved categories, got %d: %v", len(cats), cats)
+	}
+}
+
+// ── pure helper functions ─────────────────────────────────────────────────────
+
+func TestProvinceJurisdictionKey(t *testing.T) {
+	tests := []struct {
+		input string
+		want  string
+	}{
+		{"AB", "provincial-AB"}, {"Alberta", "provincial-AB"},
+		{"BC", "provincial-BC"}, {"British Columbia", "provincial-BC"},
+		{"MB", "provincial-MB"}, {"Manitoba", "provincial-MB"},
+		{"NB", "provincial-NB"}, {"New Brunswick", "provincial-NB"},
+		{"NL", "provincial-NL"}, {"Newfoundland and Labrador", "provincial-NL"},
+		{"NS", "provincial-NS"}, {"Nova Scotia", "provincial-NS"},
+		{"ON", "provincial-ON"}, {"Ontario", "provincial-ON"},
+		{"PE", "provincial-PE"}, {"PEI", "provincial-PE"}, {"Prince Edward Island", "provincial-PE"},
+		{"QC", "provincial-QC"}, {"Quebec", "provincial-QC"}, {"Québec", "provincial-QC"},
+		{"SK", "provincial-SK"}, {"Saskatchewan", "provincial-SK"},
+		{"YT", "provincial-YT"}, {"Yukon", "provincial-YT"},
+		{"NT", "provincial-NT"}, {"Northwest Territories", "provincial-NT"},
+		{"NU", "provincial-NU"}, {"Nunavut", "provincial-NU"},
+		{"", ""},
+		{"Unknown", ""},
+	}
+	for _, tt := range tests {
+		got := provinceJurisdictionKey(tt.input)
+		if got != tt.want {
+			t.Errorf("provinceJurisdictionKey(%q) = %q, want %q", tt.input, got, tt.want)
+		}
+	}
+}
+
+func TestParliamentStatusText(t *testing.T) {
+	tests := []struct {
+		input string
+		want  string
+	}{
+		{"in_session", "in session"},
+		{"on_break", "on break"},
+		{"status_unavailable", "status unavailable"},
+		{"", "status unavailable"},
+		{"unknown", "status unavailable"},
+	}
+	for _, tt := range tests {
+		got := parliamentStatusText(tt.input)
+		if got != tt.want {
+			t.Errorf("parliamentStatusText(%q) = %q, want %q", tt.input, got, tt.want)
+		}
+	}
+}
+
+func TestMemberMatchesLevel(t *testing.T) {
+	tests := []struct {
+		name   string
+		member store.MemberRow
+		level  string
+		want   bool
+	}{
+		{
+			name:   "federal by level",
+			member: store.MemberRow{GovernmentLevel: "federal", Chamber: "commons"},
+			level:  "federal",
+			want:   true,
+		},
+		{
+			name:   "federal commons by chamber",
+			member: store.MemberRow{Chamber: "commons"},
+			level:  "federal",
+			want:   true,
+		},
+		{
+			name:   "federal senate by chamber",
+			member: store.MemberRow{Chamber: "senate"},
+			level:  "federal",
+			want:   true,
+		},
+		{
+			name:   "provincial by level",
+			member: store.MemberRow{GovernmentLevel: "provincial", Chamber: "ontario"},
+			level:  "provincial",
+			want:   true,
+		},
+		{
+			name:   "provincial by non-federal chamber",
+			member: store.MemberRow{Chamber: "ontario"},
+			level:  "provincial",
+			want:   true,
+		},
+		{
+			name:   "commons member is not provincial",
+			member: store.MemberRow{Chamber: "commons"},
+			level:  "provincial",
+			want:   false,
+		},
+		{
+			name:   "senate member is not provincial",
+			member: store.MemberRow{Chamber: "senate"},
+			level:  "provincial",
+			want:   false,
+		},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			got := memberMatchesLevel(tt.member, tt.level)
+			if got != tt.want {
+				t.Errorf("memberMatchesLevel(%+v, %q) = %v, want %v", tt.member, tt.level, got, tt.want)
+			}
+		})
+	}
+}
+
+func TestSelectLocalMemberByLevel(t *testing.T) {
+	members := []store.MemberRow{
+		{ID: "fed-1", Chamber: "commons", GovernmentLevel: "federal", Riding: "Ottawa Centre"},
+		{ID: "prov-1", Chamber: "ontario", GovernmentLevel: "provincial", Riding: "Ottawa South"},
+	}
+
+	// Exact riding match at federal level.
+	m, ok := selectLocalMemberByLevel(members, "Ottawa Centre", "federal")
+	if !ok || m.ID != "fed-1" {
+		t.Errorf("exact federal riding: got %v, ok=%v", m.ID, ok)
+	}
+
+	// Fallback to first match when riding doesn't match exactly.
+	m, ok = selectLocalMemberByLevel(members, "Nonexistent Riding", "federal")
+	if !ok || m.ID != "fed-1" {
+		t.Errorf("fallback federal: got %v, ok=%v", m.ID, ok)
+	}
+
+	// Provincial match.
+	m, ok = selectLocalMemberByLevel(members, "Ottawa South", "provincial")
+	if !ok || m.ID != "prov-1" {
+		t.Errorf("exact provincial riding: got %v, ok=%v", m.ID, ok)
+	}
+
+	// No match at all — empty slice.
+	_, ok = selectLocalMemberByLevel(nil, "Ottawa Centre", "federal")
+	if ok {
+		t.Error("expected no match for empty member slice")
+	}
+}
+
+// ── authenticated API endpoints ───────────────────────────────────────────────
+
+func TestHandleFollow_AuthenticatedFollowsMember(t *testing.T) {
+	srv, st, conn := newTestServerWithConn(t)
+
+	_, err := conn.Exec(`INSERT INTO members (id, name, party, riding, province, chamber, active, government_level)
+		VALUES ('m-followed', 'Test MP', 'Liberal', 'Ottawa', 'Ontario', 'commons', 1, 'federal')`)
+	if err != nil {
+		t.Fatalf("insert member: %v", err)
+	}
+
+	u, err := st.AuthenticateOAuth("google", "follow-user", "follower@example.com", true)
+	if err != nil {
+		t.Fatalf("AuthenticateOAuth: %v", err)
+	}
+	sid, err := st.CreateSession(u.ID, time.Hour)
+	if err != nil {
+		t.Fatalf("CreateSession: %v", err)
+	}
+
+	form := url.Values{}
+	form.Set("member_id", "m-followed")
+	req := httptest.NewRequest(http.MethodPost, "/api/follow", strings.NewReader(form.Encode()))
+	req.Header.Set("Content-Type", "application/x-www-form-urlencoded")
+	req.AddCookie(&http.Cookie{Name: "od_session", Value: sid})
+	rr := httptest.NewRecorder()
+
+	srv.ServeHTTP(rr, req)
+
+	if rr.Code != http.StatusSeeOther {
+		t.Fatalf("status=%d want %d; body=%s", rr.Code, http.StatusSeeOther, rr.Body.String())
+	}
+}
+
+func TestHandleFollow_MissingMemberID(t *testing.T) {
+	srv, st := newTestServer(t)
+
+	u, err := st.AuthenticateOAuth("google", "nomember-user", "nomember@example.com", true)
+	if err != nil {
+		t.Fatalf("AuthenticateOAuth: %v", err)
+	}
+	sid, err := st.CreateSession(u.ID, time.Hour)
+	if err != nil {
+		t.Fatalf("CreateSession: %v", err)
+	}
+
+	form := url.Values{}
+	form.Set("member_id", "  ") // whitespace-only → bad request
+	req := httptest.NewRequest(http.MethodPost, "/api/follow", strings.NewReader(form.Encode()))
+	req.Header.Set("Content-Type", "application/x-www-form-urlencoded")
+	req.AddCookie(&http.Cookie{Name: "od_session", Value: sid})
+	rr := httptest.NewRecorder()
+
+	srv.ServeHTTP(rr, req)
+
+	if rr.Code != http.StatusBadRequest {
+		t.Fatalf("status=%d want %d", rr.Code, http.StatusBadRequest)
+	}
+}
+
+func TestHandleSubscribeBill_AuthenticatedToggles(t *testing.T) {
+	srv, st, conn := newTestServerWithConn(t)
+
+	_, err := conn.Exec(`INSERT INTO bills (id, parliament, session, number, title) VALUES ('b-sub', 45, 1, 'C-99', 'Subscribe Bill')`)
+	if err != nil {
+		t.Fatalf("insert bill: %v", err)
+	}
+
+	u, err := st.AuthenticateOAuth("google", "sub-user", "subscriber@example.com", true)
+	if err != nil {
+		t.Fatalf("AuthenticateOAuth: %v", err)
+	}
+	sid, err := st.CreateSession(u.ID, time.Hour)
+	if err != nil {
+		t.Fatalf("CreateSession: %v", err)
+	}
+
+	form := url.Values{}
+	form.Set("bill_id", "b-sub")
+	req := httptest.NewRequest(http.MethodPost, "/api/subscribe-bill", strings.NewReader(form.Encode()))
+	req.Header.Set("Content-Type", "application/x-www-form-urlencoded")
+	req.AddCookie(&http.Cookie{Name: "od_session", Value: sid})
+	rr := httptest.NewRecorder()
+
+	srv.ServeHTTP(rr, req)
+
+	if rr.Code != http.StatusSeeOther {
+		t.Fatalf("subscribe: status=%d want %d; body=%s", rr.Code, http.StatusSeeOther, rr.Body.String())
+	}
+}
+
+func TestHandleReact_AuthenticatedReacts(t *testing.T) {
+	t.Setenv("BILL_INTERACTION_RATE_LIMIT_PER_MINUTE", "100")
+	srv, st, conn := newTestServerWithConn(t)
+
+	_, err := conn.Exec(`INSERT INTO bills (id, parliament, session, number, title) VALUES ('b-react', 45, 1, 'C-88', 'React Bill')`)
+	if err != nil {
+		t.Fatalf("insert bill: %v", err)
+	}
+
+	u, err := st.AuthenticateOAuth("google", "react-user2", "reactor@example.com", true)
+	if err != nil {
+		t.Fatalf("AuthenticateOAuth: %v", err)
+	}
+	sid, err := st.CreateSession(u.ID, time.Hour)
+	if err != nil {
+		t.Fatalf("CreateSession: %v", err)
+	}
+	_ = conn
+
+	form := url.Values{}
+	form.Set("bill_id", "b-react")
+	form.Set("reaction", "support")
+	req := httptest.NewRequest(http.MethodPost, "/api/react", strings.NewReader(form.Encode()))
+	req.Header.Set("Content-Type", "application/x-www-form-urlencoded")
+	req.AddCookie(&http.Cookie{Name: "od_session", Value: sid})
+	rr := httptest.NewRecorder()
+
+	srv.ServeHTTP(rr, req)
+
+	if rr.Code != http.StatusSeeOther {
+		t.Fatalf("react: status=%d want %d; body=%s", rr.Code, http.StatusSeeOther, rr.Body.String())
+	}
+}
+
+func TestHandleReact_MissingBillID(t *testing.T) {
+	t.Setenv("BILL_INTERACTION_RATE_LIMIT_PER_MINUTE", "100")
+	srv, st := newTestServer(t)
+
+	u, err := st.AuthenticateOAuth("google", "react-nobill", "reactnobill@example.com", true)
+	if err != nil {
+		t.Fatalf("AuthenticateOAuth: %v", err)
+	}
+	sid, err := st.CreateSession(u.ID, time.Hour)
+	if err != nil {
+		t.Fatalf("CreateSession: %v", err)
+	}
+
+	form := url.Values{}
+	form.Set("bill_id", "")
+	form.Set("reaction", "support")
+	req := httptest.NewRequest(http.MethodPost, "/api/react", strings.NewReader(form.Encode()))
+	req.Header.Set("Content-Type", "application/x-www-form-urlencoded")
+	req.AddCookie(&http.Cookie{Name: "od_session", Value: sid})
+	rr := httptest.NewRecorder()
+
+	srv.ServeHTTP(rr, req)
+
+	if rr.Code != http.StatusBadRequest {
+		t.Fatalf("missing bill_id: status=%d want %d", rr.Code, http.StatusBadRequest)
+	}
+}
+
+func TestHandleBills_RendersPage(t *testing.T) {
+	srv, _, conn := newTestServerWithConn(t)
+
+	_, err := conn.Exec(`INSERT INTO bills (id, parliament, session, number, title, category, current_stage, chamber, last_activity_date)
+		VALUES ('b1', 45, 1, 'C-1', 'Test Bill', 'Health', '1st_reading', 'commons', '2026-01-01')`)
+	if err != nil {
+		t.Fatalf("insert bill: %v", err)
+	}
+
+	req := httptest.NewRequest(http.MethodGet, "/bills", nil)
+	rr := httptest.NewRecorder()
+	srv.ServeHTTP(rr, req)
+
+	if rr.Code != http.StatusOK {
+		t.Fatalf("status=%d want %d; body=%s", rr.Code, http.StatusOK, rr.Body.String())
+	}
+}
+
+func TestHandleVotes_RendersPage(t *testing.T) {
+	srv, _, conn := newTestServerWithConn(t)
+
+	_, err := conn.Exec(`INSERT INTO divisions (id, parliament, session, number, yeas, nays, paired) VALUES (1, 45, 1, 1, 10, 5, 0)`)
+	if err != nil {
+		t.Fatalf("insert division: %v", err)
+	}
+
+	req := httptest.NewRequest(http.MethodGet, "/votes", nil)
+	rr := httptest.NewRecorder()
+	srv.ServeHTTP(rr, req)
+
+	if rr.Code != http.StatusOK {
+		t.Fatalf("status=%d want %d; body=%s", rr.Code, http.StatusOK, rr.Body.String())
+	}
+}
+
+func TestHandleMembers_RendersPage(t *testing.T) {
+	srv, _, conn := newTestServerWithConn(t)
+
+	_, err := conn.Exec(`INSERT INTO members (id, name, party, riding, province, chamber, active, government_level)
+		VALUES ('m1', 'Test MP', 'Liberal', 'Ottawa Centre', 'Ontario', 'commons', 1, 'federal')`)
+	if err != nil {
+		t.Fatalf("insert member: %v", err)
+	}
+
+	req := httptest.NewRequest(http.MethodGet, "/members", nil)
+	rr := httptest.NewRecorder()
+	srv.ServeHTTP(rr, req)
+
+	if rr.Code != http.StatusOK {
+		t.Fatalf("status=%d want %d; body=%s", rr.Code, http.StatusOK, rr.Body.String())
+	}
+}
+
+func TestHandleMemberProfile_RendersPage(t *testing.T) {
+	srv, _, conn := newTestServerWithConn(t)
+
+	_, err := conn.Exec(`INSERT INTO members (id, name, party, riding, province, chamber, active, government_level)
+		VALUES ('m-profile', 'Profile MP', 'NDP', 'Vancouver East', 'British Columbia', 'commons', 1, 'federal')`)
+	if err != nil {
+		t.Fatalf("insert member: %v", err)
+	}
+
+	req := httptest.NewRequest(http.MethodGet, "/members/m-profile", nil)
+	rr := httptest.NewRecorder()
+	srv.ServeHTTP(rr, req)
+
+	if rr.Code != http.StatusOK {
+		t.Fatalf("status=%d want %d; body=%s", rr.Code, http.StatusOK, rr.Body.String())
+	}
+}
+
+func TestHandleBillDetail_RendersPage(t *testing.T) {
+	srv, _, conn := newTestServerWithConn(t)
+
+	_, err := conn.Exec(`INSERT INTO bills (id, parliament, session, number, title, category, current_stage, chamber)
+		VALUES ('b-detail', 45, 1, 'C-42', 'Detail Bill', 'General', '1st_reading', 'commons')`)
+	if err != nil {
+		t.Fatalf("insert bill: %v", err)
+	}
+
+	req := httptest.NewRequest(http.MethodGet, "/bills/b-detail", nil)
+	rr := httptest.NewRecorder()
+	srv.ServeHTTP(rr, req)
+
+	if rr.Code != http.StatusOK {
+		t.Fatalf("status=%d want %d; body=%s", rr.Code, http.StatusOK, rr.Body.String())
+	}
+}
+
+func TestHandleBillDetail_NotFound(t *testing.T) {
+	srv, _ := newTestServer(t)
+
+	req := httptest.NewRequest(http.MethodGet, "/bills/nonexistent", nil)
+	rr := httptest.NewRecorder()
+	srv.ServeHTTP(rr, req)
+
+	if rr.Code != http.StatusNotFound {
+		t.Fatalf("status=%d want %d", rr.Code, http.StatusNotFound)
+	}
+}
+
+func TestHandleBills_WithFilters(t *testing.T) {
+	srv, _, conn := newTestServerWithConn(t)
+
+	_, err := conn.Exec(`INSERT INTO bills (id, parliament, session, number, title, category, current_stage, chamber, last_activity_date)
+		VALUES ('b1', 45, 1, 'C-1', 'Health Bill', 'Health', '2nd_reading', 'commons', '2026-01-01'),
+		       ('b2', 45, 1, 'C-2', 'Housing Bill', 'Housing', '1st_reading', 'senate', '2026-01-02')`)
+	if err != nil {
+		t.Fatalf("insert bills: %v", err)
+	}
+
+	for _, tc := range []struct {
+		query string
+		name  string
+	}{
+		{"/bills?stage=2nd_reading", "stage filter"},
+		{"/bills?category=Health", "category filter"},
+		{"/bills?chamber=commons", "chamber filter"},
+		{"/bills?sort=stage", "sort=stage"},
+		{"/bills?per_page=5", "per_page=5"},
+		{"/bills?per_page=25", "per_page=25"},
+		{"/bills?per_page=50", "per_page=50"},
+	} {
+		req := httptest.NewRequest(http.MethodGet, tc.query, nil)
+		rr := httptest.NewRecorder()
+		srv.ServeHTTP(rr, req)
+		if rr.Code != http.StatusOK {
+			t.Errorf("%s: status=%d want %d", tc.name, rr.Code, http.StatusOK)
+		}
+	}
+}
+
+func TestHandleBills_AuthenticatedAutoSort(t *testing.T) {
+	srv, st, conn := newTestServerWithConn(t)
+
+	_, err := conn.Exec(`INSERT INTO bills (id, parliament, session, number, title, category, current_stage, chamber, last_activity_date)
+		VALUES ('b1', 45, 1, 'C-1', 'Health Bill', 'Health', '1st_reading', 'commons', '2026-01-01')`)
+	if err != nil {
+		t.Fatalf("insert bill: %v", err)
+	}
+	_ = conn
+
+	u, err := st.AuthenticateOAuth("google", "bills-auto-user", "billsauto@example.com", true)
+	if err != nil {
+		t.Fatalf("AuthenticateOAuth: %v", err)
+	}
+	sid, err := st.CreateSession(u.ID, time.Hour)
+	if err != nil {
+		t.Fatalf("CreateSession: %v", err)
+	}
+
+	req := httptest.NewRequest(http.MethodGet, "/bills?sort=auto", nil)
+	req.AddCookie(&http.Cookie{Name: "od_session", Value: sid})
+	rr := httptest.NewRecorder()
+	srv.ServeHTTP(rr, req)
+
+	if rr.Code != http.StatusOK {
+		t.Fatalf("status=%d want %d; body=%s", rr.Code, http.StatusOK, rr.Body.String())
+	}
+}
+
+func TestHandleSubscribeBill_MissingBillID(t *testing.T) {
+	srv, st := newTestServer(t)
+
+	u, err := st.AuthenticateOAuth("google", "sub-nobill", "subnobill@example.com", true)
+	if err != nil {
+		t.Fatalf("AuthenticateOAuth: %v", err)
+	}
+	sid, err := st.CreateSession(u.ID, time.Hour)
+	if err != nil {
+		t.Fatalf("CreateSession: %v", err)
+	}
+
+	form := url.Values{}
+	form.Set("bill_id", "")
+	req := httptest.NewRequest(http.MethodPost, "/api/subscribe-bill", strings.NewReader(form.Encode()))
+	req.Header.Set("Content-Type", "application/x-www-form-urlencoded")
+	req.AddCookie(&http.Cookie{Name: "od_session", Value: sid})
+	rr := httptest.NewRecorder()
+
+	srv.ServeHTTP(rr, req)
+
+	if rr.Code != http.StatusBadRequest {
+		t.Fatalf("status=%d want %d", rr.Code, http.StatusBadRequest)
+	}
+}
+
+func TestHandleProfile_Unauthenticated(t *testing.T) {
+	srv, _ := newTestServer(t)
+
+	req := httptest.NewRequest(http.MethodGet, "/profile", nil)
+	rr := httptest.NewRecorder()
+	srv.ServeHTTP(rr, req)
+
+	if rr.Code != http.StatusSeeOther {
+		t.Fatalf("status=%d want %d", rr.Code, http.StatusSeeOther)
+	}
+	if !strings.HasSuffix(rr.Header().Get("Location"), "/auth/login") {
+		t.Fatalf("expected redirect to /auth/login, got %s", rr.Header().Get("Location"))
+	}
+}
+
+func TestHandleMemberProfile_NotFound(t *testing.T) {
+	srv, _ := newTestServer(t)
+
+	req := httptest.NewRequest(http.MethodGet, "/members/nonexistent-member", nil)
+	rr := httptest.NewRecorder()
+	srv.ServeHTTP(rr, req)
+
+	// Either 404 or a rendered page with empty state is acceptable.
+	if rr.Code != http.StatusOK && rr.Code != http.StatusNotFound {
+		t.Fatalf("status=%d want 200 or 404", rr.Code)
+	}
+}
+
+func TestHandleCompare_WithSelectedMembers(t *testing.T) {
+	srv := newCompareServerWithTestMembers(t)
+
+	// Request compare with both members explicitly selected.
+	req := httptest.NewRequest(http.MethodGet, "/compare?a=f-lib&b=f-con", nil)
+	rr := httptest.NewRecorder()
+	srv.ServeHTTP(rr, req)
+
+	if rr.Code != http.StatusOK {
+		t.Fatalf("status=%d want %d; body=%s", rr.Code, http.StatusOK, rr.Body.String())
+	}
+}
+
+func TestHandleCompare_DefaultLevelIsFederal(t *testing.T) {
+	srv := newCompareServerWithTestMembers(t)
+
+	// No level param → defaults to "federal".
+	req := httptest.NewRequest(http.MethodGet, "/compare", nil)
+	rr := httptest.NewRecorder()
+	srv.ServeHTTP(rr, req)
+
+	if rr.Code != http.StatusOK {
+		t.Fatalf("status=%d want %d; body=%s", rr.Code, http.StatusOK, rr.Body.String())
+	}
+}
+
+func TestPublicURLForRequest_FallsBackToHostHeader(t *testing.T) {
+	t.Setenv("OAUTH_BASE_URL", "")
+
+	req := httptest.NewRequest(http.MethodGet, "/test", nil)
+	req.Host = "example.com"
+	got := publicURLForRequest(req, "/test")
+	if got != "http://example.com/test" {
+		t.Errorf("publicURLForRequest = %q, want %q", got, "http://example.com/test")
+	}
+}
+
+func TestPublicURLForRequest_UsesForwardedProto(t *testing.T) {
+	t.Setenv("OAUTH_BASE_URL", "")
+
+	req := httptest.NewRequest(http.MethodGet, "/test", nil)
+	req.Host = "example.com"
+	req.Header.Set("X-Forwarded-Proto", "https")
+	got := publicURLForRequest(req, "/test")
+	if got != "https://example.com/test" {
+		t.Errorf("publicURLForRequest HTTPS = %q, want %q", got, "https://example.com/test")
+	}
+}
+
+func TestHandleRiding_NoAddress(t *testing.T) {
+	srv, _ := newTestServer(t)
+
+	// GET /riding with no address param — should render page without lookup error.
+	req := httptest.NewRequest(http.MethodGet, "/riding", nil)
+	rr := httptest.NewRecorder()
+	srv.ServeHTTP(rr, req)
+
+	if rr.Code != http.StatusOK {
+		t.Fatalf("status=%d want %d; body=%s", rr.Code, http.StatusOK, rr.Body.String())
+	}
+}
+
+func TestHandleRiding_LookupFailsWithGenericError(t *testing.T) {
+	srv, _ := newTestServer(t)
+
+	// Fail geocoding with a generic error → default lookupErr message.
+	srv.riding.SetLookups(
+		func(_ context.Context, _ string, _ string) (float64, float64, error) {
+			return 0, 0, fmt.Errorf("geocode service unavailable")
+		},
+		nil,
+	)
+
+	req := httptest.NewRequest(http.MethodGet, "/riding?address=unknown+address", nil)
+	rr := httptest.NewRecorder()
+	srv.ServeHTTP(rr, req)
+
+	if rr.Code != http.StatusOK {
+		t.Fatalf("status=%d want %d", rr.Code, http.StatusOK)
+	}
+}
+
+func TestHandleRiding_LookupFailsRepresentatives(t *testing.T) {
+	srv, _ := newTestServer(t)
+
+	// Geocoding succeeds but representatives lookup fails with "representatives:" prefix.
+	srv.riding.SetLookups(
+		func(_ context.Context, _ string, _ string) (float64, float64, error) {
+			return 45.0, -75.0, nil
+		},
+		func(_ context.Context, _, _ float64) ([]opennorth.Representative, error) {
+			return nil, fmt.Errorf("representatives: API down")
+		},
+	)
+
+	req := httptest.NewRequest(http.MethodGet, "/riding?address=123+Main+St", nil)
+	rr := httptest.NewRecorder()
+	srv.ServeHTTP(rr, req)
+
+	if rr.Code != http.StatusOK {
+		t.Fatalf("status=%d want %d", rr.Code, http.StatusOK)
 	}
 }
