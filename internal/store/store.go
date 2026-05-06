@@ -634,6 +634,104 @@ func (s *Store) GetMemberVotes(id string, limit int) ([]VoteRow, error) {
 	return out, nil
 }
 
+// GetMissedVotes returns divisions that occurred during the member's term where
+// the member has no recorded vote, ordered most-recent first.
+// Returns nil (not an error) when the member has no term_start set.
+func (s *Store) GetMissedVotes(id string, limit int) ([]MissedVoteRow, error) {
+	if limit <= 0 {
+		limit = 50
+	}
+
+	var termStart, termEnd string
+	if err := s.db.QueryRow(
+		"SELECT COALESCE(term_start,''), COALESCE(term_end,'') FROM members WHERE id = ?", id,
+	).Scan(&termStart, &termEnd); err != nil {
+		return nil, nil
+	}
+	if termStart == "" {
+		return nil, nil
+	}
+
+	var party string
+	_ = s.db.QueryRow("SELECT COALESCE(party,'') FROM members WHERE id = ?", id).Scan(&party)
+
+	rows, err := s.db.Query(`
+		SELECT d.id, COALESCE(d.date,''), COALESCE(d.bill_id,''),
+		       COALESCE(b.number,''),
+		       COALESCE(NULLIF(b.short_title,''), NULLIF(b.title,''), ''),
+		       COALESCE(d.description,''), COALESCE(d.result,'')
+		FROM divisions d
+		LEFT JOIN bills b ON b.id = d.bill_id
+		WHERE d.date >= ?
+		  AND (? = '' OR d.date <= ?)
+		  AND NOT EXISTS (
+		    SELECT 1 FROM member_votes mv
+		    WHERE mv.member_id = ? AND mv.division_id = d.id
+		  )
+		ORDER BY d.date DESC
+		LIMIT ?`,
+		termStart, termEnd, termEnd, id, limit)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+
+	type rawRow struct {
+		divisionID  string
+		date        string
+		billID      string
+		billNumber  string
+		billTitle   string
+		description string
+		result      string
+	}
+	var rawRows []rawRow
+	for rows.Next() {
+		var r rawRow
+		if err := rows.Scan(&r.divisionID, &r.date, &r.billID, &r.billNumber,
+			&r.billTitle, &r.description, &r.result); err != nil {
+			return nil, err
+		}
+		rawRows = append(rawRows, r)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	rows.Close()
+
+	if len(rawRows) == 0 {
+		return nil, nil
+	}
+
+	divIDs := make([]string, len(rawRows))
+	for i, r := range rawRows {
+		divIDs[i] = r.divisionID
+	}
+	partyMajorityMap, _ := s.batchPartyMajority(divIDs, party, "")
+	if partyMajorityMap == nil {
+		partyMajorityMap = make(map[string]string)
+	}
+
+	result := make([]MissedVoteRow, len(rawRows))
+	for i, r := range rawRows {
+		majority := partyMajorityMap[r.divisionID]
+		if majority == "" {
+			majority = "Split"
+		}
+		result[i] = MissedVoteRow{
+			DivisionID:    r.divisionID,
+			Date:          r.date,
+			BillID:        r.billID,
+			BillNumber:    r.billNumber,
+			BillTitle:     r.billTitle,
+			Description:   r.description,
+			PartyMajority: majority,
+			Result:        r.result,
+		}
+	}
+	return result, nil
+}
+
 // GetMemberStats computes voting statistics for a member.
 func (s *Store) GetMemberStats(id string) (MemberStats, error) {
 	var party string
