@@ -646,7 +646,10 @@ func (s *Store) GetMissedVotes(id string, limit int) ([]MissedVoteRow, error) {
 	if err := s.db.QueryRow(
 		"SELECT COALESCE(term_start,''), COALESCE(term_end,'') FROM members WHERE id = ?", id,
 	).Scan(&termStart, &termEnd); err != nil {
-		return nil, nil
+		if errors.Is(err, sql.ErrNoRows) {
+			return nil, nil
+		}
+		return nil, err
 	}
 	if termStart == "" {
 		return nil, nil
@@ -829,6 +832,9 @@ func (s *Store) GetMemberStats(id string) (MemberStats, error) {
 	}
 
 	missed := totalDivisions - voted
+	if missed < 0 {
+		missed = 0
+	}
 
 	var stats MemberStats
 	stats.TotalVotes = totalVoted
