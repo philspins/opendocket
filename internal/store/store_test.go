@@ -3,25 +3,17 @@ package store_test
 import (
 	"database/sql"
 	"fmt"
-	"path/filepath"
+	"strings"
 	"testing"
 	"time"
 
-	_ "github.com/mattn/go-sqlite3"
-	"github.com/philspins/opendocket/internal/db"
 	"github.com/philspins/opendocket/internal/store"
+	"github.com/philspins/opendocket/internal/testutil"
 )
 
 func tempDB(t *testing.T) *sql.DB {
 	t.Helper()
-	path := filepath.Join(t.TempDir(), "test.db")
-	conn, err := db.Open(path)
-	if err != nil {
-		t.Fatalf("tempDB: %v", err)
-	}
-	conn.SetMaxOpenConns(1)
-	t.Cleanup(func() { conn.Close() })
-	return conn
+	return testutil.OpenDB(t)
 }
 
 func TestListBills_Empty(t *testing.T) {
@@ -1122,5 +1114,701 @@ func TestListBills_SortOptions(t *testing.T) {
 	}
 	if bills[1].ID != "b1" { // Preferred category next
 		t.Errorf("auto sort second should be b1 (preferred Housing), got: %v", bills[1].ID)
+	}
+}
+
+// ── write helpers ─────────────────────────────────────────────────────────────
+
+func TestUpsertMemberViaStoreWrite(t *testing.T) {
+	conn := tempDB(t)
+	m := store.MemberRecord{
+		ID: "m-write-1", Name: "Write Test MP", Party: "NDP",
+		Riding: "Victoria", Province: "British Columbia",
+		Chamber: "commons", Active: true, LastScraped: "2026-01-01", GovernmentLevel: "federal",
+	}
+	if err := store.UpsertMember(conn, m); err != nil {
+		t.Fatalf("UpsertMember: %v", err)
+	}
+	st := store.New(conn)
+	got, err := st.GetMember("m-write-1")
+	if err != nil {
+		t.Fatalf("GetMember: %v", err)
+	}
+	if got.Name != "Write Test MP" || got.Party != "NDP" || got.GovernmentLevel != "federal" {
+		t.Errorf("unexpected member: %+v", got)
+	}
+}
+
+func TestUpsertBillViaStoreWrite(t *testing.T) {
+	conn := tempDB(t)
+	b := store.BillRecord{
+		ID: "45-1-c-99", Parliament: 45, Session: 1, Number: "C-99",
+		Title: "Write Test Bill", Chamber: "commons", Category: "Housing",
+		CurrentStage: "1st_reading", LastScraped: "2026-01-01",
+	}
+	if err := store.UpsertBill(conn, b); err != nil {
+		t.Fatalf("UpsertBill: %v", err)
+	}
+	st := store.New(conn)
+	got, err := st.GetBill("45-1-c-99")
+	if err != nil {
+		t.Fatalf("GetBill: %v", err)
+	}
+	if got.Title != "Write Test Bill" || got.Category != "Housing" {
+		t.Errorf("unexpected bill: %+v", got)
+	}
+}
+
+func TestUpsertBillStageAndGetBillStages(t *testing.T) {
+	conn := tempDB(t)
+	if err := store.UpsertBill(conn, store.BillRecord{
+		ID: "b-stage", Parliament: 45, Session: 1, Number: "C-1",
+		Title: "Stage Bill", LastScraped: "2026-01-01",
+	}); err != nil {
+		t.Fatalf("UpsertBill: %v", err)
+	}
+	stages := []store.BillStageRecord{
+		{BillID: "b-stage", Stage: "1st_reading", Chamber: "commons", Date: "2024-01-01"},
+		{BillID: "b-stage", Stage: "2nd_reading", Chamber: "commons", Date: "2024-02-01"},
+	}
+	for _, s := range stages {
+		if err := store.UpsertBillStage(conn, s); err != nil {
+			t.Fatalf("UpsertBillStage: %v", err)
+		}
+	}
+	st := store.New(conn)
+	got, err := st.GetBillStages("b-stage")
+	if err != nil {
+		t.Fatalf("GetBillStages: %v", err)
+	}
+	if len(got) != 2 {
+		t.Fatalf("want 2 stages, got %d", len(got))
+	}
+	if got[0].Stage != "1st_reading" || got[1].Stage != "2nd_reading" {
+		t.Errorf("unexpected stages: %+v", got)
+	}
+}
+
+func TestUpsertDivisionAndGetBillDivisions(t *testing.T) {
+	conn := tempDB(t)
+	if err := store.UpsertBill(conn, store.BillRecord{
+		ID: "b-div", Parliament: 45, Session: 1, Number: "C-2",
+		Title: "Division Bill", LastScraped: "2026-01-01",
+	}); err != nil {
+		t.Fatalf("UpsertBill: %v", err)
+	}
+	div := store.DivisionRecord{
+		ID: "45-1-10", Parliament: 45, Session: 1, Number: 10,
+		Date: "2024-03-01", BillID: "b-div", Yeas: 150, Nays: 100,
+		Result: "Agreed to", Chamber: "commons", LastScraped: "2026-01-01",
+	}
+	if err := store.UpsertDivision(conn, div); err != nil {
+		t.Fatalf("UpsertDivision: %v", err)
+	}
+	st := store.New(conn)
+	divs, err := st.GetBillDivisions("b-div")
+	if err != nil {
+		t.Fatalf("GetBillDivisions: %v", err)
+	}
+	if len(divs) != 1 || divs[0].ID != "45-1-10" || divs[0].Yeas != 150 {
+		t.Fatalf("unexpected division: %+v", divs)
+	}
+}
+
+func TestListDivisionsAndGetRecentDivisions(t *testing.T) {
+	conn := tempDB(t)
+	for i := 1; i <= 3; i++ {
+		if err := store.UpsertDivision(conn, store.DivisionRecord{
+			ID: fmt.Sprintf("d%d", i), Parliament: 45, Session: 1, Number: i,
+			Date: fmt.Sprintf("2024-01-0%d", i), Yeas: 100, Nays: 50,
+			Result: "Agreed to", Chamber: "commons", LastScraped: "2026-01-01",
+		}); err != nil {
+			t.Fatalf("UpsertDivision: %v", err)
+		}
+	}
+	st := store.New(conn)
+	divs, total, err := st.ListDivisions(1, 10)
+	if err != nil {
+		t.Fatalf("ListDivisions: %v", err)
+	}
+	if total != 3 || len(divs) != 3 {
+		t.Fatalf("want 3 divisions, got total=%d len=%d", total, len(divs))
+	}
+
+	recent, err := st.GetRecentDivisions(2)
+	if err != nil {
+		t.Fatalf("GetRecentDivisions: %v", err)
+	}
+	if len(recent) != 2 {
+		t.Fatalf("want 2 recent divisions, got %d", len(recent))
+	}
+}
+
+func TestGetRecentBillsUsesDefaultLimit(t *testing.T) {
+	conn := tempDB(t)
+	for i := 1; i <= 5; i++ {
+		if err := store.UpsertBill(conn, store.BillRecord{
+			ID: fmt.Sprintf("b%d", i), Parliament: 45, Session: 1,
+			Number: fmt.Sprintf("C-%d", i), Title: fmt.Sprintf("Bill %d", i),
+			LastScraped: "2026-01-01",
+		}); err != nil {
+			t.Fatalf("UpsertBill: %v", err)
+		}
+	}
+	st := store.New(conn)
+	bills, err := st.GetRecentBills(3)
+	if err != nil {
+		t.Fatalf("GetRecentBills: %v", err)
+	}
+	if len(bills) != 3 {
+		t.Fatalf("want 3 recent bills, got %d", len(bills))
+	}
+
+	all, err := st.GetRecentBills(0) // 0 should default to 10
+	if err != nil {
+		t.Fatalf("GetRecentBills(0): %v", err)
+	}
+	if len(all) != 5 {
+		t.Fatalf("want 5 bills with limit=0 default, got %d", len(all))
+	}
+}
+
+func TestListDistinctMemberHelpers(t *testing.T) {
+	conn := tempDB(t)
+	_, err := conn.Exec(`INSERT INTO members (id, name, party, riding, province, chamber, active, government_level)
+		VALUES ('m1', 'Alice', 'Liberal', 'Ottawa Centre', 'Ontario', 'commons', 1, 'federal'),
+		       ('m2', 'Bob', 'Conservative', 'Calgary East', 'Alberta', 'commons', 1, 'federal'),
+		       ('m3', 'Carol', 'NDP', 'Vancouver East', 'British Columbia', 'legislature', 1, 'provincial')`)
+	if err != nil {
+		t.Fatalf("insert: %v", err)
+	}
+	st := store.New(conn)
+
+	parties, err := st.ListDistinctParties()
+	if err != nil {
+		t.Fatalf("ListDistinctParties: %v", err)
+	}
+	if len(parties) != 3 {
+		t.Fatalf("want 3 parties, got %d: %v", len(parties), parties)
+	}
+
+	provinces, err := st.ListDistinctProvinces()
+	if err != nil {
+		t.Fatalf("ListDistinctProvinces: %v", err)
+	}
+	if len(provinces) != 3 {
+		t.Fatalf("want 3 provinces, got %d: %v", len(provinces), provinces)
+	}
+
+	ridings, err := st.ListDistinctRidings()
+	if err != nil {
+		t.Fatalf("ListDistinctRidings: %v", err)
+	}
+	if len(ridings) != 3 {
+		t.Fatalf("want 3 ridings, got %d: %v", len(ridings), ridings)
+	}
+
+	fedRidings, err := st.ListDistinctRidingsByLevel("federal")
+	if err != nil {
+		t.Fatalf("ListDistinctRidingsByLevel: %v", err)
+	}
+	if len(fedRidings) != 2 {
+		t.Fatalf("want 2 federal ridings, got %d: %v", len(fedRidings), fedRidings)
+	}
+}
+
+func TestGetMembersByRiding(t *testing.T) {
+	conn := tempDB(t)
+	_, err := conn.Exec(`INSERT INTO members (id, name, party, riding, province, chamber, active, government_level)
+		VALUES ('m1', 'Alice', 'Liberal', 'Ottawa Centre', 'Ontario', 'commons', 1, 'federal'),
+		       ('m2', 'Bob', 'Liberal', 'Ottawa South', 'Ontario', 'legislature', 1, 'provincial')`)
+	if err != nil {
+		t.Fatalf("insert: %v", err)
+	}
+	st := store.New(conn)
+
+	members, err := st.GetMembersByRiding("ottawa")
+	if err != nil {
+		t.Fatalf("GetMembersByRiding: %v", err)
+	}
+	if len(members) != 2 {
+		t.Fatalf("want 2 members for 'ottawa', got %d", len(members))
+	}
+
+	members, err = st.GetMembersByRiding("nonexistent")
+	if err != nil {
+		t.Fatalf("GetMembersByRiding nonexistent: %v", err)
+	}
+	if len(members) != 0 {
+		t.Fatalf("want 0 members for nonexistent riding, got %d", len(members))
+	}
+}
+
+func TestGetMemberVotes(t *testing.T) {
+	conn := tempDB(t)
+	if err := store.UpsertMember(conn, store.MemberRecord{
+		ID: "m-votes", Name: "Vote Test MP", Party: "Liberal",
+		Active: true, LastScraped: "2026-01-01",
+	}); err != nil {
+		t.Fatalf("UpsertMember: %v", err)
+	}
+	if err := store.UpsertBill(conn, store.BillRecord{
+		ID: "b-votes", Parliament: 45, Session: 1, Number: "C-10",
+		Title: "Vote Bill", LastScraped: "2026-01-01",
+	}); err != nil {
+		t.Fatalf("UpsertBill: %v", err)
+	}
+	for i := 1; i <= 3; i++ {
+		divID := fmt.Sprintf("d-votes-%d", i)
+		if err := store.UpsertDivision(conn, store.DivisionRecord{
+			ID: divID, Parliament: 45, Session: 1, Number: i,
+			Date: fmt.Sprintf("2024-01-0%d", i), BillID: "b-votes",
+			Yeas: 100, Nays: 50, Result: "Agreed to", Chamber: "commons",
+			LastScraped: "2026-01-01",
+		}); err != nil {
+			t.Fatalf("UpsertDivision: %v", err)
+		}
+		vote := "Yea"
+		if i == 3 {
+			vote = "Nay"
+		}
+		if err := store.UpsertMemberVote(conn, divID, "m-votes", vote); err != nil {
+			t.Fatalf("UpsertMemberVote: %v", err)
+		}
+	}
+
+	st := store.New(conn)
+	votes, err := st.GetMemberVotes("m-votes", 10)
+	if err != nil {
+		t.Fatalf("GetMemberVotes: %v", err)
+	}
+	if len(votes) != 3 {
+		t.Fatalf("want 3 votes, got %d", len(votes))
+	}
+
+	// DivisionHasVotes
+	has, err := store.DivisionHasVotes(conn, "d-votes-1")
+	if err != nil || !has {
+		t.Fatalf("DivisionHasVotes: has=%v err=%v", has, err)
+	}
+	noHas, err := store.DivisionHasVotes(conn, "nonexistent")
+	if err != nil || noHas {
+		t.Fatalf("DivisionHasVotes nonexistent: has=%v err=%v", noHas, err)
+	}
+}
+
+func TestUpsertProfiles(t *testing.T) {
+	conn := tempDB(t)
+	members := []store.MemberRecord{
+		{ID: "m-profile-1", Name: "Profile MP One", Party: "Liberal", Active: true, LastScraped: "2026-01-01"},
+		{ID: "m-profile-2", Name: "Profile MP Two", Party: "NDP", Active: true, LastScraped: "2026-01-01"},
+	}
+	// UpsertProfiles batches multiple UpsertMember calls with a delay between each.
+	store.UpsertProfiles(conn, members, 0)
+	st := store.New(conn)
+	for _, m := range members {
+		got, err := st.GetMember(m.ID)
+		if err != nil {
+			t.Fatalf("GetMember %s: %v", m.ID, err)
+		}
+		if got.Name != m.Name {
+			t.Errorf("member %s name=%q want %q", m.ID, got.Name, m.Name)
+		}
+	}
+}
+
+func TestUpsertSittingDateAndSittingDates(t *testing.T) {
+	conn := tempDB(t)
+	for _, d := range []string{"2026-01-01", "2026-01-02", "2026-01-08"} {
+		if err := store.UpsertSittingDate(conn, 45, 1, d); err != nil {
+			t.Fatalf("UpsertSittingDate: %v", err)
+		}
+	}
+	// idempotent second insert
+	if err := store.UpsertSittingDate(conn, 45, 1, "2026-01-01"); err != nil {
+		t.Fatalf("UpsertSittingDate duplicate: %v", err)
+	}
+	dates, err := store.SittingDates(conn, 45, 1)
+	if err != nil {
+		t.Fatalf("SittingDates: %v", err)
+	}
+	if len(dates) != 3 {
+		t.Fatalf("want 3 sitting dates, got %d: %v", len(dates), dates)
+	}
+	if dates[0] != "2026-01-01" {
+		t.Errorf("dates[0]=%q want 2026-01-01", dates[0])
+	}
+}
+
+func TestDivisionExists(t *testing.T) {
+	conn := tempDB(t)
+	exists, err := store.DivisionExists(conn, "d-none")
+	if err != nil || exists {
+		t.Fatalf("DivisionExists before insert: %v %v", exists, err)
+	}
+	if err := store.UpsertDivision(conn, store.DivisionRecord{
+		ID: "d-exists", Parliament: 45, Session: 1, Number: 1,
+		Yeas: 100, Nays: 50, Result: "Agreed to", Chamber: "commons",
+		LastScraped: "2026-01-01",
+	}); err != nil {
+		t.Fatalf("UpsertDivision: %v", err)
+	}
+	exists, err = store.DivisionExists(conn, "d-exists")
+	if err != nil || !exists {
+		t.Fatalf("DivisionExists after insert: %v %v", exists, err)
+	}
+}
+
+func TestVerifyEmailCode_InvalidAndExpired(t *testing.T) {
+	conn := tempDB(t)
+	st := store.New(conn)
+
+	// Wrong code
+	if _, err := st.VerifyEmailCode("nobody@example.com", "000000"); err == nil {
+		t.Fatal("expected error for invalid code")
+	}
+
+	// Empty inputs
+	if _, err := st.VerifyEmailCode("", "123456"); err == nil {
+		t.Fatal("expected error for empty email")
+	}
+	if _, err := st.VerifyEmailCode("a@example.com", ""); err == nil {
+		t.Fatal("expected error for empty code")
+	}
+
+	// Valid code flow: create verification, then verify with correct code.
+	_, code, err := st.CreateEmailVerification("code2@example.com", time.Hour)
+	if err != nil {
+		t.Fatalf("CreateEmailVerification: %v", err)
+	}
+	u, err := st.VerifyEmailCode("code2@example.com", code)
+	if err != nil {
+		t.Fatalf("VerifyEmailCode valid: %v", err)
+	}
+	if !u.EmailVerified {
+		t.Fatal("expected user verified after code verification")
+	}
+
+	// Code reuse should fail.
+	if _, err := st.VerifyEmailCode("code2@example.com", code); err == nil {
+		t.Fatal("expected error on code reuse")
+	}
+}
+
+func TestOrdinal(t *testing.T) {
+	// ordinal is unexported but exercised via GetParliamentStatus label.
+	// We test indirectly: parliament 1 → "1st", 2 → "2nd", 3 → "3rd",
+	// 11 → "11th" (special case), 21 → "21st".
+	conn := tempDB(t)
+	st := store.New(conn)
+	cases := []struct{ parl int; want string }{
+		{1, "1st"},
+		{2, "2nd"},
+		{3, "3rd"},
+		{4, "4th"},
+		{11, "11th"},
+		{12, "12th"},
+		{13, "13th"},
+		{21, "21st"},
+	}
+	for _, tc := range cases {
+		ps, err := st.GetParliamentStatus(tc.parl, 1)
+		if err != nil {
+			t.Fatalf("GetParliamentStatus(%d): %v", tc.parl, err)
+		}
+		if !strings.Contains(ps.Label, tc.want) {
+			t.Errorf("parliament=%d label=%q, want ordinal %q", tc.parl, ps.Label, tc.want)
+		}
+	}
+}
+
+func TestReplaceLegislatureCalendarDates(t *testing.T) {
+	conn := tempDB(t)
+	dates := []string{"2026-02-01", "2026-02-02", "2026-02-03"}
+	if err := store.ReplaceLegislatureCalendarDates(conn, "provincial-ON", dates, "2026-01-01T00:00:00"); err != nil {
+		t.Fatalf("ReplaceLegislatureCalendarDates: %v", err)
+	}
+
+	got, err := store.LegislatureCalendarDates(conn, "provincial-ON")
+	if err != nil {
+		t.Fatalf("LegislatureCalendarDates: %v", err)
+	}
+	if len(got) != 3 {
+		t.Fatalf("want 3 dates, got %d: %v", len(got), got)
+	}
+
+	// Replace with a smaller set — old dates should be removed.
+	if err := store.ReplaceLegislatureCalendarDates(conn, "provincial-ON", []string{"2026-03-01"}, "2026-02-01T00:00:00"); err != nil {
+		t.Fatalf("ReplaceLegislatureCalendarDates replace: %v", err)
+	}
+	got, err = store.LegislatureCalendarDates(conn, "provincial-ON")
+	if err != nil {
+		t.Fatalf("LegislatureCalendarDates after replace: %v", err)
+	}
+	if len(got) != 1 || got[0] != "2026-03-01" {
+		t.Fatalf("want [2026-03-01], got %v", got)
+	}
+}
+
+func TestReplaceLegislatureCalendarDates_EdgeCases(t *testing.T) {
+	conn := tempDB(t)
+
+	// Empty jurisdiction must return an error.
+	if err := store.ReplaceLegislatureCalendarDates(conn, "", []string{"2026-01-01"}, ""); err == nil {
+		t.Fatal("expected error for empty jurisdiction")
+	}
+
+	// Empty dates list clears existing rows for the jurisdiction.
+	if err := store.ReplaceLegislatureCalendarDates(conn, "provincial-BC", []string{"2026-03-01", "2026-03-02"}, ""); err != nil {
+		t.Fatalf("setup: %v", err)
+	}
+	if err := store.ReplaceLegislatureCalendarDates(conn, "provincial-BC", nil, ""); err != nil {
+		t.Fatalf("replace with nil dates: %v", err)
+	}
+	got, err := store.LegislatureCalendarDates(conn, "provincial-BC")
+	if err != nil {
+		t.Fatalf("LegislatureCalendarDates: %v", err)
+	}
+	if len(got) != 0 {
+		t.Fatalf("expected 0 dates after empty replace, got %v", got)
+	}
+}
+
+func TestVerifyEmailToken_ErrorPaths(t *testing.T) {
+	conn := tempDB(t)
+	st := store.New(conn)
+
+	// Empty token should return an error immediately.
+	if _, err := st.VerifyEmailToken(""); err == nil {
+		t.Fatal("expected error for empty token")
+	}
+
+	// Non-existent token should return an error.
+	if _, err := st.VerifyEmailToken("no-such-token-xyz"); err == nil {
+		t.Fatal("expected error for unknown token")
+	}
+
+	// Expired token should return an error.
+	token, _, err := st.CreateEmailVerification("expire@example.com", time.Hour)
+	if err != nil {
+		t.Fatalf("CreateEmailVerification: %v", err)
+	}
+	// Back-date the expiry so the token is already expired.
+	if _, err := conn.Exec(`UPDATE email_verification_tokens SET expires_at = '2000-01-01T00:00:00Z' WHERE email = 'expire@example.com'`); err != nil {
+		t.Fatalf("backdating token: %v", err)
+	}
+	if _, err := st.VerifyEmailToken(token); err == nil {
+		t.Fatal("expected error for expired token")
+	}
+}
+
+func TestListDivisions_DefaultPagination(t *testing.T) {
+	conn := tempDB(t)
+	st := store.New(conn)
+
+	// Insert two divisions.
+	for _, id := range []int{1, 2} {
+		if _, err := conn.Exec(`INSERT INTO divisions (id, parliament, session, number, yeas, nays, paired) VALUES (?,44,1,?,10,5,0)`, id, id); err != nil {
+			t.Fatalf("insert division %d: %v", id, err)
+		}
+	}
+
+	// page=0 and perPage=0 should apply defaults (page→1, perPage→50).
+	divs, total, err := st.ListDivisions(0, 0)
+	if err != nil {
+		t.Fatalf("ListDivisions: %v", err)
+	}
+	if total != 2 {
+		t.Fatalf("want total=2, got %d", total)
+	}
+	if len(divs) != 2 {
+		t.Fatalf("want 2 divisions, got %d", len(divs))
+	}
+}
+
+func TestGetCombinedJurisdictionStatus_EdgeCases(t *testing.T) {
+	conn := tempDB(t)
+	st := store.New(conn)
+
+	// No jurisdictions → unavailable.
+	status, err := st.GetCombinedJurisdictionStatus()
+	if err != nil {
+		t.Fatalf("no-arg: %v", err)
+	}
+	if status != "status_unavailable" {
+		t.Fatalf("want status_unavailable, got %q", status)
+	}
+
+	// Whitespace-only jurisdiction strings are skipped → unavailable.
+	status, err = st.GetCombinedJurisdictionStatus("   ", "")
+	if err != nil {
+		t.Fatalf("whitespace only: %v", err)
+	}
+	if status != "status_unavailable" {
+		t.Fatalf("want status_unavailable for whitespace, got %q", status)
+	}
+
+	// One jurisdiction has no data, one is on_break → result is on_break.
+	// Use a date 10 days ago to be beyond the 3-day in-session grace window.
+	tenDaysAgo := time.Now().UTC().AddDate(0, 0, -10).Format("2006-01-02")
+	if err := store.ReplaceLegislatureCalendarDates(conn, "fed", []string{tenDaysAgo}, ""); err != nil {
+		t.Fatalf("setup fed: %v", err)
+	}
+	status, err = st.GetCombinedJurisdictionStatus("fed", "no-data-jur")
+	if err != nil {
+		t.Fatalf("mixed jurisdictions: %v", err)
+	}
+	if status != "on_break" {
+		t.Fatalf("want on_break, got %q", status)
+	}
+}
+
+func TestReactToBill_InvalidReaction(t *testing.T) {
+	conn := tempDB(t)
+	st := store.New(conn)
+
+	if err := st.ReactToBill("react@example.com", "bill-1", "thumbsup", ""); err == nil {
+		t.Fatal("expected error for invalid reaction type")
+	}
+}
+
+func TestSaveUserCategoryPreferences_SkipsEmptyCategories(t *testing.T) {
+	conn := tempDB(t)
+	st := store.New(conn)
+
+	u, err := st.UpsertUser("catpref@example.com")
+	if err != nil {
+		t.Fatalf("UpsertUser: %v", err)
+	}
+
+	// Save with a mix of valid and empty/whitespace categories.
+	if err := st.SaveUserCategoryPreferences(u.ID, []string{"health", "  ", "", "environment"}); err != nil {
+		t.Fatalf("SaveUserCategoryPreferences: %v", err)
+	}
+
+	cats, err := st.GetUserCategoryPreferences(u.ID)
+	if err != nil {
+		t.Fatalf("GetUserCategoryPreferences: %v", err)
+	}
+	if len(cats) != 2 {
+		t.Fatalf("want 2 categories (empty ones skipped), got %d: %v", len(cats), cats)
+	}
+}
+
+func TestGetUserBySession_ExpiredSession(t *testing.T) {
+	conn := tempDB(t)
+	st := store.New(conn)
+
+	u, err := st.UpsertUser("expiredses@example.com")
+	if err != nil {
+		t.Fatalf("UpsertUser: %v", err)
+	}
+
+	sid, err := st.CreateSession(u.ID, time.Hour)
+	if err != nil {
+		t.Fatalf("CreateSession: %v", err)
+	}
+
+	// Back-date the session so it's already expired.
+	if _, err := conn.Exec(`UPDATE user_sessions SET expires_at = '2000-01-01T00:00:00Z'`); err != nil {
+		t.Fatalf("backdating session: %v", err)
+	}
+
+	if _, err := st.GetUserBySession(sid); err == nil {
+		t.Fatal("expected error for expired session")
+	}
+}
+
+func TestUpdateUserLocation_EmptyUserID(t *testing.T) {
+	conn := tempDB(t)
+	st := store.New(conn)
+
+	if _, err := st.UpdateUserLocation("", "fed-riding", "prov-riding"); err == nil {
+		t.Fatal("expected error for empty user id")
+	}
+}
+
+func TestGetJurisdictionStatus_NoData(t *testing.T) {
+	conn := tempDB(t)
+	st := store.New(conn)
+
+	// No rows for this jurisdiction → must return "status_unavailable".
+	status, err := st.GetJurisdictionStatus("nonexistent-jur")
+	if err != nil {
+		t.Fatalf("GetJurisdictionStatus: %v", err)
+	}
+	if status != "status_unavailable" {
+		t.Fatalf("want status_unavailable, got %q", status)
+	}
+}
+
+func TestGetRecentDivisions_DefaultLimit(t *testing.T) {
+	conn := tempDB(t)
+	st := store.New(conn)
+
+	// Insert one division so the function returns real results.
+	if _, err := conn.Exec(`INSERT INTO divisions (id, parliament, session, number, yeas, nays, paired) VALUES (1,44,1,1,10,5,0)`); err != nil {
+		t.Fatalf("insert division: %v", err)
+	}
+
+	// limit=0 should trigger the default limit=10 branch.
+	divs, err := st.GetRecentDivisions(0)
+	if err != nil {
+		t.Fatalf("GetRecentDivisions: %v", err)
+	}
+	if len(divs) != 1 {
+		t.Fatalf("want 1 division, got %d", len(divs))
+	}
+}
+
+func TestListBills_ProvinceLevelFilters(t *testing.T) {
+	conn := tempDB(t)
+	st := store.New(conn)
+
+	if _, err := conn.Exec(`INSERT INTO bills (id, parliament, session, number, title, category, current_stage, chamber, last_activity_date)
+		VALUES
+		('fed-1', 45, 1, 'C-10', 'Federal Bill', 'General', '1st_reading', 'commons', '2026-01-01'),
+		('on-1', 45, 1, 'ON-5', 'Ontario Bill', 'General', '1st_reading', 'legislature', '2026-01-02')`); err != nil {
+		t.Fatalf("insert bills: %v", err)
+	}
+
+	// Level "federal" should return only commons/senate bills.
+	bills, _, err := st.ListBills(store.BillFilter{Level: "federal", Page: 1, PerPage: 20})
+	if err != nil {
+		t.Fatalf("ListBills federal: %v", err)
+	}
+	if len(bills) != 1 || bills[0].ID != "fed-1" {
+		t.Errorf("federal filter: want [fed-1], got %v", bills)
+	}
+
+	// Level "provincial" should return non-commons/senate bills.
+	bills, _, err = st.ListBills(store.BillFilter{Level: "provincial", Page: 1, PerPage: 20})
+	if err != nil {
+		t.Fatalf("ListBills provincial: %v", err)
+	}
+	if len(bills) != 1 || bills[0].ID != "on-1" {
+		t.Errorf("provincial filter: want [on-1], got %v", bills)
+	}
+
+	// Search filter on title.
+	bills, _, err = st.ListBills(store.BillFilter{Search: "Ontario", Page: 1, PerPage: 20})
+	if err != nil {
+		t.Fatalf("ListBills search: %v", err)
+	}
+	if len(bills) != 1 || bills[0].ID != "on-1" {
+		t.Errorf("search filter: want [on-1], got %v", bills)
+	}
+}
+
+func TestAuthenticateOAuth_NotMarkingVerified(t *testing.T) {
+	conn := tempDB(t)
+	st := store.New(conn)
+
+	u, err := st.AuthenticateOAuth("github", "gh-999", "nomark@example.com", false)
+	if err != nil {
+		t.Fatalf("AuthenticateOAuth: %v", err)
+	}
+	if u.EmailVerified {
+		t.Fatalf("expected email_verified=false when markEmailVerified=false")
 	}
 }
