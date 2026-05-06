@@ -161,8 +161,9 @@ func TestIsGreenLike(t *testing.T) {
 		{"white", 255, 255, 255, false},
 		{"red", 220, 60, 60, false},
 		{"dark grey", 80, 80, 80, false},
-		// g=94 is just below the threshold
+		// g=94 is just below the threshold; g=95 is the inclusive lower bound
 		{"g just under threshold", 60, 94, 60, false},
+		{"g at threshold", 60, 95, 60, true},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
