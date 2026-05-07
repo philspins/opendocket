@@ -311,29 +311,27 @@ func executeSessionPlan(conn *sql.DB, client *http.Client, delay time.Duration, 
 				// members that haven't been crawled yet.
 				// AB is excluded: its plain-token PDF parser still emits enough non-name
 				// tokens that auto-creating records would pollute the members table.
-				if src.Code != "ab" {
-					fallbackID := provisionalProvincialMemberID(src.Code, mv.MemberName)
-					if fallbackID != "" {
-						rec := store.MemberRecord{
-							ID:              fallbackID,
-							Name:            mv.MemberName,
-							Province:        src.Province,
-							Chamber:         res.Division.Chamber,
-							Active:          false,
-							LastScraped:     utils.NowISO(),
-							GovernmentLevel: "provincial",
-						}
-						if wiki != nil {
-							if info, ok := wiki.lookupInfo(mv.MemberName); ok {
-								rec.Party = info.party
-								rec.Riding = info.riding
-								rec.TermStart = info.termStart
-								rec.TermEnd = info.termEnd
-								clog.Debugf("[wiki] enriched provisional member %q: party=%q riding=%q term=%s..%s", mv.MemberName, info.party, info.riding, info.termStart, info.termEnd)
+				if src.Code != "ab" && wiki != nil {
+					if info, ok := wiki.lookupInfo(mv.MemberName); ok && info.party != "" && info.termStart != "" {
+						fallbackID := provisionalProvincialMemberID(src.Code, mv.MemberName)
+						if fallbackID != "" {
+							rec := store.MemberRecord{
+								ID:              fallbackID,
+								Name:            mv.MemberName,
+								Province:        src.Province,
+								Chamber:         res.Division.Chamber,
+								Active:          false,
+								LastScraped:     utils.NowISO(),
+								GovernmentLevel: "provincial",
+								Party:           info.party,
+								Riding:          info.riding,
+								TermStart:       info.termStart,
+								TermEnd:         info.termEnd,
 							}
-						}
-						if err := store.UpsertMember(conn, rec); err == nil {
-							memberID = fallbackID
+							clog.Debugf("[wiki] creating provisional member %q: party=%q riding=%q term=%s..%s", mv.MemberName, info.party, info.riding, info.termStart, info.termEnd)
+							if err := store.UpsertMember(conn, rec); err == nil {
+								memberID = fallbackID
+							}
 						}
 					}
 				}
