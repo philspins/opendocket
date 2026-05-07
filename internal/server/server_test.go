@@ -2084,3 +2084,114 @@ func TestHandleRiding_LookupFailsRepresentatives(t *testing.T) {
 		t.Fatalf("status=%d want %d", rr.Code, http.StatusOK)
 	}
 }
+
+func TestHandleRiding_ShowsHighlightedRepCards(t *testing.T) {
+	srv, _ := newTestServer(t)
+
+	// Successful lookup with both federal and provincial reps.
+	srv.riding.SetLookups(
+		func(_ context.Context, _ string, _ string) (float64, float64, error) {
+			return 45.0, -75.0, nil
+		},
+		func(_ context.Context, _, _ float64) ([]opennorth.Representative, error) {
+			return []opennorth.Representative{
+				{Name: "Jane MP", ElectedOffice: "MP", DistrictName: "Ottawa Centre", PartyName: "Liberal"},
+				{Name: "John MPP", ElectedOffice: "MPP (ON)", DistrictName: "Ottawa South", PartyName: "NDP"},
+				{Name: "Alice Councillor", ElectedOffice: "councillor", DistrictName: "Ward 12"},
+			}, nil
+		},
+	)
+
+	req := httptest.NewRequest(http.MethodGet, "/riding?address=123+Main+St,+Ottawa,+ON", nil)
+	rr := httptest.NewRecorder()
+	srv.ServeHTTP(rr, req)
+
+	if rr.Code != http.StatusOK {
+		t.Fatalf("status=%d want %d", rr.Code, http.StatusOK)
+	}
+	body := rr.Body.String()
+	// Both highlighted reps should appear.
+	if !strings.Contains(body, "Jane MP") {
+		t.Errorf("expected federal rep 'Jane MP' in body")
+	}
+	if !strings.Contains(body, "John MPP") {
+		t.Errorf("expected provincial rep 'John MPP' in body")
+	}
+	// Other local rep should appear in the "other" section.
+	if !strings.Contains(body, "Alice Councillor") {
+		t.Errorf("expected other rep 'Alice Councillor' in body")
+	}
+	// Should NOT show "not found" prompts when both reps are present.
+	if strings.Contains(body, "Federal representative not found") {
+		t.Errorf("unexpected 'Federal representative not found' in body")
+	}
+	if strings.Contains(body, "Provincial representative not found") {
+		t.Errorf("unexpected 'Provincial representative not found' in body")
+	}
+}
+
+func TestHandleRiding_ShowsNotFoundCardsWhenRepsAbsent(t *testing.T) {
+	srv, _ := newTestServer(t)
+
+	// Successful lookup but no federal or provincial reps returned.
+	srv.riding.SetLookups(
+		func(_ context.Context, _ string, _ string) (float64, float64, error) {
+			return 45.0, -75.0, nil
+		},
+		func(_ context.Context, _, _ float64) ([]opennorth.Representative, error) {
+			return []opennorth.Representative{
+				{Name: "Alice Councillor", ElectedOffice: "councillor", DistrictName: "Ward 12"},
+			}, nil
+		},
+	)
+
+	req := httptest.NewRequest(http.MethodGet, "/riding?address=123+Main+St,+Ottawa,+ON", nil)
+	rr := httptest.NewRecorder()
+	srv.ServeHTTP(rr, req)
+
+	if rr.Code != http.StatusOK {
+		t.Fatalf("status=%d want %d", rr.Code, http.StatusOK)
+	}
+	body := rr.Body.String()
+	// Both "not found" prompts should appear.
+	if !strings.Contains(body, "Federal representative not found") {
+		t.Errorf("expected 'Federal representative not found' in body")
+	}
+	if !strings.Contains(body, "Provincial representative not found") {
+		t.Errorf("expected 'Provincial representative not found' in body")
+	}
+	// Both should prompt the user to go to their profile.
+	if count := strings.Count(body, "Go to Profile"); count < 2 {
+		t.Errorf("expected at least 2 'Go to Profile' links, got %d", count)
+	}
+}
+
+func TestHandleRiding_ShowsNotFoundWithNoRepsAtAll(t *testing.T) {
+	srv, _ := newTestServer(t)
+
+	// Successful lookup but zero reps returned.
+	srv.riding.SetLookups(
+		func(_ context.Context, _ string, _ string) (float64, float64, error) {
+			return 45.0, -75.0, nil
+		},
+		func(_ context.Context, _, _ float64) ([]opennorth.Representative, error) {
+			return []opennorth.Representative{}, nil
+		},
+	)
+
+	req := httptest.NewRequest(http.MethodGet, "/riding?address=123+Main+St,+Ottawa,+ON", nil)
+	rr := httptest.NewRecorder()
+	srv.ServeHTTP(rr, req)
+
+	if rr.Code != http.StatusOK {
+		t.Fatalf("status=%d want %d", rr.Code, http.StatusOK)
+	}
+	body := rr.Body.String()
+	// Should show both "not found" prompts.
+	if !strings.Contains(body, "Federal representative not found") {
+		t.Errorf("expected 'Federal representative not found' in body")
+	}
+	if !strings.Contains(body, "Provincial representative not found") {
+		t.Errorf("expected 'Provincial representative not found' in body")
+	}
+}

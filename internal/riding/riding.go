@@ -133,8 +133,10 @@ func (s *Service) HandleLookup(w http.ResponseWriter, r *http.Request) {
 	address := strings.TrimSpace(r.URL.Query().Get("address"))
 	ps := s.parliamentStatus()
 	var (
-		reps      []opennorth.Representative
-		lookupErr string
+		federalRep    opennorth.Representative
+		provincialRep opennorth.Representative
+		otherReps     []opennorth.Representative
+		lookupErr     string
 	)
 	if address != "" {
 		result, err := s.Lookup(r.Context(), address)
@@ -148,8 +150,20 @@ func (s *Service) HandleLookup(w http.ResponseWriter, r *http.Request) {
 				lookupErr = "Could not locate that address. Please try a more specific Canadian address."
 			}
 		} else {
-			reps = result.Representatives
+			federalRep = result.FederalRepresentative
+			provincialRep = result.ProvincialRepresentative
+			fedName := strings.TrimSpace(federalRep.Name)
+			provName := strings.TrimSpace(provincialRep.Name)
+			for _, rep := range result.Representatives {
+				if fedName != "" && strings.EqualFold(strings.TrimSpace(rep.Name), fedName) {
+					continue
+				}
+				if provName != "" && strings.EqualFold(strings.TrimSpace(rep.Name), provName) {
+					continue
+				}
+				otherReps = append(otherReps, rep)
+			}
 		}
 	}
-	_ = templates.RidingLookup(ps, address, reps, lookupErr, s.placesApiKey).Render(r.Context(), w)
+	_ = templates.RidingLookup(ps, address, federalRep, provincialRep, otherReps, lookupErr, s.placesApiKey, false).Render(r.Context(), w)
 }

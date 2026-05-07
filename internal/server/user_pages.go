@@ -131,9 +131,12 @@ func memberMatchesLevel(member store.MemberRow, level string) bool {
 func (s *Server) handleRiding(w http.ResponseWriter, r *http.Request) {
 	address := strings.TrimSpace(r.URL.Query().Get("address"))
 	ps := s.parliamentStatus()
+	user, isLoggedIn := s.auth.SessionUser(r)
 	var (
-		reps      []opennorth.Representative
-		lookupErr string
+		federalRep    opennorth.Representative
+		provincialRep opennorth.Representative
+		otherReps     []opennorth.Representative
+		lookupErr     string
 	)
 
 	if address != "" {
@@ -149,9 +152,21 @@ func (s *Server) handleRiding(w http.ResponseWriter, r *http.Request) {
 				lookupErr = "Could not locate that address. Please try a more specific Canadian address."
 			}
 		} else {
-			reps = result.Representatives
+			federalRep = result.FederalRepresentative
+			provincialRep = result.ProvincialRepresentative
+			fedName := strings.TrimSpace(federalRep.Name)
+			provName := strings.TrimSpace(provincialRep.Name)
+			for _, rep := range result.Representatives {
+				if fedName != "" && strings.EqualFold(strings.TrimSpace(rep.Name), fedName) {
+					continue
+				}
+				if provName != "" && strings.EqualFold(strings.TrimSpace(rep.Name), provName) {
+					continue
+				}
+				otherReps = append(otherReps, rep)
+			}
 			s.setLocalRidingCookies(w, result.FederalRidingID, result.ProvincialRidingID)
-			if user, ok := s.auth.SessionUser(r); ok {
+			if isLoggedIn {
 				if _, saveErr := s.store.UpdateUserLocation(user.ID, result.FederalRidingID, result.ProvincialRidingID); saveErr != nil {
 					log.Printf("handleRiding save failed for user=%q: %v", user.ID, saveErr)
 				}
@@ -159,7 +174,7 @@ func (s *Server) handleRiding(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 
-	_ = templates.RidingLookup(ps, address, reps, lookupErr, s.riding.PlacesAPIKey()).Render(r.Context(), w)
+	_ = templates.RidingLookup(ps, address, federalRep, provincialRep, otherReps, lookupErr, s.riding.PlacesAPIKey(), isLoggedIn).Render(r.Context(), w)
 }
 
 func (s *Server) handleProfile(w http.ResponseWriter, r *http.Request) {
