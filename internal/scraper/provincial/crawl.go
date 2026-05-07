@@ -357,8 +357,9 @@ func executeSessionPlan(conn *sql.DB, client *http.Client, delay time.Duration, 
 }
 
 // looksLikePersonName rejects tokens that are clearly not person names:
-// anything starting with a digit (timestamps, numbers) or containing no
-// lowercase letters (all-caps headings like "AN ACT TO").
+// anything starting with a digit (timestamps, numbers), containing no
+// lowercase letters (all-caps headings like "AN ACT TO"), or containing
+// any word that is entirely digits (e.g. "Bill No 102").
 func looksLikePersonName(s string) bool {
 	s = strings.TrimSpace(s)
 	if s == "" {
@@ -368,12 +369,29 @@ func looksLikePersonName(s string) bool {
 	if !unicode.IsLetter(runes[0]) {
 		return false
 	}
+	hasLower := false
 	for _, r := range runes {
 		if unicode.IsLower(r) {
-			return true
+			hasLower = true
+			break
 		}
 	}
-	return false
+	if !hasLower {
+		return false
+	}
+	for _, word := range strings.Fields(s) {
+		allDigits := true
+		for _, r := range word {
+			if !unicode.IsDigit(r) {
+				allDigits = false
+				break
+			}
+		}
+		if allDigits {
+			return false
+		}
+	}
+	return true
 }
 
 func provisionalProvincialMemberID(provinceCode, sourceName string) string {
