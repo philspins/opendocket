@@ -1822,8 +1822,8 @@ func TestHandleMembers_RendersPage(t *testing.T) {
 func TestHandleMemberProfile_RendersPage(t *testing.T) {
 	srv, _, conn := newTestServerWithConn(t)
 
-	_, err := conn.Exec(`INSERT INTO members (id, name, party, riding, province, chamber, active, government_level)
-		VALUES ('m-profile', 'Profile MP', 'NDP', 'Vancouver East', 'British Columbia', 'commons', 1, 'federal')`)
+	_, err := conn.Exec(`INSERT INTO members (id, name, party, riding, province, chamber, active, government_level, term_start)
+		VALUES ('m-profile', 'Profile MP', 'NDP', 'Vancouver East', 'British Columbia', 'commons', 1, 'federal', '2024-01-01')`)
 	if err != nil {
 		t.Fatalf("insert member: %v", err)
 	}

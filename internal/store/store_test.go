@@ -410,6 +410,51 @@ func TestGetMemberStats_SolePartyMemberCountsAsPartyLine(t *testing.T) {
 	}
 }
 
+func TestGetMemberStats_MissedPct_UsesTermDates(t *testing.T) {
+	conn := tempDB(t)
+
+	// term_start is 2024-02-01, so d-before (2024-01-15) must NOT count.
+	_, err := conn.Exec(`INSERT INTO members (id, name, party, riding, province, chamber, active, term_start)
+		VALUES ('m-term', 'Term MP', 'Liberal', 'Ottawa Centre', 'ON', 'commons', 1, '2024-02-01'),
+		       ('m-lib2', 'Lib Colleague', 'Liberal', 'Ottawa West', 'ON', 'commons', 1, NULL)`)
+	if err != nil {
+		t.Fatalf("insert members: %v", err)
+	}
+
+	for _, row := range []struct {
+		id   string
+		date string
+		num  int
+	}{
+		{"d-before", "2024-01-15", 1}, // before term — must NOT count toward denominator
+		{"d-in1", "2024-02-05", 2},
+		{"d-in2", "2024-02-10", 3},
+	} {
+		_, err = conn.Exec(`INSERT INTO divisions (id, parliament, session, number, date, yeas, nays, result, chamber)
+			VALUES (?, 45, 1, ?, ?, 100, 50, 'Carried', 'commons')`,
+			row.id, row.num, row.date)
+		if err != nil {
+			t.Fatalf("insert division %s: %v", row.id, err)
+		}
+	}
+
+	// m-term votes only on d-in1; d-in2 is missed; d-before must be excluded
+	_, err = conn.Exec(`INSERT INTO member_votes (division_id, member_id, vote) VALUES ('d-in1', 'm-term', 'Yea')`)
+	if err != nil {
+		t.Fatalf("insert vote: %v", err)
+	}
+
+	st := store.New(conn)
+	stats, err := st.GetMemberStats("m-term")
+	if err != nil {
+		t.Fatalf("GetMemberStats: %v", err)
+	}
+	// 2 divisions in term, 1 voted, 1 missed → MissedPct = 50
+	if stats.MissedPct != 50 {
+		t.Errorf("want MissedPct=50, got %d", stats.MissedPct)
+	}
+}
+
 func TestCompareMemberVotes(t *testing.T) {
 	conn := tempDB(t)
 	st := store.New(conn)
@@ -1394,6 +1439,153 @@ func TestGetMemberVotes(t *testing.T) {
 	noHas, err := store.DivisionHasVotes(conn, "nonexistent")
 	if err != nil || noHas {
 		t.Fatalf("DivisionHasVotes nonexistent: has=%v err=%v", noHas, err)
+	}
+}
+
+func TestGetMissedVotes(t *testing.T) {
+	conn := tempDB(t)
+
+	// Member with term_start, party colleague for majority calculation
+	_, err := conn.Exec(`INSERT INTO members (id, name, party, riding, province, chamber, active, term_start)
+		VALUES ('m-missed', 'Test MP', 'NDP', 'Some Riding', 'BC', 'commons', 1, '2024-01-01')`)
+	if err != nil {
+		t.Fatalf("insert member: %v", err)
+	}
+	_, err = conn.Exec(`INSERT INTO members (id, name, party, riding, province, chamber, active)
+		VALUES ('m-ndp2', 'NDP Colleague', 'NDP', 'Other Riding', 'BC', 'commons', 1)`)
+	if err != nil {
+		t.Fatalf("insert party member: %v", err)
+	}
+
+	for i := 1; i <= 3; i++ {
+		_, err := conn.Exec(
+			fmt.Sprintf(`INSERT INTO divisions (id, parliament, session, number, date, yeas, nays, result, chamber)
+				VALUES (?, 45, 1, ?, '2024-01-0%d', 100, 50, 'Carried', 'commons')`, i),
+			fmt.Sprintf("dm%d", i), i)
+		if err != nil {
+			t.Fatalf("insert division: %v", err)
+		}
+	}
+
+	// m-missed votes only on dm1; dm2 and dm3 are missed
+	_, err = conn.Exec(`INSERT INTO member_votes (division_id, member_id, vote) VALUES ('dm1', 'm-missed', 'Yea')`)
+	if err != nil {
+		t.Fatalf("insert vote: %v", err)
+	}
+	// m-ndp2 votes Yea on all three — provides party majority
+	for i := 1; i <= 3; i++ {
+		_, err = conn.Exec(`INSERT INTO member_votes (division_id, member_id, vote) VALUES (?, 'm-ndp2', 'Yea')`,
+			fmt.Sprintf("dm%d", i))
+		if err != nil {
+			t.Fatalf("insert ndp2 vote: %v", err)
+		}
+	}
+
+	st := store.New(conn)
+	missed, err := st.GetMissedVotes("m-missed", 50)
+	if err != nil {
+		t.Fatalf("GetMissedVotes: %v", err)
+	}
+	if len(missed) != 2 {
+		t.Fatalf("want 2 missed votes, got %d", len(missed))
+	}
+	// Most recent first
+	if missed[0].Date != "2024-01-03" {
+		t.Errorf("want first missed date=2024-01-03, got %s", missed[0].Date)
+	}
+	// Party voted Yea (m-ndp2)
+	if missed[0].PartyMajority != "Yea" {
+		t.Errorf("want PartyMajority=Yea, got %s", missed[0].PartyMajority)
+	}
+}
+
+func TestGetMissedVotes_Split(t *testing.T) {
+	conn := tempDB(t)
+
+	_, err := conn.Exec(`INSERT INTO members (id, name, party, riding, province, chamber, active, term_start)
+		VALUES ('m-split', 'Split MP', 'Liberal', 'Some Riding', 'ON', 'commons', 1, '2024-01-01'),
+		       ('m-lib2', 'Lib A', 'Liberal', 'Other Riding', 'ON', 'commons', 1, NULL),
+		       ('m-lib3', 'Lib B', 'Liberal', 'Another Riding', 'ON', 'commons', 1, NULL)`)
+	if err != nil {
+		t.Fatalf("insert members: %v", err)
+	}
+	_, err = conn.Exec(`INSERT INTO divisions (id, parliament, session, number, date, yeas, nays, result, chamber)
+		VALUES ('ds1', 45, 1, 1, '2024-01-10', 1, 1, 'Negatived', 'commons')`)
+	if err != nil {
+		t.Fatalf("insert division: %v", err)
+	}
+	// m-lib2=Yea, m-lib3=Nay: equal split; m-split does not vote
+	for _, v := range []struct{ m, vote string }{{"m-lib2", "Yea"}, {"m-lib3", "Nay"}} {
+		_, err = conn.Exec(`INSERT INTO member_votes (division_id, member_id, vote) VALUES ('ds1', ?, ?)`, v.m, v.vote)
+		if err != nil {
+			t.Fatalf("insert vote: %v", err)
+		}
+	}
+
+	st := store.New(conn)
+	missed, err := st.GetMissedVotes("m-split", 50)
+	if err != nil {
+		t.Fatalf("GetMissedVotes: %v", err)
+	}
+	if len(missed) != 1 {
+		t.Fatalf("want 1 missed vote, got %d", len(missed))
+	}
+	if missed[0].PartyMajority != "Split" {
+		t.Errorf("want PartyMajority=Split, got %s", missed[0].PartyMajority)
+	}
+}
+
+func TestGetMissedVotes_NoTermStart(t *testing.T) {
+	conn := tempDB(t)
+	_, err := conn.Exec(`INSERT INTO members (id, name, party, riding, province, chamber, active)
+		VALUES ('m-noterm', 'No Term MP', 'NDP', 'Some Riding', 'BC', 'commons', 1)`)
+	if err != nil {
+		t.Fatalf("insert member: %v", err)
+	}
+	st := store.New(conn)
+	missed, err := st.GetMissedVotes("m-noterm", 50)
+	if err != nil {
+		t.Fatalf("GetMissedVotes: %v", err)
+	}
+	if missed != nil {
+		t.Errorf("want nil for member with no term_start, got %v", missed)
+	}
+}
+
+func TestGetMissedVotes_ExcludesDivisionsBeforeTerm(t *testing.T) {
+	conn := tempDB(t)
+	_, err := conn.Exec(`INSERT INTO members (id, name, party, riding, province, chamber, active, term_start)
+		VALUES ('m-term', 'Term MP', 'NDP', 'Some Riding', 'BC', 'commons', 1, '2024-02-01')`)
+	if err != nil {
+		t.Fatalf("insert member: %v", err)
+	}
+	// d-before is before the term; d-after is within the term
+	for _, row := range []struct {
+		id   string
+		date string
+		num  int
+	}{
+		{"d-before", "2024-01-15", 1},
+		{"d-after", "2024-02-10", 2},
+	} {
+		_, err = conn.Exec(`INSERT INTO divisions (id, parliament, session, number, date, yeas, nays, result, chamber)
+			VALUES (?, 45, 1, ?, ?, 100, 50, 'Carried', 'commons')`,
+			row.id, row.num, row.date)
+		if err != nil {
+			t.Fatalf("insert division %s: %v", row.id, err)
+		}
+	}
+	// m-term does not vote on either
+	st := store.New(conn)
+	missed, err := st.GetMissedVotes("m-term", 50)
+	if err != nil {
+		t.Fatalf("GetMissedVotes: %v", err)
+	}
+	if len(missed) != 1 {
+		t.Fatalf("want 1 missed vote (only d-after is in term), got %d", len(missed))
+	}
+	if missed[0].DivisionID != "d-after" {
+		t.Errorf("want DivisionID=d-after, got %s", missed[0].DivisionID)
 	}
 }
 

@@ -326,6 +326,8 @@ func VoteBadgeClass(vote string) string {
 		return "vote-yea"
 	case "Nay":
 		return "vote-nay"
+	case "Split":
+		return "vote-other"
 	default:
 		return "vote-other"
 	}

@@ -8,6 +8,7 @@ import (
 	"strings"
 	"sync"
 	"time"
+	"unicode"
 
 	"github.com/PuerkitoBio/goquery"
 	"github.com/philspins/opendocket/internal/clog"
@@ -310,29 +311,27 @@ func executeSessionPlan(conn *sql.DB, client *http.Client, delay time.Duration, 
 				// members that haven't been crawled yet.
 				// AB is excluded: its plain-token PDF parser still emits enough non-name
 				// tokens that auto-creating records would pollute the members table.
-				if src.Code != "ab" {
-					fallbackID := provisionalProvincialMemberID(src.Code, mv.MemberName)
-					if fallbackID != "" {
-						rec := store.MemberRecord{
-							ID:              fallbackID,
-							Name:            mv.MemberName,
-							Province:        src.Province,
-							Chamber:         res.Division.Chamber,
-							Active:          false,
-							LastScraped:     utils.NowISO(),
-							GovernmentLevel: "provincial",
-						}
-						if wiki != nil {
-							if info, ok := wiki.lookupInfo(mv.MemberName); ok {
-								rec.Party = info.party
-								rec.Riding = info.riding
-								rec.TermStart = info.termStart
-								rec.TermEnd = info.termEnd
-								clog.Debugf("[wiki] enriched provisional member %q: party=%q riding=%q term=%s..%s", mv.MemberName, info.party, info.riding, info.termStart, info.termEnd)
+				if src.Code != "ab" && wiki != nil {
+					if info, ok := wiki.lookupInfo(mv.MemberName); ok && info.party != "" && info.termStart != "" {
+						fallbackID := provisionalProvincialMemberID(src.Code, mv.MemberName)
+						if fallbackID != "" {
+							rec := store.MemberRecord{
+								ID:              fallbackID,
+								Name:            mv.MemberName,
+								Province:        src.Province,
+								Chamber:         res.Division.Chamber,
+								Active:          false,
+								LastScraped:     utils.NowISO(),
+								GovernmentLevel: "provincial",
+								Party:           info.party,
+								Riding:          info.riding,
+								TermStart:       info.termStart,
+								TermEnd:         info.termEnd,
 							}
-						}
-						if err := store.UpsertMember(conn, rec); err == nil {
-							memberID = fallbackID
+							clog.Debugf("[wiki] creating provisional member %q: party=%q riding=%q term=%s..%s", mv.MemberName, info.party, info.riding, info.termStart, info.termEnd)
+							if err := store.UpsertMember(conn, rec); err == nil {
+								memberID = fallbackID
+							}
 						}
 					}
 				}
@@ -355,7 +354,48 @@ func executeSessionPlan(conn *sql.DB, client *http.Client, delay time.Duration, 
 	return nil
 }
 
+// looksLikePersonName rejects tokens that are clearly not person names:
+// anything starting with a digit (timestamps, numbers), containing no
+// lowercase letters (all-caps headings like "AN ACT TO"), or containing
+// any word that is entirely digits (e.g. "Bill No 102").
+func looksLikePersonName(s string) bool {
+	s = strings.TrimSpace(s)
+	if s == "" {
+		return false
+	}
+	runes := []rune(s)
+	if !unicode.IsLetter(runes[0]) {
+		return false
+	}
+	hasLower := false
+	for _, r := range runes {
+		if unicode.IsLower(r) {
+			hasLower = true
+			break
+		}
+	}
+	if !hasLower {
+		return false
+	}
+	for _, word := range strings.Fields(s) {
+		allDigits := true
+		for _, r := range word {
+			if !unicode.IsDigit(r) {
+				allDigits = false
+				break
+			}
+		}
+		if allDigits {
+			return false
+		}
+	}
+	return true
+}
+
 func provisionalProvincialMemberID(provinceCode, sourceName string) string {
+	if !looksLikePersonName(sourceName) {
+		return ""
+	}
 	base := strings.ToLower(strings.TrimSpace(sourceName))
 	if base == "" {
 		return ""

@@ -334,7 +334,12 @@ func representMembersJSON(count int) string {
 
 // ── CrawlVotes ────────────────────────────────────────────────────────────────
 
-const votesIndexBody = `<html><body>
+func TestCrawlVotes_PersistsDivision(t *testing.T) {
+	mux := http.NewServeMux()
+	srv := httptest.NewServer(mux)
+	defer srv.Close()
+
+	indexHTML := `<html><body>
   <table class="table">
     <thead><tr>
       <th>#</th><th>Vote type</th><th>Description</th>
@@ -342,7 +347,7 @@ const votesIndexBody = `<html><body>
     </tr></thead>
     <tbody>
       <tr>
-        <td><a href="/Members/en/votes/45/1/892">No. 892</a></td>
+        <td><a href="` + srv.URL + `/votes/45/1/892">No. 892</a></td>
         <td>Procedural</td>
         <td>Procedural vote</td>
         <td>172 / 148 / 5</td>
@@ -352,10 +357,14 @@ const votesIndexBody = `<html><body>
     </tbody>
   </table>
 </body></html>`
-
-func TestCrawlVotes_PersistsDivision(t *testing.T) {
-	srv := serve(votesIndexBody)
-	defer srv.Close()
+	mux.HandleFunc("/votes/", func(w http.ResponseWriter, _ *http.Request) {
+		w.Header().Set("Content-Type", "text/html; charset=utf-8")
+		fmt.Fprint(w, "<html><body></body></html>")
+	})
+	mux.HandleFunc("/", func(w http.ResponseWriter, _ *http.Request) {
+		w.Header().Set("Content-Type", "text/html; charset=utf-8")
+		fmt.Fprint(w, indexHTML)
+	})
 
 	conn := newDB(t)
 	if err := scraper.CrawlVotes(conn, srv.Client(), noDelay, srv.URL); err != nil {
@@ -369,7 +378,12 @@ func TestCrawlVotes_PersistsDivision(t *testing.T) {
 	}
 }
 
-const votesWithBillBody = `<html><body>
+func TestCrawlVotes_StoresBillIDWhenBillExists(t *testing.T) {
+	mux := http.NewServeMux()
+	srv := httptest.NewServer(mux)
+	defer srv.Close()
+
+	indexHTML := `<html><body>
   <table class="table">
     <thead><tr>
       <th>#</th><th>Vote type</th><th>Description</th>
@@ -377,7 +391,7 @@ const votesWithBillBody = `<html><body>
     </tr></thead>
     <tbody>
       <tr>
-        <td><a href="/Members/en/votes/45/1/893">No. 893</a></td>
+        <td><a href="` + srv.URL + `/votes/45/1/893">No. 893</a></td>
         <td>House Government Bill</td>
         <td>Motion on C-47</td>
         <td>172 / 148 / 5</td>
@@ -387,10 +401,14 @@ const votesWithBillBody = `<html><body>
     </tbody>
   </table>
 </body></html>`
-
-func TestCrawlVotes_StoresBillIDWhenBillExists(t *testing.T) {
-	srv := serve(votesWithBillBody)
-	defer srv.Close()
+	mux.HandleFunc("/votes/", func(w http.ResponseWriter, _ *http.Request) {
+		w.Header().Set("Content-Type", "text/html; charset=utf-8")
+		fmt.Fprint(w, "<html><body></body></html>")
+	})
+	mux.HandleFunc("/", func(w http.ResponseWriter, _ *http.Request) {
+		w.Header().Set("Content-Type", "text/html; charset=utf-8")
+		fmt.Fprint(w, indexHTML)
+	})
 
 	conn := newDB(t)
 	// Pre-insert the referenced bill so FK constraint is satisfied.
@@ -479,7 +497,12 @@ func TestCrawlVotes_BackfillsVotesForExistingDivision(t *testing.T) {
 
 // ── crawlSenate ───────────────────────────────────────────────────────────────
 
-const senateVotesBody = `<html><body>
+func TestCrawlSenate_PersistsDivision(t *testing.T) {
+	mux := http.NewServeMux()
+	srv := httptest.NewServer(mux)
+	defer srv.Close()
+
+	indexHTML := `<html><body>
   <table>
     <thead><tr>
       <th>Date</th><th>Description</th><th>Bill</th><th>Result</th>
@@ -490,7 +513,7 @@ const senateVotesBody = `<html><body>
           <a href="/en/content/sen/chamber/451/journals/j-e">2024-04-04</a>
         </td>
         <td>
-          <a class="vote-web-title-link" href="/en/in-the-chamber/votes/details/12345/45-1">Procedural motion</a>
+          <a class="vote-web-title-link" href="` + srv.URL + `/en/in-the-chamber/votes/details/12345/45-1">Procedural motion</a>
           <br />
           Yeas: 58 | Nays: 22 | Abstentions: 2 | Total: 82
         </td>
@@ -502,10 +525,14 @@ const senateVotesBody = `<html><body>
     </tbody>
   </table>
 </body></html>`
-
-func TestCrawlSenate_PersistsDivision(t *testing.T) {
-	srv := serve(senateVotesBody)
-	defer srv.Close()
+	mux.HandleFunc("/en/in-the-chamber/votes/details/", func(w http.ResponseWriter, _ *http.Request) {
+		w.Header().Set("Content-Type", "text/html; charset=utf-8")
+		fmt.Fprint(w, "<html><body></body></html>")
+	})
+	mux.HandleFunc("/", func(w http.ResponseWriter, _ *http.Request) {
+		w.Header().Set("Content-Type", "text/html; charset=utf-8")
+		fmt.Fprint(w, indexHTML)
+	})
 
 	conn := newDB(t)
 	if err := scraper.CrawlSenate(conn, srv.Client(), noDelay, srv.URL); err != nil {
@@ -519,7 +546,12 @@ func TestCrawlSenate_PersistsDivision(t *testing.T) {
 	}
 }
 
-const senateVotesWithBillBody = `<html><body>
+func TestCrawlSenate_StoresBillIDWhenBillExists(t *testing.T) {
+	mux := http.NewServeMux()
+	srv := httptest.NewServer(mux)
+	defer srv.Close()
+
+	indexHTML := `<html><body>
   <table>
     <thead><tr>
       <th>Date</th><th>Description</th><th>Bill</th><th>Result</th>
@@ -530,7 +562,7 @@ const senateVotesWithBillBody = `<html><body>
           <a href="/en/content/sen/chamber/451/journals/j-e">2024-04-04</a>
         </td>
         <td>
-          <a class="vote-web-title-link" href="/en/in-the-chamber/votes/details/12345/45-1">Third reading of S-209</a>
+          <a class="vote-web-title-link" href="` + srv.URL + `/en/in-the-chamber/votes/details/12345/45-1">Third reading of S-209</a>
           <br />
           Yeas: 58 | Nays: 22 | Abstentions: 2 | Total: 82
         </td>
@@ -544,10 +576,14 @@ const senateVotesWithBillBody = `<html><body>
     </tbody>
   </table>
 </body></html>`
-
-func TestCrawlSenate_StoresBillIDWhenBillExists(t *testing.T) {
-	srv := serve(senateVotesWithBillBody)
-	defer srv.Close()
+	mux.HandleFunc("/en/in-the-chamber/votes/details/", func(w http.ResponseWriter, _ *http.Request) {
+		w.Header().Set("Content-Type", "text/html; charset=utf-8")
+		fmt.Fprint(w, "<html><body></body></html>")
+	})
+	mux.HandleFunc("/", func(w http.ResponseWriter, _ *http.Request) {
+		w.Header().Set("Content-Type", "text/html; charset=utf-8")
+		fmt.Fprint(w, indexHTML)
+	})
 
 	conn := newDB(t)
 	// Pre-insert the referenced bill so FK constraint is satisfied.
@@ -777,8 +813,36 @@ func TestRunFrequentVoteCheck_SkipsWhenNotSitting(t *testing.T) {
 }
 
 func TestRunFrequentVoteCheck_CrawlsVotesWhenSitting(t *testing.T) {
-	srv := serve(votesIndexBody)
+	mux := http.NewServeMux()
+	srv := httptest.NewServer(mux)
 	defer srv.Close()
+
+	indexHTML := `<html><body>
+  <table class="table">
+    <thead><tr>
+      <th>#</th><th>Vote type</th><th>Description</th>
+      <th>Votes</th><th>Result</th><th>Date</th>
+    </tr></thead>
+    <tbody>
+      <tr>
+        <td><a href="` + srv.URL + `/votes/45/1/892">No. 892</a></td>
+        <td>Procedural</td>
+        <td>Procedural vote</td>
+        <td>172 / 148 / 5</td>
+        <td><i class="icon"></i> Agreed to</td>
+        <td>Wednesday, April 3, 2024</td>
+      </tr>
+    </tbody>
+  </table>
+</body></html>`
+	mux.HandleFunc("/votes/", func(w http.ResponseWriter, _ *http.Request) {
+		w.Header().Set("Content-Type", "text/html; charset=utf-8")
+		fmt.Fprint(w, "<html><body></body></html>")
+	})
+	mux.HandleFunc("/", func(w http.ResponseWriter, _ *http.Request) {
+		w.Header().Set("Content-Type", "text/html; charset=utf-8")
+		fmt.Fprint(w, indexHTML)
+	})
 
 	conn := newDB(t)
 	// Insert today's date as a sitting date so the check proceeds.

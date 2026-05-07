@@ -28,7 +28,7 @@ func TestMemberProfile_ReordersEngageAndAddsVotePagination(t *testing.T) {
 	}
 
 	var buf bytes.Buffer
-	if err := MemberProfile(store.ParliamentStatus{}, member, votes, store.MemberStats{}, nil).Render(context.Background(), &buf); err != nil {
+	if err := MemberProfile(store.ParliamentStatus{}, member, votes, store.MemberStats{}, nil, nil).Render(context.Background(), &buf); err != nil {
 		t.Fatalf("render member profile: %v", err)
 	}
 	html := buf.String()
@@ -77,7 +77,7 @@ func TestMemberProfile_VotesTableHasMobileResponsiveClasses(t *testing.T) {
 	}}
 
 	var buf bytes.Buffer
-	if err := MemberProfile(store.ParliamentStatus{}, member, votes, store.MemberStats{}, nil).Render(context.Background(), &buf); err != nil {
+	if err := MemberProfile(store.ParliamentStatus{}, member, votes, store.MemberStats{}, nil, nil).Render(context.Background(), &buf); err != nil {
 		t.Fatalf("render member profile: %v", err)
 	}
 	html := buf.String()
@@ -119,7 +119,7 @@ func TestMemberProfile_UsesConsistentRedStylingForNaysAndRebel(t *testing.T) {
 	}}
 
 	var buf bytes.Buffer
-	if err := MemberProfile(store.ParliamentStatus{}, member, votes, store.MemberStats{}, catScores).Render(context.Background(), &buf); err != nil {
+	if err := MemberProfile(store.ParliamentStatus{}, member, votes, store.MemberStats{}, catScores, nil).Render(context.Background(), &buf); err != nil {
 		t.Fatalf("render member profile: %v", err)
 	}
 	html := buf.String()

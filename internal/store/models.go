@@ -144,3 +144,16 @@ type CategoryScore struct {
 	Nays     int
 	YeaPct   int // 0–100, rounded
 }
+
+// MissedVoteRow represents a division that occurred during a member's term
+// where the member has no recorded vote.
+type MissedVoteRow struct {
+	DivisionID    string
+	Date          string
+	BillID        string
+	BillNumber    string
+	BillTitle     string
+	Description   string
+	PartyMajority string // "Yea", "Nay", or "Split"
+	Result        string
+}
