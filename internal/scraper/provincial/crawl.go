@@ -8,6 +8,7 @@ import (
 	"strings"
 	"sync"
 	"time"
+	"unicode"
 
 	"github.com/PuerkitoBio/goquery"
 	"github.com/philspins/opendocket/internal/clog"
@@ -355,7 +356,30 @@ func executeSessionPlan(conn *sql.DB, client *http.Client, delay time.Duration, 
 	return nil
 }
 
+// looksLikePersonName rejects tokens that are clearly not person names:
+// anything starting with a digit (timestamps, numbers) or containing no
+// lowercase letters (all-caps headings like "AN ACT TO").
+func looksLikePersonName(s string) bool {
+	s = strings.TrimSpace(s)
+	if s == "" {
+		return false
+	}
+	runes := []rune(s)
+	if !unicode.IsLetter(runes[0]) {
+		return false
+	}
+	for _, r := range runes {
+		if unicode.IsLower(r) {
+			return true
+		}
+	}
+	return false
+}
+
 func provisionalProvincialMemberID(provinceCode, sourceName string) string {
+	if !looksLikePersonName(sourceName) {
+		return ""
+	}
 	base := strings.ToLower(strings.TrimSpace(sourceName))
 	if base == "" {
 		return ""
