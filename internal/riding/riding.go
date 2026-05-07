@@ -155,10 +155,11 @@ func (s *Service) HandleLookup(w http.ResponseWriter, r *http.Request) {
 			fedName := strings.TrimSpace(federalRep.Name)
 			provName := strings.TrimSpace(provincialRep.Name)
 			for _, rep := range result.Representatives {
-				if fedName != "" && strings.EqualFold(strings.TrimSpace(rep.Name), fedName) {
+				repName := strings.TrimSpace(rep.Name)
+				if fedName != "" && strings.EqualFold(repName, fedName) {
 					continue
 				}
-				if provName != "" && strings.EqualFold(strings.TrimSpace(rep.Name), provName) {
+				if provName != "" && strings.EqualFold(repName, provName) {
 					continue
 				}
 				otherReps = append(otherReps, rep)
