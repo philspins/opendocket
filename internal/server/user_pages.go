@@ -162,8 +162,14 @@ func (s *Server) handleRiding(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 
-	federalRidings, _ := s.store.ListDistinctRidingsByLevel("federal")
-	provincialRidings, _ := s.store.ListDistinctRidingsByLevel("provincial")
+	federalRidings, err := s.store.ListDistinctRidingsByLevel("federal")
+	if err != nil {
+		log.Printf("handleRiding: list federal ridings: %v", err)
+	}
+	provincialRidings, err := s.store.ListDistinctRidingsByLevel("provincial")
+	if err != nil {
+		log.Printf("handleRiding: list provincial ridings: %v", err)
+	}
 
 	_ = templates.RidingLookup(ps, address, federalRep, provincialRep, lookupErr, s.riding.PlacesAPIKey(), isLoggedIn, federalRidings, provincialRidings).Render(r.Context(), w)
 }
