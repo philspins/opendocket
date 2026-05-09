@@ -163,7 +163,7 @@ func RidingLookup(ps store.ParliamentStatus, address string, federalRep opennort
 					}
 				} else {
 					provName, provRole := homeRepresentativeNameRole(provincialRep, "Your current provincial representative", "Provincial representative")
-					templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 15, "<div class=\"h-full p-4 sm:p-8 lg:p-[12.5%]\"><div class=\"surface-card overflow-hidden h-full\"><div class=\"px-5 py-3 text-sm\" style=\"")
+					templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 15, "<div class=\"h-full p-2 sm:p-4 lg:p-[6.25%]\"><div class=\"surface-card overflow-hidden h-full\"><div class=\"px-5 py-3 text-sm\" style=\"")
 					if templ_7745c5c3_Err != nil {
 						return templ_7745c5c3_Err
 					}
@@ -392,7 +392,7 @@ func RidingLookup(ps store.ParliamentStatus, address string, federalRep opennort
 					}
 				} else {
 					fedName, fedRole := homeRepresentativeNameRole(federalRep, "Your current federal representative", "Federal representative")
-					templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 42, "<div class=\"h-full p-4 sm:p-8 lg:p-[12.5%]\"><div class=\"surface-card overflow-hidden h-full\"><div class=\"px-5 py-3 text-sm\" style=\"")
+					templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 42, "<div class=\"h-full p-2 sm:p-4 lg:p-[6.25%]\"><div class=\"surface-card overflow-hidden h-full\"><div class=\"px-5 py-3 text-sm\" style=\"")
 					if templ_7745c5c3_Err != nil {
 						return templ_7745c5c3_Err
 					}
