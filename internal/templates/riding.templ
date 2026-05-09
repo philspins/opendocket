@@ -6,7 +6,7 @@ import (
 	"github.com/philspins/opendocket/internal/store"
 )
 
-templ RidingLookup(ps store.ParliamentStatus, address string, federalRep opennorth.Representative, provincialRep opennorth.Representative, otherReps []opennorth.Representative, lookupErr string, placesApiKey string, isLoggedIn bool) {
+templ RidingLookup(ps store.ParliamentStatus, address string, federalRep opennorth.Representative, provincialRep opennorth.Representative, lookupErr string, placesApiKey string, isLoggedIn bool, federalRidings []string, provincialRidings []string) {
 	@Layout("Find My Representatives", ps) {
 		<div class="space-y-6">
 			<h1 class="text-2xl font-bold text-gray-900">Find Your Representatives</h1>
@@ -40,8 +40,21 @@ templ RidingLookup(ps store.ParliamentStatus, address string, federalRep opennor
 							if !hasProvincialRep {
 								<div class="surface-card p-6 flex flex-col items-center text-center space-y-3 h-full">
 									<p class="text-base font-semibold">Provincial representative not found</p>
-									<p class="section-lead text-sm max-w-xs">Your provincial representative could not be found automatically. Please manually select your riding on your profile page.</p>
-									<a href="/profile" class="btn btn-primary text-sm">Go to Profile</a>
+									if isLoggedIn {
+										<p class="section-lead text-sm max-w-xs">Your provincial representative could not be found automatically. Please manually select your riding on your profile page.</p>
+										<a href="/profile" class="btn btn-primary text-sm">Go to Profile</a>
+									} else {
+										<p class="section-lead text-sm max-w-xs">Couldn&#39;t auto-detect your provincial rep. Select your riding manually:</p>
+										<form method="POST" action="/riding" class="w-full space-y-3">
+											<select name="provincial_riding" class="input-field w-full px-3 py-2 text-sm">
+												<option value="">— select provincial riding —</option>
+												for _, r := range provincialRidings {
+													<option value={ r }>{ r }</option>
+												}
+											</select>
+											<button type="submit" class="btn btn-primary text-sm w-full">Save &amp; Continue</button>
+										</form>
+									}
 								</div>
 							} else {
 								{{
@@ -85,8 +98,21 @@ templ RidingLookup(ps store.ParliamentStatus, address string, federalRep opennor
 							if !hasFederalRep {
 								<div class="surface-card p-6 flex flex-col items-center text-center space-y-3 h-full">
 									<p class="text-base font-semibold">Federal representative not found</p>
-									<p class="section-lead text-sm max-w-xs">Your federal representative could not be found automatically. Please manually select your riding on your profile page.</p>
-									<a href="/profile" class="btn btn-primary text-sm">Go to Profile</a>
+									if isLoggedIn {
+										<p class="section-lead text-sm max-w-xs">Your federal representative could not be found automatically. Please manually select your riding on your profile page.</p>
+										<a href="/profile" class="btn btn-primary text-sm">Go to Profile</a>
+									} else {
+										<p class="section-lead text-sm max-w-xs">Couldn&#39;t auto-detect your federal rep. Select your riding manually:</p>
+										<form method="POST" action="/riding" class="w-full space-y-3">
+											<select name="federal_riding" class="input-field w-full px-3 py-2 text-sm">
+												<option value="">— select federal riding —</option>
+												for _, r := range federalRidings {
+													<option value={ r }>{ r }</option>
+												}
+											</select>
+											<button type="submit" class="btn btn-primary text-sm w-full">Save &amp; Continue</button>
+										</form>
+									}
 								</div>
 							} else {
 								{{
@@ -127,16 +153,28 @@ templ RidingLookup(ps store.ParliamentStatus, address string, federalRep opennor
 							}
 						</div>
 					</section>
-					if len(otherReps) > 0 {
-						<div class="mt-6">
-							<h3 class="text-base font-semibold text-gray-700 mb-3">Other local representatives</h3>
-							<div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
-								for _, rep := range otherReps {
-									@openNorthRepCard(rep)
-								}
-							</div>
-						</div>
-					}
+					<section class="surface-card p-6 mt-2">
+						<h2 class="text-xl font-semibold text-gray-900">What to do next</h2>
+						<p class="section-lead mt-2 max-w-2xl">You&#39;ve found your reps — now explore everything the site has to offer:</p>
+						<ul class="mt-4 space-y-3 text-sm">
+							<li>
+								<a href="/votes" class="font-semibold text-blue-700 hover:underline">See how your reps voted →</a>
+								<span class="text-gray-600"> — browse every recorded division in federal Parliament and all ten provincial legislatures.</span>
+							</li>
+							<li>
+								<a href="/bills" class="font-semibold text-blue-700 hover:underline">View bills →</a>
+								<span class="text-gray-600"> — track legislation moving through Parliament and the provincial assemblies.</span>
+							</li>
+							<li>
+								<a href="/compare" class="font-semibold text-blue-700 hover:underline">Compare your rep with others →</a>
+								<span class="text-gray-600"> — see how your representative's voting record stacks up against their colleagues.</span>
+							</li>
+							<li>
+								<a href="/members" class="font-semibold text-blue-700 hover:underline">Browse all members →</a>
+								<span class="text-gray-600"> — explore profiles for every federal MP across the country.</span>
+							</li>
+						</ul>
+					</section>
 				</div>
 			}
 		</div>

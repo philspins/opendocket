@@ -2097,7 +2097,6 @@ func TestHandleRiding_ShowsHighlightedRepCards(t *testing.T) {
 			return []opennorth.Representative{
 				{Name: "Jane MP", ElectedOffice: "MP", DistrictName: "Ottawa Centre", PartyName: "Liberal"},
 				{Name: "John MPP", ElectedOffice: "MPP (ON)", DistrictName: "Ottawa South", PartyName: "NDP"},
-				{Name: "Alice Councillor", ElectedOffice: "councillor", DistrictName: "Ward 12"},
 			}, nil
 		},
 	)
@@ -2117,10 +2116,6 @@ func TestHandleRiding_ShowsHighlightedRepCards(t *testing.T) {
 	if !strings.Contains(body, "John MPP") {
 		t.Errorf("expected provincial rep 'John MPP' in body")
 	}
-	// Other local rep should appear in the "other" section.
-	if !strings.Contains(body, "Alice Councillor") {
-		t.Errorf("expected other rep 'Alice Councillor' in body")
-	}
 	// Should NOT show "not found" prompts when both reps are present.
 	if strings.Contains(body, "Federal representative not found") {
 		t.Errorf("unexpected 'Federal representative not found' in body")
@@ -2130,21 +2125,20 @@ func TestHandleRiding_ShowsHighlightedRepCards(t *testing.T) {
 	}
 }
 
-func TestHandleRiding_ShowsNotFoundCardsWhenRepsAbsent(t *testing.T) {
+// Unauthenticated visitor sees inline riding selectors when reps are absent.
+func TestHandleRiding_ShowsInlineSelectorForGuestWhenRepsAbsent(t *testing.T) {
 	srv, _ := newTestServer(t)
 
-	// Successful lookup but no federal or provincial reps returned.
 	srv.riding.SetLookups(
 		func(_ context.Context, _ string, _ string) (float64, float64, error) {
 			return 45.0, -75.0, nil
 		},
 		func(_ context.Context, _, _ float64) ([]opennorth.Representative, error) {
-			return []opennorth.Representative{
-				{Name: "Alice Councillor", ElectedOffice: "councillor", DistrictName: "Ward 12"},
-			}, nil
+			return []opennorth.Representative{}, nil
 		},
 	)
 
+	// No session cookie → guest visitor.
 	req := httptest.NewRequest(http.MethodGet, "/riding?address=123+Main+St,+Ottawa,+ON", nil)
 	rr := httptest.NewRecorder()
 	srv.ServeHTTP(rr, req)
@@ -2153,16 +2147,123 @@ func TestHandleRiding_ShowsNotFoundCardsWhenRepsAbsent(t *testing.T) {
 		t.Fatalf("status=%d want %d", rr.Code, http.StatusOK)
 	}
 	body := rr.Body.String()
-	// Both "not found" prompts should appear.
 	if !strings.Contains(body, "Federal representative not found") {
 		t.Errorf("expected 'Federal representative not found' in body")
 	}
 	if !strings.Contains(body, "Provincial representative not found") {
 		t.Errorf("expected 'Provincial representative not found' in body")
 	}
-	// Both should prompt the user to go to their profile.
+	// Guest: should see inline selectors (select elements), not "Go to Profile".
+	if strings.Contains(body, "Go to Profile") {
+		t.Errorf("unexpected 'Go to Profile' link for guest visitor")
+	}
+	if !strings.Contains(body, `name="federal_riding"`) {
+		t.Errorf("expected federal riding select in body for guest")
+	}
+	if !strings.Contains(body, `name="provincial_riding"`) {
+		t.Errorf("expected provincial riding select in body for guest")
+	}
+}
+
+// Authenticated user sees "Go to Profile" prompt when reps are absent.
+func TestHandleRiding_ShowsGoToProfileForAuthUserWhenRepsAbsent(t *testing.T) {
+	srv, st := newTestServer(t)
+	u, err := st.UpsertUser("riding-notfound@example.com")
+	if err != nil {
+		t.Fatalf("UpsertUser: %v", err)
+	}
+	sid, err := st.CreateSession(u.ID, time.Hour)
+	if err != nil {
+		t.Fatalf("CreateSession: %v", err)
+	}
+
+	srv.riding.SetLookups(
+		func(_ context.Context, _ string, _ string) (float64, float64, error) {
+			return 45.0, -75.0, nil
+		},
+		func(_ context.Context, _, _ float64) ([]opennorth.Representative, error) {
+			return []opennorth.Representative{}, nil
+		},
+	)
+
+	req := httptest.NewRequest(http.MethodGet, "/riding?address=123+Main+St,+Ottawa,+ON", nil)
+	req.AddCookie(&http.Cookie{Name: "od_session", Value: sid})
+	rr := httptest.NewRecorder()
+	srv.ServeHTTP(rr, req)
+
+	if rr.Code != http.StatusOK {
+		t.Fatalf("status=%d want %d", rr.Code, http.StatusOK)
+	}
+	body := rr.Body.String()
+	// Authenticated: should see "Go to Profile", not inline selectors.
 	if count := strings.Count(body, "Go to Profile"); count < 2 {
-		t.Errorf("expected at least 2 'Go to Profile' links, got %d", count)
+		t.Errorf("expected at least 2 'Go to Profile' links for logged-in user, got %d", count)
+	}
+	if strings.Contains(body, `name="federal_riding"`) {
+		t.Errorf("unexpected federal riding select for authenticated user")
+	}
+}
+
+// POST /riding sets cookies and redirects to / for a guest.
+func TestHandleRidingPost_GuestSetsRidingCookies(t *testing.T) {
+	srv, _ := newTestServer(t)
+
+	form := url.Values{}
+	form.Set("federal_riding", "Ottawa Centre")
+	form.Set("provincial_riding", "Ottawa South")
+	req := httptest.NewRequest(http.MethodPost, "/riding", strings.NewReader(form.Encode()))
+	req.Header.Set("Content-Type", "application/x-www-form-urlencoded")
+	rr := httptest.NewRecorder()
+	srv.ServeHTTP(rr, req)
+
+	if rr.Code != http.StatusSeeOther {
+		t.Fatalf("status=%d want %d", rr.Code, http.StatusSeeOther)
+	}
+	if rr.Header().Get("Location") != "/" {
+		t.Fatalf("Location=%q want /", rr.Header().Get("Location"))
+	}
+	var fedCookie, provCookie string
+	for _, c := range rr.Result().Cookies() {
+		switch c.Name {
+		case testGuestFederalRidingCookie:
+			fedCookie = c.Value
+		case testGuestProvincialRidingCookie:
+			provCookie = c.Value
+		}
+	}
+	if !strings.Contains(fedCookie, "Ottawa") {
+		t.Errorf("federal riding cookie=%q, want to contain 'Ottawa'", fedCookie)
+	}
+	if !strings.Contains(provCookie, "Ottawa") {
+		t.Errorf("provincial riding cookie=%q, want to contain 'Ottawa'", provCookie)
+	}
+}
+
+// POST /riding preserves an existing cookie when only one riding is submitted.
+func TestHandleRidingPost_PreservesExistingCookie(t *testing.T) {
+	srv, _ := newTestServer(t)
+
+	form := url.Values{}
+	form.Set("federal_riding", "Ottawa Centre")
+	// provincial_riding intentionally omitted.
+	req := httptest.NewRequest(http.MethodPost, "/riding", strings.NewReader(form.Encode()))
+	req.Header.Set("Content-Type", "application/x-www-form-urlencoded")
+	req.AddCookie(&http.Cookie{Name: testGuestProvincialRidingCookie, Value: url.QueryEscape("Ottawa South")})
+	rr := httptest.NewRecorder()
+	srv.ServeHTTP(rr, req)
+
+	if rr.Code != http.StatusSeeOther {
+		t.Fatalf("status=%d want %d", rr.Code, http.StatusSeeOther)
+	}
+	var provCookie string
+	for _, c := range rr.Result().Cookies() {
+		if c.Name == testGuestProvincialRidingCookie {
+			provCookie = c.Value
+		}
+	}
+	// Provincial cookie should be refreshed with the preserved value, not deleted.
+	if !strings.Contains(provCookie, "Ottawa") {
+		t.Errorf("provincial riding cookie=%q, want preserved 'Ottawa South'", provCookie)
 	}
 }
 

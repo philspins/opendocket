@@ -135,7 +135,6 @@ func (s *Service) HandleLookup(w http.ResponseWriter, r *http.Request) {
 	var (
 		federalRep    opennorth.Representative
 		provincialRep opennorth.Representative
-		otherReps     []opennorth.Representative
 		lookupErr     string
 	)
 	if address != "" {
@@ -152,19 +151,7 @@ func (s *Service) HandleLookup(w http.ResponseWriter, r *http.Request) {
 		} else {
 			federalRep = result.FederalRepresentative
 			provincialRep = result.ProvincialRepresentative
-			fedName := strings.TrimSpace(federalRep.Name)
-			provName := strings.TrimSpace(provincialRep.Name)
-			for _, rep := range result.Representatives {
-				repName := strings.TrimSpace(rep.Name)
-				if fedName != "" && strings.EqualFold(repName, fedName) {
-					continue
-				}
-				if provName != "" && strings.EqualFold(repName, provName) {
-					continue
-				}
-				otherReps = append(otherReps, rep)
-			}
 		}
 	}
-	_ = templates.RidingLookup(ps, address, federalRep, provincialRep, otherReps, lookupErr, s.placesApiKey, false).Render(r.Context(), w)
+	_ = templates.RidingLookup(ps, address, federalRep, provincialRep, lookupErr, s.placesApiKey, false, nil, nil).Render(r.Context(), w)
 }

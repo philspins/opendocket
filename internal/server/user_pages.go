@@ -135,7 +135,6 @@ func (s *Server) handleRiding(w http.ResponseWriter, r *http.Request) {
 	var (
 		federalRep    opennorth.Representative
 		provincialRep opennorth.Representative
-		otherReps     []opennorth.Representative
 		lookupErr     string
 	)
 
@@ -154,18 +153,6 @@ func (s *Server) handleRiding(w http.ResponseWriter, r *http.Request) {
 		} else {
 			federalRep = result.FederalRepresentative
 			provincialRep = result.ProvincialRepresentative
-			fedName := strings.TrimSpace(federalRep.Name)
-			provName := strings.TrimSpace(provincialRep.Name)
-			for _, rep := range result.Representatives {
-				repName := strings.TrimSpace(rep.Name)
-				if fedName != "" && strings.EqualFold(repName, fedName) {
-					continue
-				}
-				if provName != "" && strings.EqualFold(repName, provName) {
-					continue
-				}
-				otherReps = append(otherReps, rep)
-			}
 			s.setLocalRidingCookies(w, result.FederalRidingID, result.ProvincialRidingID)
 			if isLoggedIn {
 				if _, saveErr := s.store.UpdateUserLocation(user.ID, result.FederalRidingID, result.ProvincialRidingID); saveErr != nil {
@@ -175,7 +162,36 @@ func (s *Server) handleRiding(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 
-	_ = templates.RidingLookup(ps, address, federalRep, provincialRep, otherReps, lookupErr, s.riding.PlacesAPIKey(), isLoggedIn).Render(r.Context(), w)
+	federalRidings, _ := s.store.ListDistinctRidingsByLevel("federal")
+	provincialRidings, _ := s.store.ListDistinctRidingsByLevel("provincial")
+
+	_ = templates.RidingLookup(ps, address, federalRep, provincialRep, lookupErr, s.riding.PlacesAPIKey(), isLoggedIn, federalRidings, provincialRidings).Render(r.Context(), w)
+}
+
+func (s *Server) handleRidingPost(w http.ResponseWriter, r *http.Request) {
+	if err := r.ParseForm(); err != nil {
+		http.Error(w, "bad request", http.StatusBadRequest)
+		return
+	}
+	federalRiding := strings.TrimSpace(r.FormValue("federal_riding"))
+	provincialRiding := strings.TrimSpace(r.FormValue("provincial_riding"))
+
+	// Preserve existing cookie values for fields not submitted.
+	v := visitor.FromRequest(r, s.auth)
+	if federalRiding == "" {
+		federalRiding = v.FederalRidingID
+	}
+	if provincialRiding == "" {
+		provincialRiding = v.ProvincialRidingID
+	}
+
+	s.setLocalRidingCookies(w, federalRiding, provincialRiding)
+	if user, ok := s.auth.SessionUser(r); ok {
+		if _, saveErr := s.store.UpdateUserLocation(user.ID, federalRiding, provincialRiding); saveErr != nil {
+			log.Printf("handleRidingPost save failed for user=%q: %v", user.ID, saveErr)
+		}
+	}
+	http.Redirect(w, r, "/", http.StatusSeeOther)
 }
 
 func (s *Server) handleProfile(w http.ResponseWriter, r *http.Request) {
