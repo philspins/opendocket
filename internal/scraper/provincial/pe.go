@@ -797,7 +797,7 @@ func isAllCaps(s string) bool {
 }
 
 func extractPEIDivisionDescription(text string, triggerStart int) string {
-	const contextWindow = 500
+	const contextWindow = 900
 	const maxDescriptionLen = 240
 
 	start := triggerStart - contextWindow
@@ -807,6 +807,10 @@ func extractPEIDivisionDescription(text string, triggerStart int) string {
 	ctx := strings.TrimSpace(strings.Join(strings.Fields(text[start:triggerStart]), " "))
 	if ctx == "" {
 		return "Recorded division"
+	}
+
+	if desc := peiBillDescriptionFromContext(ctx); desc != "" {
+		return desc
 	}
 
 	parts := strings.FieldsFunc(ctx, func(r rune) bool {
