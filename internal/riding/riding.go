@@ -161,5 +161,16 @@ func (s *Service) HandleLookup(w http.ResponseWriter, r *http.Request) {
 	if err != nil {
 		log.Printf("riding.HandleLookup: list provincial ridings: %v", err)
 	}
-	_ = templates.RidingLookup(ps, address, federalRep, provincialRep, lookupErr, s.placesApiKey, false, federalRidings, provincialRidings).Render(r.Context(), w)
+	var federalMember, provincialMember store.MemberRow
+	if federalRep.LocalMemberID != "" {
+		if m, err := s.store.GetMember(federalRep.LocalMemberID); err == nil {
+			federalMember = m
+		}
+	}
+	if provincialRep.LocalMemberID != "" {
+		if m, err := s.store.GetMember(provincialRep.LocalMemberID); err == nil {
+			provincialMember = m
+		}
+	}
+	_ = templates.RidingLookup(ps, address, federalRep, provincialRep, federalMember, provincialMember, lookupErr, s.placesApiKey, false, federalRidings, provincialRidings).Render(r.Context(), w)
 }

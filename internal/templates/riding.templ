@@ -6,7 +6,7 @@ import (
 	"github.com/philspins/opendocket/internal/store"
 )
 
-templ RidingLookup(ps store.ParliamentStatus, address string, federalRep opennorth.Representative, provincialRep opennorth.Representative, lookupErr string, placesApiKey string, isLoggedIn bool, federalRidings []string, provincialRidings []string) {
+templ RidingLookup(ps store.ParliamentStatus, address string, federalRep opennorth.Representative, provincialRep opennorth.Representative, federalMember store.MemberRow, provincialMember store.MemberRow, lookupErr string, placesApiKey string, isLoggedIn bool, federalRidings []string, provincialRidings []string) {
 	@Layout("Find My Representatives", ps) {
 		<div class="space-y-6">
 			<h1 class="text-2xl font-bold text-gray-900">Find Your Representatives</h1>
@@ -56,6 +56,8 @@ templ RidingLookup(ps store.ParliamentStatus, address string, federalRep opennor
 										</form>
 									}
 								</div>
+							} else if provincialMember.ID != "" {
+								@MemberSummaryCard(provincialMember)
 							} else {
 								{{
 									provName, provRole := homeRepresentativeNameRole(provincialRep, "Your current provincial representative", "Provincial representative")
@@ -116,6 +118,8 @@ templ RidingLookup(ps store.ParliamentStatus, address string, federalRep opennor
 										</form>
 									}
 								</div>
+							} else if federalMember.ID != "" {
+								@MemberSummaryCard(federalMember)
 							} else {
 								{{
 									fedName, fedRole := homeRepresentativeNameRole(federalRep, "Your current federal representative", "Federal representative")

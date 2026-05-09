@@ -11,34 +11,7 @@ templ MemberProfile(ps store.ParliamentStatus, member store.MemberRow, votes []s
 			<a href="/members" class="text-sm text-blue-600 hover:underline">← Members</a>
 
 			<!-- Header -->
-			<div class="surface-card p-6 flex items-start gap-6">
-				if member.PhotoURL != "" {
-					<img src={ member.PhotoURL } alt={ member.Name } class="w-24 h-24 rounded-full object-cover flex-shrink-0"/>
-				} else {
-					<div class="w-24 h-24 rounded-full bg-gray-200 flex items-center justify-center text-gray-500 text-3xl font-semibold flex-shrink-0">
-						{ string([]rune(member.Name)[0:1]) }
-					</div>
-				}
-				<div>
-					<div class="flex items-center gap-2 flex-wrap">
-						<h1 class="text-2xl font-bold text-gray-900">{ member.Name }</h1>
-						@GovernmentLevelBadge(member.GovernmentLevel)
-					</div>
-					<p class={ "text-lg", PartyClass(member.Party) }>{ member.Party }</p>
-					<p class="text-gray-600">{ member.Riding } · { member.Province }</p>
-					if member.Role != "" {
-						<p class="text-sm text-gray-500 mt-1">{ member.Role }</p>
-					}
-					<div class="flex gap-4 mt-2">
-						if member.Email != "" {
-							<a href={ templ.SafeURL("mailto:" + member.Email) } class="text-sm text-blue-600 hover:underline">Email</a>
-						}
-						if member.Website != "" {
-							<a href={ templ.SafeURL(member.Website) } target="_blank" rel="noopener" class="text-sm text-blue-600 hover:underline">Website</a>
-						}
-					</div>
-				</div>
-			</div>
+			@MemberSummaryCard(member)
 
 			<!-- Stats -->
 			<div class="grid grid-cols-2 sm:grid-cols-4 gap-4">
@@ -199,4 +172,39 @@ templ MemberProfile(ps store.ParliamentStatus, member store.MemberRow, votes []s
 			</section>
 		</div>
 	}
+}
+
+// MemberSummaryCard renders the member header card (photo, name, party, riding,
+// contact links) in the same style used on the member detail page.
+templ MemberSummaryCard(member store.MemberRow) {
+<div class="surface-card p-6 flex items-start gap-6">
+if member.PhotoURL != "" {
+<img src={ member.PhotoURL } alt={ member.Name } class="w-24 h-24 rounded-full object-cover flex-shrink-0"/>
+} else {
+<div class="w-24 h-24 rounded-full bg-gray-200 flex items-center justify-center text-gray-500 text-3xl font-semibold flex-shrink-0">
+{ string([]rune(member.Name)[0:1]) }
+</div>
+}
+<div>
+<div class="flex items-center gap-2 flex-wrap">
+<h2 class="text-2xl font-bold text-gray-900">
+<a href={ templ.SafeURL("/members/" + member.ID) } class="hover:underline">{ member.Name }</a>
+</h2>
+@GovernmentLevelBadge(member.GovernmentLevel)
+</div>
+<p class={ "text-lg", PartyClass(member.Party) }>{ member.Party }</p>
+<p class="text-gray-600">{ member.Riding } · { member.Province }</p>
+if member.Role != "" {
+<p class="text-sm text-gray-500 mt-1">{ member.Role }</p>
+}
+<div class="flex gap-4 mt-2">
+if member.Email != "" {
+<a href={ templ.SafeURL("mailto:" + member.Email) } class="text-sm text-blue-600 hover:underline">Email</a>
+}
+if member.Website != "" {
+<a href={ templ.SafeURL(member.Website) } target="_blank" rel="noopener" class="text-sm text-blue-600 hover:underline">Website</a>
+}
+</div>
+</div>
+</div>
 }

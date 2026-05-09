@@ -173,7 +173,19 @@ func (s *Server) handleRiding(w http.ResponseWriter, r *http.Request) {
 		log.Printf("handleRiding: list provincial ridings: %v", err)
 	}
 
-	_ = templates.RidingLookup(ps, address, federalRep, provincialRep, lookupErr, s.riding.PlacesAPIKey(), isLoggedIn, federalRidings, provincialRidings).Render(r.Context(), w)
+	var federalMember, provincialMember store.MemberRow
+	if federalRep.LocalMemberID != "" {
+		if m, err := s.store.GetMember(federalRep.LocalMemberID); err == nil {
+			federalMember = m
+		}
+	}
+	if provincialRep.LocalMemberID != "" {
+		if m, err := s.store.GetMember(provincialRep.LocalMemberID); err == nil {
+			provincialMember = m
+		}
+	}
+
+	_ = templates.RidingLookup(ps, address, federalRep, provincialRep, federalMember, provincialMember, lookupErr, s.riding.PlacesAPIKey(), isLoggedIn, federalRidings, provincialRidings).Render(r.Context(), w)
 }
 
 func (s *Server) handleRidingPost(w http.ResponseWriter, r *http.Request) {
