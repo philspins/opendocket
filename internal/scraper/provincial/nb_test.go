@@ -80,3 +80,15 @@ func TestNewBrunswickDescriptionFromContext_PrefersSubstantiveMotionText(t *test
 		t.Fatalf("desc=%q; procedural boilerplate should be stripped", desc)
 	}
 }
+
+func TestNewBrunswickDescriptionFromContext_ExtractsBillNo(t *testing.T) {
+	text := `AN ACT TO AMEND THE MUNICIPALITIES ACT Bill No. 47 YEAS - 23`
+	matchStart := strings.Index(text, "YEAS")
+	desc := newBrunswickDescriptionFromContext(text, matchStart)
+	if !strings.Contains(desc, "47") {
+		t.Errorf("description %q should contain bill number 47", desc)
+	}
+	if !strings.Contains(desc, "Bill") {
+		t.Errorf("description %q should contain 'Bill' (not just the bare number fragment)", desc)
+	}
+}
