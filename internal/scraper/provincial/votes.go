@@ -376,6 +376,9 @@ var voteNamePrefixTokens = map[string]bool{
 var newBrunswickDescRecordedDivisionTailRe = regexp.MustCompile(`(?is)\bRECORDED\s+DIVISION\b.*$`)
 var newBrunswickDescBoilerplateRe = regexp.MustCompile(`(?is)\b(?:and\s+the\s+debate\s+being\s+ended|the\s+debate\s+being\s+ended|and\s+the\s+question\s+being\s+put|the\s+question\s+being\s+put|leave\s+was\s+granted\s+to\s+dispense\s+with\s+the\s+ten\s*-?\s*minute\s+time\s+allotted\s+for\s+the\s+ringing\s+of\s+the\s+bells|on\s+the\s+following\s+recorded\s+division)\b`)
 
+// billNoInContextRe matches "Bill No. X" or "Bill X" in provincial journal text.
+var billNoInContextRe = regexp.MustCompile(`(?i)\bBill\s+(?:No\.?\s*)?(\d+\w*)`)
+
 var splitUppercaseNameTokenRe = regexp.MustCompile(`\b([A-Z])\s+([A-Z][A-Z][A-Z''\-]*)\b`)
 
 func collapseSplitUppercaseNameTokens(text string) string {
@@ -479,6 +482,42 @@ func newBrunswickDescriptionFromContext(text string, matchStart int) string {
 	}
 
 	snippet = strings.TrimSpace(newBrunswickDescRecordedDivisionTailRe.ReplaceAllString(snippet, ""))
+
+	// Primary: look for "Bill No. X" in the context. Sentence-splitting on "." breaks
+	// "Bill No." into separate fragments, losing the bill number. Search directly first.
+	if m := billNoInContextRe.FindStringSubmatch(snippet); len(m) == 2 {
+		billNum := strings.ToUpper(strings.TrimSpace(m[1]))
+		if billNum != "" {
+			// Attempt to find an ALL-CAPS title in the 200 chars preceding the match.
+			matchPos := billNoInContextRe.FindStringIndex(snippet)
+			beforeBill := snippet
+			if matchPos != nil && matchPos[0] > 0 {
+				start := matchPos[0] - 200
+				if start < 0 {
+					start = 0
+				}
+				beforeBill = snippet[start:matchPos[0]]
+			}
+			words := strings.Fields(beforeBill)
+			var titleWords []string
+			for i := len(words) - 1; i >= 0; i-- {
+				w := words[i]
+				if w != strings.ToUpper(w) {
+					break
+				}
+				stripped := strings.Trim(w, `.,;:\/'"-`)
+				if stripped == "" {
+					break
+				}
+				titleWords = append([]string{w}, titleWords...)
+			}
+			if title := strings.TrimSpace(strings.Join(titleWords, " ")); title != "" {
+				return fmt.Sprintf("%s (Bill %s)", title, billNum)
+			}
+			return "Bill " + billNum
+		}
+	}
+
 	parts := strings.FieldsFunc(snippet, func(r rune) bool {
 		return r == '.' || r == ';' || r == ':'
 	})
