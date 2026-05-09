@@ -635,6 +635,7 @@ var peiJournalPageHeaderRe = regexp.MustCompile(`JOURNAL OF THE LEGISLATIVE ASSE
 var peiOctalEscapeRe = regexp.MustCompile(`\\(\d{3})`)
 var peiPremierRe = regexp.MustCompile(`(?i)Hon\.\s+Premier`)
 var peiDivisionBoilerplateRe = regexp.MustCompile(`(?i)^(?:and\s+the\s+question\s+being\s+put.*|the\s+question\s+being\s+put.*|hon\.\s+mr\.\s+speaker\s+put\s+the\s+question.*|motion\s+resolved.*|the\s+motion\s+was.*)$`)
+var peiBillNoInContextRe = regexp.MustCompile(`(?i)\bBill\s+No\.?\s*(\d+\w*)`)
 
 var peiTitlePrefixes = []string{
 	"Hon. Leader of the Opposition",
@@ -750,6 +751,49 @@ func parsePEIJournalDivisions(rawText, pdfURL string, legislature, session, star
 		divNum++
 	}
 	return results
+}
+
+// peiBillDescriptionFromContext returns "TITLE (Bill N)" for the last
+// "Bill No. N" match found in ctx, walking backward to collect the
+// all-uppercase title words that precede it. Returns "" if no match.
+func peiBillDescriptionFromContext(ctx string) string {
+	matches := peiBillNoInContextRe.FindAllStringSubmatchIndex(ctx, -1)
+	if len(matches) == 0 {
+		return ""
+	}
+	// Use the LAST match (handles omnibus sessions where multiple bills appear).
+	last := matches[len(matches)-1]
+	billNo := ctx[last[2]:last[3]] // capture group 1 = bill number
+
+	// Walk backward from the match start collecting all-uppercase words for the title.
+	before := ctx[:last[0]]
+	words := strings.Fields(before)
+	var titleWords []string
+	for i := len(words) - 1; i >= 0; i-- {
+		w := words[i]
+		// Stop at the first word that is not all-uppercase letters (allows hyphens).
+		if !isAllCaps(w) {
+			break
+		}
+		titleWords = append([]string{w}, titleWords...)
+	}
+	if len(titleWords) == 0 {
+		return fmt.Sprintf("Bill %s", billNo)
+	}
+	return fmt.Sprintf("%s (Bill %s)", strings.Join(titleWords, " "), billNo)
+}
+
+// isAllCaps reports whether s consists entirely of uppercase ASCII letters and hyphens.
+func isAllCaps(s string) bool {
+	if s == "" {
+		return false
+	}
+	for _, r := range s {
+		if r != '-' && (r < 'A' || r > 'Z') {
+			return false
+		}
+	}
+	return true
 }
 
 func extractPEIDivisionDescription(text string, triggerStart int) string {
