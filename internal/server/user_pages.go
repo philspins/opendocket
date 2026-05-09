@@ -157,6 +157,8 @@ func (s *Server) handleRiding(w http.ResponseWriter, r *http.Request) {
 			if isLoggedIn {
 				if _, saveErr := s.store.UpdateUserLocation(user.ID, result.FederalRidingID, result.ProvincialRidingID); saveErr != nil {
 					log.Printf("handleRiding save failed for user=%q: %v", user.ID, saveErr)
+				} else {
+					_ = s.store.CompleteTutorialActivity(user.ID, store.TutorialFindRiding)
 				}
 			}
 		}
@@ -195,6 +197,8 @@ func (s *Server) handleRidingPost(w http.ResponseWriter, r *http.Request) {
 	if user, ok := s.auth.SessionUser(r); ok {
 		if _, saveErr := s.store.UpdateUserLocation(user.ID, federalRiding, provincialRiding); saveErr != nil {
 			log.Printf("handleRidingPost save failed for user=%q: %v", user.ID, saveErr)
+		} else {
+			_ = s.store.CompleteTutorialActivity(user.ID, store.TutorialFindRiding)
 		}
 	}
 	http.Redirect(w, r, "/", http.StatusSeeOther)
@@ -236,6 +240,7 @@ func (s *Server) handleProfile(w http.ResponseWriter, r *http.Request) {
 				http.Error(w, "failed to save profile", http.StatusInternalServerError)
 				return
 			}
+			_ = s.store.CompleteTutorialActivity(user.ID, store.TutorialFindRiding)
 			s.setLocalRidingCookies(w, result.FederalRidingID, result.ProvincialRidingID)
 			http.Redirect(w, r, "/profile?updated=1", http.StatusSeeOther)
 			return
@@ -247,6 +252,7 @@ func (s *Server) handleProfile(w http.ResponseWriter, r *http.Request) {
 				http.Error(w, "failed to save profile", http.StatusInternalServerError)
 				return
 			}
+			_ = s.store.CompleteTutorialActivity(user.ID, store.TutorialFindRiding)
 			s.setLocalRidingCookies(w, federalRiding, provincialRiding)
 			http.Redirect(w, r, "/profile?updated=1", http.StatusSeeOther)
 			return

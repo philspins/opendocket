@@ -187,6 +187,12 @@ func Migrate(db *sql.DB) error {
 			created_at TEXT DEFAULT (strftime('%Y-%m-%dT%H:%M:%SZ', 'now')),
 			PRIMARY KEY (user_id, bill_id)
 		)`,
+		`CREATE TABLE IF NOT EXISTS user_tutorial_progress (
+			user_id      TEXT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+			activity     TEXT NOT NULL,
+			completed_at TEXT DEFAULT (strftime('%Y-%m-%dT%H:%M:%SZ', 'now')),
+			PRIMARY KEY (user_id, activity)
+		)`,
 		`CREATE INDEX IF NOT EXISTS idx_divisions_bill      ON divisions(bill_id)`,
 		`CREATE INDEX IF NOT EXISTS idx_member_votes_member ON member_votes(member_id)`,
 		`CREATE INDEX IF NOT EXISTS idx_bills_stage         ON bills(current_stage)`,
@@ -200,6 +206,7 @@ func Migrate(db *sql.DB) error {
 		`CREATE INDEX IF NOT EXISTS idx_user_cat_prefs_user  ON user_category_preferences(user_id)`,
 		`CREATE INDEX IF NOT EXISTS idx_user_bill_subs_user  ON user_bill_subscriptions(user_id)`,
 		`CREATE INDEX IF NOT EXISTS idx_user_bill_subs_bill  ON user_bill_subscriptions(bill_id)`,
+		`CREATE INDEX IF NOT EXISTS idx_user_tutorial_user   ON user_tutorial_progress(user_id)`,
 	}
 	for _, s := range stmts {
 		if _, err := db.Exec(s); err != nil {

@@ -92,6 +92,8 @@ func New(st *store.Store) *Server {
 	s.mux.HandleFunc("POST /api/subscribe-bill", s.handleSubscribeBill)
 	s.mux.HandleFunc("POST /api/log-submission", s.handleLogSubmission)
 	s.mux.HandleFunc("POST /profile/interests", s.handleProfileInterests)
+	s.mux.HandleFunc("GET /api/tutorial-progress", s.handleTutorialProgress)
+	s.mux.HandleFunc("POST /api/dismiss-tutorial", s.handleDismissTutorial)
 	s.auth.RegisterRoutes(s.mux)
 
 	return s
@@ -391,6 +393,7 @@ func (s *Server) handleBillDetail(w http.ResponseWriter, r *http.Request) {
 	var isSubscribed bool
 	if isAuthenticated {
 		isSubscribed, _ = s.store.IsUserSubscribedToBill(user.ID, id)
+		_ = s.store.CompleteTutorialActivity(user.ID, store.TutorialViewBill)
 	}
 	_ = templates.BillDetail(ps, bill, stages, divs, reactions, isAuthenticated, isSubscribed).Render(r.Context(), w)
 }
@@ -454,6 +457,9 @@ func (s *Server) handleMemberProfile(w http.ResponseWriter, r *http.Request) {
 	stats, _ := s.store.GetMemberStats(id)
 	catScores, _ := s.store.GetMemberCategoryScores(id)
 	missedVotes, _ := s.store.GetMissedVotes(id, 500)
+	if user, ok := s.auth.SessionUser(r); ok {
+		_ = s.store.CompleteTutorialActivity(user.ID, store.TutorialViewRep)
+	}
 	_ = templates.MemberProfile(ps, member, votes, stats, catScores, missedVotes).Render(r.Context(), w)
 }
 
@@ -518,6 +524,9 @@ func (s *Server) handleCompare(w http.ResponseWriter, r *http.Request) {
 		sharedVotes, err = s.store.GetSharedMemberVotes(m1.ID, m2.ID, 100)
 		if err != nil {
 			log.Printf("handleCompare: shared votes %q vs %q: %v", m1.ID, m2.ID, err)
+		}
+		if user, ok := s.auth.SessionUser(r); ok {
+			_ = s.store.CompleteTutorialActivity(user.ID, store.TutorialCompareRep)
 		}
 	}
 	if err := templates.CompareMPs(ps, members, m1, m2, level, province, party, provinces, parties, overlap, total, sharedVotes).Render(r.Context(), w); err != nil {
@@ -601,6 +610,7 @@ func (s *Server) handleReact(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, "failed to save reaction", http.StatusBadRequest)
 		return
 	}
+	_ = s.store.CompleteTutorialActivity(u.ID, store.TutorialReactBill)
 	http.Redirect(w, r, "/bills/"+billID, http.StatusSeeOther)
 }
 
@@ -675,6 +685,7 @@ func (s *Server) handleSubscribeBill(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, "failed to toggle subscription", http.StatusInternalServerError)
 		return
 	}
+	_ = s.store.CompleteTutorialActivity(u.ID, store.TutorialSubscribeBill)
 	http.Redirect(w, r, "/bills/"+billID, http.StatusSeeOther)
 }
 
@@ -693,9 +704,66 @@ func (s *Server) handleProfileInterests(w http.ResponseWriter, r *http.Request) 
 		http.Error(w, "failed to save preferences", http.StatusInternalServerError)
 		return
 	}
+	_ = s.store.CompleteTutorialActivity(user.ID, store.TutorialSaveInterests)
 	http.Redirect(w, r, "/profile?updated=1", http.StatusSeeOther)
 }
 
 func billInteractionRateKey(email string) string {
 	return "bill:react:" + strings.ToLower(strings.TrimSpace(email))
+}
+
+func (s *Server) handleTutorialProgress(w http.ResponseWriter, r *http.Request) {
+	user, ok := s.auth.SessionUser(r)
+	if !ok {
+		w.Header().Set("Content-Type", "application/json")
+		_, _ = w.Write([]byte(`{"dismissed":true,"doneCount":0,"total":0,"steps":[]}`))
+		return
+	}
+	tp, err := s.store.GetTutorialProgress(user.ID)
+	if err != nil {
+		http.Error(w, "internal error", http.StatusInternalServerError)
+		return
+	}
+	type stepJSON struct {
+		Key   string `json:"key"`
+		Label string `json:"label"`
+		Done  bool   `json:"done"`
+		URL   string `json:"url"`
+	}
+	doneCount := 0
+	steps := make([]stepJSON, 0, len(store.AllTutorialStepDefs))
+	for _, def := range store.AllTutorialStepDefs {
+		done := tp.Done[def.Key]
+		if done {
+			doneCount++
+		}
+		steps = append(steps, stepJSON{Key: def.Key, Label: def.Label, Done: done, URL: def.URL})
+	}
+	type respBody struct {
+		Dismissed bool       `json:"dismissed"`
+		DoneCount int        `json:"doneCount"`
+		Total     int        `json:"total"`
+		Steps     []stepJSON `json:"steps"`
+	}
+	w.Header().Set("Content-Type", "application/json")
+	_ = json.NewEncoder(w).Encode(respBody{
+		Dismissed: tp.Dismissed,
+		DoneCount: doneCount,
+		Total:     len(store.AllTutorialStepDefs),
+		Steps:     steps,
+	})
+}
+
+func (s *Server) handleDismissTutorial(w http.ResponseWriter, r *http.Request) {
+	user, ok := s.auth.SessionUser(r)
+	if !ok {
+		http.Error(w, "not authenticated", http.StatusUnauthorized)
+		return
+	}
+	if err := s.store.DismissTutorial(user.ID); err != nil {
+		http.Error(w, "internal error", http.StatusInternalServerError)
+		return
+	}
+	w.Header().Set("Content-Type", "application/json")
+	_, _ = w.Write([]byte(`{"ok":true}`))
 }

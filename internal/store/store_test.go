@@ -2004,3 +2004,76 @@ func TestAuthenticateOAuth_NotMarkingVerified(t *testing.T) {
 		t.Fatalf("expected email_verified=false when markEmailVerified=false")
 	}
 }
+
+func TestTutorialProgress(t *testing.T) {
+conn := tempDB(t)
+st := store.New(conn)
+
+u, err := st.UpsertUser("tutorial@example.com")
+if err != nil {
+t.Fatalf("UpsertUser: %v", err)
+}
+
+// Initially empty, not dismissed.
+tp, err := st.GetTutorialProgress(u.ID)
+if err != nil {
+t.Fatalf("GetTutorialProgress initial: %v", err)
+}
+if tp.Dismissed {
+t.Error("expected not dismissed initially")
+}
+if len(tp.Done) != 0 {
+t.Errorf("expected 0 done activities initially, got %d", len(tp.Done))
+}
+
+// Complete view_bill.
+if err := st.CompleteTutorialActivity(u.ID, store.TutorialViewBill); err != nil {
+t.Fatalf("CompleteTutorialActivity view_bill: %v", err)
+}
+// Idempotent — second call must not error.
+if err := st.CompleteTutorialActivity(u.ID, store.TutorialViewBill); err != nil {
+t.Fatalf("CompleteTutorialActivity view_bill idempotent: %v", err)
+}
+
+tp, err = st.GetTutorialProgress(u.ID)
+if err != nil {
+t.Fatalf("GetTutorialProgress after view_bill: %v", err)
+}
+if !tp.Done[store.TutorialViewBill] {
+t.Error("expected view_bill to be done")
+}
+if tp.Done[store.TutorialViewRep] {
+t.Error("expected view_rep not yet done")
+}
+if tp.Dismissed {
+t.Error("expected not dismissed after completing one activity")
+}
+
+// Complete all steps.
+for _, def := range store.AllTutorialStepDefs {
+if err := st.CompleteTutorialActivity(u.ID, def.Key); err != nil {
+t.Fatalf("CompleteTutorialActivity %q: %v", def.Key, err)
+}
+}
+tp, err = st.GetTutorialProgress(u.ID)
+if err != nil {
+t.Fatalf("GetTutorialProgress after all steps: %v", err)
+}
+for _, def := range store.AllTutorialStepDefs {
+if !tp.Done[def.Key] {
+t.Errorf("expected %q done after completing all steps", def.Key)
+}
+}
+
+// Dismiss.
+if err := st.DismissTutorial(u.ID); err != nil {
+t.Fatalf("DismissTutorial: %v", err)
+}
+tp, err = st.GetTutorialProgress(u.ID)
+if err != nil {
+t.Fatalf("GetTutorialProgress after dismiss: %v", err)
+}
+if !tp.Dismissed {
+t.Error("expected dismissed after DismissTutorial")
+}
+}
