@@ -10,7 +10,7 @@ templ RidingLookup(ps store.ParliamentStatus, address string, federalRep opennor
 	@Layout("Find My Representatives", ps) {
 		<div class="space-y-6">
 			<h1 class="text-2xl font-bold text-gray-900">Find Your Representatives</h1>
-			<p class="section-lead max-w-2xl">Enter your address to find your federal MP, provincial MLA/MPP/MNA, and local representatives.</p>
+			<p class="section-lead">Enter your address to find your federal MP, provincial MLA/MPP/MNA, and local representatives.</p>
 
 			<form method="GET" action="/riding" class="flex flex-wrap gap-3 items-center">
 				<input type="text" id="riding-address-input" name="address" value={ address }
@@ -60,35 +60,37 @@ templ RidingLookup(ps store.ParliamentStatus, address string, federalRep opennor
 								{{
 									provName, provRole := homeRepresentativeNameRole(provincialRep, "Your current provincial representative", "Provincial representative")
 								}}
-								<div class="surface-card overflow-hidden">
-									<div class="px-5 py-3 text-sm" style={ partyBannerStyle(provParty) }>
-										<div class="flex items-start justify-between gap-3">
-											<h3 class="text-base font-bold leading-tight">
-												if strings.TrimSpace(provincialRep.LocalMemberID) != "" {
-													<a href={ templ.SafeURL("/members/" + strings.TrimSpace(provincialRep.LocalMemberID)) } class="hover:underline">{ provName }</a>
-												} else {
-													{ provName }
+								<div class="h-full p-4 sm:p-8 lg:p-[12.5%]">
+									<div class="surface-card overflow-hidden h-full">
+										<div class="px-5 py-3 text-sm" style={ partyBannerStyle(provParty) }>
+											<div class="flex items-start justify-between gap-3">
+												<h3 class="text-base font-bold leading-tight">
+													if strings.TrimSpace(provincialRep.LocalMemberID) != "" {
+														<a href={ templ.SafeURL("/members/" + strings.TrimSpace(provincialRep.LocalMemberID)) } class="hover:underline">{ provName }</a>
+													} else {
+														{ provName }
+													}
+													if provRole != "" {
+														{ " (" + provRole + ")" }
+													}
+												</h3>
+												if strings.TrimSpace(provincialRep.DistrictName) != "" {
+													<h4 class="text-sm font-semibold text-right leading-tight">{ strings.TrimSpace(provincialRep.DistrictName) }</h4>
 												}
-												if provRole != "" {
-													{ " (" + provRole + ")" }
-												}
-											</h3>
-											if strings.TrimSpace(provincialRep.DistrictName) != "" {
-												<h4 class="text-sm font-semibold text-right leading-tight">{ strings.TrimSpace(provincialRep.DistrictName) }</h4>
+											</div>
+											if strings.TrimSpace(provParty) != "" {
+												<h4 class="mt-1 text-sm font-semibold leading-tight">{ strings.TrimSpace(provParty) }</h4>
 											}
 										</div>
-										if strings.TrimSpace(provParty) != "" {
-											<h4 class="mt-1 text-sm font-semibold leading-tight">{ strings.TrimSpace(provParty) }</h4>
-										}
-									</div>
-									<div class="p-4">
-										<div class="flex flex-wrap gap-3">
-											if provincialRep.Email != "" {
-												<a href={ safeMailtoURL(provincialRep.Email) } class="text-xs text-blue-600 hover:underline">Email</a>
-											}
-											if provincialRep.URL != "" {
-												<a href={ safeExternalURL(provincialRep.URL) } target="_blank" rel="noopener" class="text-xs text-blue-600 hover:underline">Profile</a>
-											}
+										<div class="p-4">
+											<div class="flex flex-wrap gap-3">
+												if provincialRep.Email != "" {
+													<a href={ safeMailtoURL(provincialRep.Email) } class="text-xs text-blue-600 hover:underline">Email</a>
+												}
+												if provincialRep.URL != "" {
+													<a href={ safeExternalURL(provincialRep.URL) } target="_blank" rel="noopener" class="text-xs text-blue-600 hover:underline">Profile</a>
+												}
+											</div>
 										</div>
 									</div>
 								</div>
@@ -118,35 +120,37 @@ templ RidingLookup(ps store.ParliamentStatus, address string, federalRep opennor
 								{{
 									fedName, fedRole := homeRepresentativeNameRole(federalRep, "Your current federal representative", "Federal representative")
 								}}
-								<div class="surface-card overflow-hidden">
-									<div class="px-5 py-3 text-sm" style={ partyBannerStyle(fedParty) }>
-										<div class="flex items-start justify-between gap-3">
-											<h3 class="text-base font-bold leading-tight">
-												if strings.TrimSpace(federalRep.LocalMemberID) != "" {
-													<a href={ templ.SafeURL("/members/" + strings.TrimSpace(federalRep.LocalMemberID)) } class="hover:underline">{ fedName }</a>
-												} else {
-													{ fedName }
+								<div class="h-full p-4 sm:p-8 lg:p-[12.5%]">
+									<div class="surface-card overflow-hidden h-full">
+										<div class="px-5 py-3 text-sm" style={ partyBannerStyle(fedParty) }>
+											<div class="flex items-start justify-between gap-3">
+												<h3 class="text-base font-bold leading-tight">
+													if strings.TrimSpace(federalRep.LocalMemberID) != "" {
+														<a href={ templ.SafeURL("/members/" + strings.TrimSpace(federalRep.LocalMemberID)) } class="hover:underline">{ fedName }</a>
+													} else {
+														{ fedName }
+													}
+													if fedRole != "" {
+														{ " (" + fedRole + ")" }
+													}
+												</h3>
+												if strings.TrimSpace(federalRep.DistrictName) != "" {
+													<h4 class="text-sm font-semibold text-right leading-tight">{ strings.TrimSpace(federalRep.DistrictName) }</h4>
 												}
-												if fedRole != "" {
-													{ " (" + fedRole + ")" }
-												}
-											</h3>
-											if strings.TrimSpace(federalRep.DistrictName) != "" {
-												<h4 class="text-sm font-semibold text-right leading-tight">{ strings.TrimSpace(federalRep.DistrictName) }</h4>
+											</div>
+											if strings.TrimSpace(fedParty) != "" {
+												<h4 class="mt-1 text-sm font-semibold leading-tight">{ strings.TrimSpace(fedParty) }</h4>
 											}
 										</div>
-										if strings.TrimSpace(fedParty) != "" {
-											<h4 class="mt-1 text-sm font-semibold leading-tight">{ strings.TrimSpace(fedParty) }</h4>
-										}
-									</div>
-									<div class="p-4">
-										<div class="flex flex-wrap gap-3">
-											if federalRep.Email != "" {
-												<a href={ safeMailtoURL(federalRep.Email) } class="text-xs text-blue-600 hover:underline">Email</a>
-											}
-											if federalRep.URL != "" {
-												<a href={ safeExternalURL(federalRep.URL) } target="_blank" rel="noopener" class="text-xs text-blue-600 hover:underline">Profile</a>
-											}
+										<div class="p-4">
+											<div class="flex flex-wrap gap-3">
+												if federalRep.Email != "" {
+													<a href={ safeMailtoURL(federalRep.Email) } class="text-xs text-blue-600 hover:underline">Email</a>
+												}
+												if federalRep.URL != "" {
+													<a href={ safeExternalURL(federalRep.URL) } target="_blank" rel="noopener" class="text-xs text-blue-600 hover:underline">Profile</a>
+												}
+											</div>
 										</div>
 									</div>
 								</div>
