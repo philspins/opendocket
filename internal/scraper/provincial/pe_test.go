@@ -454,7 +454,7 @@ func TestParsePEIJournalDivisions_ExtractsBillNameFromReading(t *testing.T) {
 	if !strings.Contains(desc, "21") {
 		t.Errorf("description %q should contain bill number 21", desc)
 	}
-	if !strings.Contains(strings.ToUpper(desc), "COMBATIVE") {
+	if !strings.Contains(desc, "COMBATIVE") {
 		t.Errorf("description %q should contain bill title COMBATIVE", desc)
 	}
 	if strings.EqualFold(desc, "recorded division") {
@@ -487,6 +487,9 @@ func TestParsePEIJournalDivisions_UsesLastBillInOmnibusContext(t *testing.T) {
 	if !strings.Contains(desc, "76") {
 		t.Errorf("description %q should contain bill number 76 (last bill)", desc)
 	}
+	if !strings.Contains(desc, "EMPLOYMENT STANDARDS ACT") {
+		t.Errorf("description %q should contain bill title EMPLOYMENT STANDARDS ACT", desc)
+	}
 }
 
 func TestParsePEIJournalDivisions_FallsBackForProceduralVote(t *testing.T) {
@@ -498,6 +501,9 @@ func TestParsePEIJournalDivisions_FallsBackForProceduralVote(t *testing.T) {
 	desc := divs[0].Division.Description
 	if desc == "" {
 		t.Errorf("description should not be empty for procedural vote")
+	}
+	if strings.EqualFold(desc, "recorded division") {
+		t.Errorf("description should not be generic %q for procedural vote", desc)
 	}
 }
 
