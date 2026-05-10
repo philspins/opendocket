@@ -5,6 +5,7 @@ import (
 	"net/http"
 	"regexp"
 	"sort"
+	"strconv"
 	"strings"
 	"time"
 
@@ -17,17 +18,32 @@ import (
 
 var novaScotiaBillLinkRe = regexp.MustCompile(`(?i)(bills-statutes|bill|legislative-business)`)
 
+// nsHansardSessionIndexRe matches hrefs to NS Hansard session index pages, e.g.
+// /legislative-business/hansard-debates/assembly-66-session-1
+var nsHansardSessionIndexRe = regexp.MustCompile(`(?i)/hansard-debates/assembly-(\d+)-session-(\d+)`)
+
 // nsVotesPDFLinkRe matches NS journals and Hansard PDF links under the default
 // files path.
 var nsVotesPDFLinkRe = regexp.MustCompile(`(?i)/sites/default/files/pdfs/proceedings/(?:journals|hansard)/[^"'\s]+\.pdf(?:\?[^"'\s]*)?`)
 
-// nsHansardDayPageRe matches hrefs to individual Hansard day pages, e.g.
-// "/legislative-business/hansard-debates/assembly-65-session-1/house_26apr09"
-var nsHansardDayPageRe = regexp.MustCompile(`(?i)/hansard-debates/assembly-\d+-session-\d+/house_\w+`)
+// nsHansardDayPageRe matches hrefs to individual Hansard day pages.
+// Handles the modern format (assembly 64+):
+//
+//	/assembly-65-session-1/house_26apr09
+//
+// and the assembly 61–63 transitional format:
+//
+//	/assembly-61-session-1/61_1_house_09nov04.htm
+//	/61e-assemblee-1e-session/61_1_house_10mar25
+var nsHansardDayPageRe = regexp.MustCompile(`(?i)/hansard-debates/[^/]+/(?:\d+_\d+_)?house_\w+`)
 
 // nsHansardSlugRe extracts the date components from a Hansard day-page slug:
 // "house_26apr09" -> year="26", month="apr", day="09"
 var nsHansardSlugRe = regexp.MustCompile(`(?i)house_(\d{2})([a-z]{3})(\d{1,2})`)
+
+// nsDoubleSpaceRe matches two or more consecutive spaces, used to split the
+// two-column paragraph vote format used by assembly 61–63.
+var nsDoubleSpaceRe = regexp.MustCompile(`  +`)
 
 var nsMonthAbbr = map[string]string{
 	"jan": "01", "feb": "02", "mar": "03", "apr": "04",
@@ -67,6 +83,45 @@ func nsDateFromHansardURL(rawURL string) string {
 	year := "20" + m[1]
 	day := fmt.Sprintf("%02s", m[3])
 	return fmt.Sprintf("%s-%s-%s", year, month, day)
+}
+
+type nsSessionRef struct{ leg, sess int }
+
+// discoverNovaScotiaAllSessions fetches the main NS Hansard index and returns
+// all assembly/session pairs found in links, sorted oldest-first.
+func discoverNovaScotiaAllSessions(client *http.Client) []nsSessionRef {
+	const indexURL = "https://nslegislature.ca/legislative-business/hansard-debates"
+	doc, err := fetchDoc(indexURL, client)
+	if err != nil {
+		clog.Infof("[ns-votes] all-sittings: could not load session index: %v", err)
+		return nil
+	}
+	seen := map[nsSessionRef]bool{}
+	var sessions []nsSessionRef
+	doc.Find("a[href]").Each(func(_ int, a *goquery.Selection) {
+		href := normalizeHref(a.AttrOr("href", ""))
+		m := nsHansardSessionIndexRe.FindStringSubmatch(href)
+		if len(m) != 3 {
+			return
+		}
+		leg, _ := strconv.Atoi(m[1])
+		sess, _ := strconv.Atoi(m[2])
+		if leg == 0 || sess == 0 {
+			return
+		}
+		s := nsSessionRef{leg, sess}
+		if !seen[s] {
+			seen[s] = true
+			sessions = append(sessions, s)
+		}
+	})
+	sort.Slice(sessions, func(i, j int) bool {
+		if sessions[i].leg != sessions[j].leg {
+			return sessions[i].leg < sessions[j].leg
+		}
+		return sessions[i].sess < sessions[j].sess
+	})
+	return sessions
 }
 
 // crawlNovaScotiaVotesFromHTML fetches the NS Hansard session index page,
@@ -120,9 +175,20 @@ func crawlNovaScotiaVotesFromHTML(sessionURL string, legislature, session int, c
 	return results, len(dayURLs), nil
 }
 
-// parseNSHansardHTMLPage finds all YEAS/NAYS vote tables on a single Hansard
-// day page and returns one ProvincialDivisionResult per table.
+// parseNSHansardHTMLPage finds all YEAS/NAYS vote divisions on a single
+// Hansard day page and returns one ProvincialDivisionResult per division.
+// It tries the modern table format (assembly 64+) first, then falls back to
+// the paragraph format used by assemblies 61–63.
 func parseNSHansardHTMLPage(doc *goquery.Document, pageURL string, legislature, session, startDivNum int) []ProvincialDivisionResult {
+	if results := parseNSHansardTableVotes(doc, pageURL, legislature, session, startDivNum); len(results) > 0 {
+		return results
+	}
+	return parseNSHansardParagraphVotes(doc, pageURL, legislature, session, startDivNum)
+}
+
+// parseNSHansardTableVotes handles the modern <table class="vote"> format
+// introduced in assembly 64 (2023+).
+func parseNSHansardTableVotes(doc *goquery.Document, pageURL string, legislature, session, startDivNum int) []ProvincialDivisionResult {
 	date := nsDateFromHansardURL(pageURL)
 	if date == "" {
 		date = utils.TodayISO()
@@ -190,6 +256,137 @@ func parseNSHansardHTMLPage(doc *goquery.Document, pageURL string, legislature, 
 		divNum++
 	})
 	return results
+}
+
+// parseNSHansardParagraphVotes handles the paragraph-based vote format used by
+// assemblies 61–63 (2009–2021), where each vote section is bracketed by a bold
+// "YEAS  NAYS" header paragraph and a "THE CLERK: For, N, Against, M." line.
+// Each intervening paragraph encodes one row in a two-column layout, with the
+// yea and nay names separated by two or more spaces.
+func parseNSHansardParagraphVotes(doc *goquery.Document, pageURL string, legislature, session, startDivNum int) []ProvincialDivisionResult {
+	date := nsDateFromHansardURL(pageURL)
+	if date == "" {
+		date = utils.TodayISO()
+	}
+
+	var results []ProvincialDivisionResult
+	divNum := startDivNum
+
+	doc.Find("b").Each(func(_ int, b *goquery.Selection) {
+		upper := strings.ToUpper(strings.TrimSpace(b.Text()))
+		if !strings.Contains(upper, "YEAS") || !strings.Contains(upper, "NAYS") {
+			return
+		}
+		headerP := b.Parent()
+		if !headerP.Is("p") {
+			return
+		}
+
+		var yeaNames, nayNames []string
+		for sib := headerP.Next(); sib.Length() > 0; sib = sib.Next() {
+			if !sib.Is("p") {
+				continue
+			}
+			text := sib.Text()
+			upperText := strings.ToUpper(strings.TrimSpace(text))
+			if strings.HasPrefix(upperText, "THE CLERK") {
+				break
+			}
+			trimmed := strings.TrimSpace(text)
+			if trimmed == "" || strings.HasPrefix(trimmed, "[") {
+				continue
+			}
+			yea, nay := parseNSParagraphVoteRow(trimmed)
+			if yea != "" {
+				yeaNames = append(yeaNames, yea)
+			}
+			if nay != "" {
+				nayNames = append(nayNames, nay)
+			}
+		}
+
+		if len(yeaNames) == 0 && len(nayNames) == 0 {
+			return
+		}
+
+		divID := ProvincialDivisionID("ns", legislature, session, divNum, date)
+		var votes []ProvincialMemberVote
+		for _, name := range yeaNames {
+			votes = append(votes, ProvincialMemberVote{DivisionID: divID, MemberName: name, Vote: "Yea"})
+		}
+		for _, name := range nayNames {
+			votes = append(votes, ProvincialMemberVote{DivisionID: divID, MemberName: name, Vote: "Nay"})
+		}
+
+		voteResult := "Carried"
+		if len(nayNames) > len(yeaNames) {
+			voteResult = "Negatived"
+		}
+
+		desc := nsDescriptionForVoteTable(headerP)
+		if desc == "" {
+			desc = "Recorded division"
+		}
+
+		results = append(results, ProvincialDivisionResult{
+			Division: DivisionStub{
+				ID: divID, Parliament: legislature, Session: session,
+				Number: divNum, Date: date, Description: desc,
+				Yeas: len(yeaNames), Nays: len(nayNames), Result: voteResult,
+				Chamber: "nova_scotia", DetailURL: pageURL,
+				LastScraped: utils.NowISO(),
+			},
+			Votes: votes,
+		})
+		divNum++
+	})
+	return results
+}
+
+// parseNSParagraphVoteRow splits one paragraph vote row into yea and nay names.
+// The paragraph uses two or more consecutive spaces as a column separator; each
+// name component within a column is separated by a single space.  "Hon." title
+// tokens have a double space after them in the source, so they appear as a
+// separate token in the split result.
+//
+// Examples:
+//
+//	"  Hon.  Alice Smith  Bob Jones"  → yea="Hon. Alice Smith", nay="Bob Jones"
+//	"  Rafah  DiCostanzo  Tim Houston" → yea="Rafah DiCostanzo", nay="Tim Houston"
+//	"  Bill  Horne  Karla  MacFarlane" → yea="Bill Horne",       nay="Karla MacFarlane"
+//	"  Hon.  Iain Rankin"              → yea="Hon. Iain Rankin",  nay=""
+func parseNSParagraphVoteRow(text string) (yea, nay string) {
+	parts := nsDoubleSpaceRe.Split(text, -1)
+	var tokens []string
+	for _, p := range parts {
+		if p = strings.TrimSpace(p); p != "" {
+			tokens = append(tokens, p)
+		}
+	}
+	switch len(tokens) {
+	case 0:
+		return "", ""
+	case 1:
+		return tokens[0], ""
+	case 2:
+		if strings.EqualFold(tokens[0], "Hon.") {
+			return "Hon. " + tokens[1], ""
+		}
+		return tokens[0] + " " + tokens[1], ""
+	case 3:
+		if strings.EqualFold(tokens[0], "Hon.") {
+			return "Hon. " + tokens[1], tokens[2]
+		}
+		return tokens[0] + " " + tokens[1], tokens[2]
+	case 4:
+		if strings.EqualFold(tokens[0], "Hon.") {
+			return "Hon. " + tokens[1] + " " + tokens[2], tokens[3]
+		}
+		return tokens[0] + " " + tokens[1], tokens[2] + " " + tokens[3]
+	default:
+		mid := len(tokens) / 2
+		return strings.Join(tokens[:mid], " "), strings.Join(tokens[mid:], " ")
+	}
 }
 
 // nsDescriptionForVoteTable walks backwards through the siblings of the vote
@@ -269,7 +466,7 @@ func discoverNovaScotiaVotePDFLinks(doc *goquery.Document, baseURL string, legis
 // crawlNovaScotiaVotesFromPDF fetches the NS Hansard session page for the
 // requested legislature/session and parses each discovered PDF. Older journal
 // listings remain as a fallback when no Hansard PDFs are exposed.
-func crawlNovaScotiaVotesFromPDF(indexURL string, legislature, session int, client *http.Client) ([]ProvincialDivisionResult, error) {
+func crawlNovaScotiaVotesFromPDF(indexURL string, legislature, session int, client *http.Client, allSittings bool) ([]ProvincialDivisionResult, error) {
 	sessionURL := novaScotiaHansardSessionURL(indexURL, legislature, session)
 	clog.Debugf("[ns-votes] fetching hansard session index for pdf: %s", sessionURL)
 	indexDoc, err := fetchDoc(sessionURL, client)
@@ -298,7 +495,11 @@ func crawlNovaScotiaVotesFromPDF(indexURL string, legislature, session int, clie
 			sessionURL = indexURL
 		}
 		if len(pdfLinks) == 0 {
-			clog.Infof("[ns-votes] no vote PDFs discovered for legislature=%d session=%d", legislature, session)
+			if allSittings {
+				clog.Debugf("[ns-votes] no vote PDFs for assembly %d session %d", legislature, session)
+			} else {
+				clog.Infof("[ns-votes] no vote PDFs discovered for legislature=%d session=%d", legislature, session)
+			}
 			return nil, nil
 		}
 	}
@@ -334,28 +535,52 @@ func crawlNovaScotiaVotesFromPDF(indexURL string, legislature, session int, clie
 // crawlNovaScotiaVotes tries the HTML Hansard day-page approach first (current
 // sessions publish individual HTML pages with structured vote tables), then
 // falls back to the PDF approach for older sessions that only have journal PDFs.
-func crawlNovaScotiaVotes(indexURL string, legislature, session int, client *http.Client) ([]ProvincialDivisionResult, error) {
-	if indexURL == "" {
-		indexURL = novaScotiaHansardSessionURL("", legislature, session)
-	}
+// When allSittings is true it discovers all available assembly/session pairs and
+// crawls each one instead of only the auto-detected current session.
+func crawlNovaScotiaVotes(indexURL string, legislature, session int, client *http.Client, allSittings bool) ([]ProvincialDivisionResult, error) {
 	if client == nil {
 		client = utils.NewHTTPClientWithTimeout(45 * time.Second)
 	}
 
-	sessionURL := novaScotiaHansardSessionURL(indexURL, legislature, session)
-	results, dayPages, err := crawlNovaScotiaVotesFromHTML(sessionURL, legislature, session, client)
-	if err != nil {
-		clog.Infof("[ns-votes] html approach failed: %v; falling back to pdf", err)
-	}
-	if dayPages > 0 {
-		return results, nil
+	crawlOneSession := func(url string, leg, sess int) ([]ProvincialDivisionResult, error) {
+		if url == "" {
+			url = novaScotiaHansardSessionURL("", leg, sess)
+		}
+		sessionURL := novaScotiaHansardSessionURL(url, leg, sess)
+		results, dayPages, err := crawlNovaScotiaVotesFromHTML(sessionURL, leg, sess, client)
+		if err != nil {
+			clog.Infof("[ns-votes] html approach failed: %v; falling back to pdf", err)
+		}
+		if dayPages > 0 {
+			return results, nil
+		}
+		if allSittings {
+			clog.Debugf("[ns-votes] no html day pages for assembly %d session %d; trying pdf", leg, sess)
+		} else {
+			clog.Infof("[ns-votes] no html day pages found; falling back to pdf approach")
+		}
+		return crawlNovaScotiaVotesFromPDF(url, leg, sess, client, allSittings)
 	}
 
-	clog.Infof("[ns-votes] no html day pages found; falling back to pdf approach")
-	return crawlNovaScotiaVotesFromPDF(indexURL, legislature, session, client)
+	if !allSittings {
+		return crawlOneSession(indexURL, legislature, session)
+	}
+
+	sessions := discoverNovaScotiaAllSessions(client)
+	var allResults []ProvincialDivisionResult
+	for _, s := range sessions {
+		clog.Infof("[ns-votes] all-sittings: crawling assembly %d session %d", s.leg, s.sess)
+		results, err := crawlOneSession("", s.leg, s.sess)
+		if err != nil {
+			clog.Infof("[ns-votes] all-sittings: assembly %d session %d: %v", s.leg, s.sess, err)
+			continue
+		}
+		allResults = append(allResults, results...)
+	}
+	return allResults, nil
 }
 
 // CrawlNovaScotiaVotes crawls Nova Scotia votes/proceedings pages.
 func CrawlNovaScotiaVotes(indexURL string, legislature, session int, client *http.Client) ([]ProvincialDivisionResult, error) {
-	return crawlNovaScotiaVotes(indexURL, legislature, session, client)
+	return crawlNovaScotiaVotes(indexURL, legislature, session, client, false)
 }

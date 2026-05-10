@@ -386,6 +386,44 @@ var manitobaVotesLinkRe = regexp.MustCompile(
 // and session components), so the session number must also end with an ordinal.
 var mbSessionPageLinkRe = regexp.MustCompile(`(?i)\d+(?:rd|th|st|nd)/\d+(?:rd|th|st|nd)_\d+(?:rd|th|st|nd)\.html`)
 
+// mbSessionLegislatureRe extracts the legislature number from a resolved MB session
+// page URL, e.g. ".../43rd/43rd_3rd.html" → capture group 1 = "43".
+var mbSessionLegislatureRe = regexp.MustCompile(`(?i)/(\d+)(?:rd|th|st|nd)/\d+(?:rd|th|st|nd)_\d+(?:rd|th|st|nd)\.html`)
+
+// filterMBSessionsToRecentLegislatures retains only session links belonging to
+// the n most recently numbered legislatures discovered in the link set.
+func filterMBSessionsToRecentLegislatures(links []string, n int) []string {
+	legNums := map[int]bool{}
+	for _, link := range links {
+		if m := mbSessionLegislatureRe.FindStringSubmatch(link); len(m) == 2 {
+			if leg, _ := strconv.Atoi(m[1]); leg > 0 {
+				legNums[leg] = true
+			}
+		}
+	}
+	legs := make([]int, 0, len(legNums))
+	for leg := range legNums {
+		legs = append(legs, leg)
+	}
+	sort.Ints(legs)
+	if len(legs) > n {
+		legs = legs[len(legs)-n:]
+	}
+	keep := make(map[int]bool, len(legs))
+	for _, leg := range legs {
+		keep[leg] = true
+	}
+	filtered := make([]string, 0, len(links))
+	for _, link := range links {
+		if m := mbSessionLegislatureRe.FindStringSubmatch(link); len(m) == 2 {
+			if leg, _ := strconv.Atoi(m[1]); keep[leg] {
+				filtered = append(filtered, link)
+			}
+		}
+	}
+	return filtered
+}
+
 func manitobaSessionPageMatches(href string, legislature, session int) bool {
 	if href == "" {
 		return false
@@ -426,7 +464,7 @@ func crawlManitobaVotesFromPDF(indexURL string, legislature, session int, client
 			matchingSessionLinks = append(matchingSessionLinks, full)
 		}
 	})
-	if len(matchingSessionLinks) > 0 {
+	if !allSittings && len(matchingSessionLinks) > 0 {
 		sessionLinks = matchingSessionLinks
 	}
 	if len(sessionLinks) == 0 {
@@ -434,8 +472,8 @@ func crawlManitobaVotesFromPDF(indexURL string, legislature, session int, client
 		return crawlGenericProvincialVotesWithMatcher(indexURL, "mb", "manitoba", legislature, session, client, manitobaVotesLinkRe)
 	}
 	sort.Strings(sessionLinks)
-	if len(sessionLinks) > 6 {
-		sessionLinks = sessionLinks[len(sessionLinks)-6:]
+	if !allSittings {
+		sessionLinks = filterMBSessionsToRecentLegislatures(sessionLinks, 3)
 	}
 
 	// Level 2: for each session page, collect PDF links.

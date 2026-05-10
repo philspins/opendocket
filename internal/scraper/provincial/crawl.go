@@ -658,8 +658,10 @@ func crawlBillsForSource(src ProvincialSource, legislature, session int, client 
 // for all non-special provinces (i.e. excluding ON and SK which use their own multi-step
 // logic in CrawlProvinceSource).
 func crawlDivisionsForSource(src ProvincialSource, legislature, session int, client *http.Client) ([]ProvincialDivisionResult, error) {
-	// For provinces with PDF-window limits, call the internal function directly so
-	// src.AllSittings can bypass the recent-only cap.
+	// Call internal functions directly so src.AllSittings can be forwarded.
+	// MB/NB/AB/NL: AllSittings bypasses a per-PDF window cap within the current session.
+	// NS: AllSittings iterates over all discovered assembly/session pairs.
+	// BC: AllSittings enumerates all parliaments/sessions via the LIMS GraphQL API.
 	switch src.Code {
 	case "mb":
 		return crawlManitobaVotes(src.VotesURL, legislature, session, client, src.AllSittings)
@@ -669,6 +671,10 @@ func crawlDivisionsForSource(src ProvincialSource, legislature, session int, cli
 		return crawlAlbertaVotes(src.VotesURL, legislature, session, client, src.AllSittings)
 	case "nl":
 		return crawlNewfoundlandAndLabradorVotes(src.VotesURL, legislature, session, client, src.AllSittings)
+	case "ns":
+		return crawlNovaScotiaVotes(src.VotesURL, legislature, session, client, src.AllSittings)
+	case "bc":
+		return crawlBritishColumbiaVotes(src.VotesURL, legislature, session, client, src.AllSittings)
 	}
 	if crawler, ok := provinceCrawlers[src.Code]; ok && crawler != nil {
 		if votes, err := crawler.CrawlVotes(src.VotesURL, legislature, session, client); err != nil || votes != nil {
