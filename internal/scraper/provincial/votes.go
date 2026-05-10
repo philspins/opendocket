@@ -379,6 +379,114 @@ var newBrunswickDescBoilerplateRe = regexp.MustCompile(`(?is)\b(?:and\s+the\s+de
 // billNoInContextRe matches "Bill No. X" or "Bill X" in provincial journal text.
 var billNoInContextRe = regexp.MustCompile(`(?i)\bBill\s+(?:No\.?\s*)?(\d+\w*)`)
 
+// ── Parliamentary motion classifier ──────────────────────────────────────────
+
+// motionReadingRe matches "read a [first|second|third] time".
+var motionReadingRe = regexp.MustCompile(`(?i)\bread\s+a\s+(first|second|third)\s+time`)
+
+// motionNotNowReadRe matches the "be not now read a Nth time" amendment pattern
+// (must be checked before motionReadingRe to avoid misclassifying amendments).
+var motionNotNowReadRe = regexp.MustCompile(`(?i)\bnot\s+now\s+read\s+a\s+(first|second|third)\s+time`)
+
+// motionForReadingRe matches "motion for Nth reading"; fo\s*r handles the common
+// OCR artifact "fo r" (space inserted mid-word by some PDF extractors).
+var motionForReadingRe = regexp.MustCompile(`(?i)\bmotion\s+fo\s*r\s+(first|second|third)\s+reading`)
+
+// motionBillPassesRe matches "the said Bill does pass" and similar passage phrases.
+var motionBillPassesRe = regexp.MustCompile(`(?i)\b(?:said\s+)?[Bb]ill\b.{0,40}?\bpass(?:es)?\b`)
+
+// motionAddressReplyRe matches "Address in Reply" (throne speech response motions).
+var motionAddressReplyRe = regexp.MustCompile(`(?i)\bAddress\s+in\s+Reply\b`)
+
+// motionCommitteeWholeRe matches "Committee of the Whole".
+var motionCommitteeWholeRe = regexp.MustCompile(`(?i)\bCommittee\s+of\s+the\s+Whole\b`)
+
+// motionBudgetRe matches Manitoba budget approval votes.
+var motionBudgetRe = regexp.MustCompile(`(?i)\bbudgetary\s+policy\b`)
+
+// motionDescJournalHeaderRe matches journal date-header lines that leak into the
+// context window (e.g. "Monday , November 3 , 2025 424").
+var motionDescJournalHeaderRe = regexp.MustCompile(`(?i)^(?:monday|tuesday|wednesday|thursday|friday|saturday|sunday)\s*,`)
+
+// motionDescVoterLeakRe matches "single initial + ALL_CAPS surname" voter-name
+// patterns that sometimes bleed in from an adjacent division's name list.
+var motionDescVoterLeakRe = regexp.MustCompile(`^[A-Z]\s+[A-Z]{2,}`)
+
+var readingOrdinalLabels = map[string]string{
+	"first": "First", "second": "Second", "third": "Third",
+}
+
+// classifyParliamentaryMotion returns a compact description for standard
+// parliamentary motion types: bill readings, amendments to readings, committee
+// of the whole, budget votes, and address-in-reply motions. Returns "" when no
+// pattern matches and the caller should fall back to sentence extraction.
+//
+// Handles common PDF artifacts: backslash line-break characters (Manitoba
+// journals) and OCR spacing splits such as "fo r" instead of "for".
+func classifyParliamentaryMotion(snippet string) string {
+	// Normalize backslash PDF line-break artifacts before pattern matching.
+	snippet = strings.ReplaceAll(snippet, `\`, " ")
+	snippet = strings.Join(strings.Fields(snippet), " ")
+
+	billNum := ""
+	if bm := billNoInContextRe.FindStringSubmatch(snippet); len(bm) == 2 {
+		billNum = strings.ToUpper(strings.TrimSpace(bm[1]))
+	}
+	billSuffix := ""
+	if billNum != "" {
+		billSuffix = ": Bill " + billNum
+	}
+
+	lower := strings.ToLower(snippet)
+
+	// "not now read a Nth time" → amendment to that reading.
+	// Must come before motionReadingRe to avoid matching the reading itself.
+	if m := motionNotNowReadRe.FindStringSubmatch(snippet); len(m) == 2 {
+		ord := readingOrdinalLabels[strings.ToLower(m[1])]
+		return "Amendment to " + ord + " Reading" + billSuffix
+	}
+
+	// "motion for Nth reading" → amended reading or plain reading depending on context.
+	if m := motionForReadingRe.FindStringSubmatch(snippet); len(m) == 2 {
+		ord := readingOrdinalLabels[strings.ToLower(m[1])]
+		if strings.Contains(lower, "amend") || strings.Contains(lower, "not now") {
+			return "Amendment to " + ord + " Reading" + billSuffix
+		}
+		return ord + " Reading" + billSuffix
+	}
+
+	// "read a Nth time" → bill reading (plain).
+	if m := motionReadingRe.FindStringSubmatch(snippet); len(m) == 2 {
+		ord := readingOrdinalLabels[strings.ToLower(m[1])]
+		return ord + " Reading" + billSuffix
+	}
+
+	// "the said Bill does pass" → third reading / passage.
+	if motionBillPassesRe.MatchString(snippet) {
+		return "Third Reading" + billSuffix
+	}
+
+	// "Address in Reply" motions.
+	if motionAddressReplyRe.MatchString(snippet) {
+		if strings.Contains(lower, "amend") {
+			return "Address in Reply: Amendment"
+		}
+		return "Address in Reply to the Throne Speech"
+	}
+
+	// "Committee of the Whole".
+	if motionCommitteeWholeRe.MatchString(snippet) {
+		return "Committee of the Whole"
+	}
+
+	// Manitoba budget approval votes.
+	if motionBudgetRe.MatchString(snippet) {
+		return "Budget Vote"
+	}
+
+	return ""
+}
+
 var splitUppercaseNameTokenRe = regexp.MustCompile(`\b([A-Z])\s+([A-Z][A-Z][A-Z''\-]*)\b`)
 
 func collapseSplitUppercaseNameTokens(text string) string {
@@ -476,12 +584,25 @@ func newBrunswickDescriptionFromContext(text string, matchStart int) string {
 	if start < 0 {
 		start = 0
 	}
-	snippet := strings.TrimSpace(strings.Join(strings.Fields(strings.ReplaceAll(text[start:matchStart], "\u00a0", " ")), " "))
+	raw := strings.ReplaceAll(text[start:matchStart], "\u00a0", " ")
+	// Normalize PDF backslash line-break artifacts (common in MB journals) before
+	// all downstream processing so classifiers and bill-number extraction both see
+	// clean text.
+	raw = strings.ReplaceAll(raw, `\`, " ")
+	snippet := strings.TrimSpace(strings.Join(strings.Fields(raw), " "))
 	if snippet == "" {
 		return ""
 	}
 
 	snippet = strings.TrimSpace(newBrunswickDescRecordedDivisionTailRe.ReplaceAllString(snippet, ""))
+
+	// Parliamentary motion classifier: recognises reading stages, amendments,
+	// committee of the whole, budget votes, and address-in-reply motions and
+	// returns a compact label (e.g. "Second Reading: Bill 5") without requiring
+	// sentence-splitting of verbose motion text.
+	if classified := classifyParliamentaryMotion(snippet); classified != "" {
+		return classified
+	}
 
 	// Primary: look for "Bill No. X" in the context. Sentence-splitting on "." breaks
 	// "Bill No." into separate fragments, losing the bill number. Search directly first.
@@ -532,6 +653,20 @@ func newBrunswickDescriptionFromContext(text string, matchStart int) string {
 		// Skip all-caps name lists (voter names from adjacent divisions that leak
 		// into the context window when two divisions appear on the same PDF page).
 		if isAllCapsWordList(desc) {
+			continue
+		}
+		// Skip sentence fragments that begin with a lowercase letter \u2014 these are
+		// tails of sentences split on an earlier period (e.g. "r Honour" from "Your Honour").
+		if len(desc) > 0 && desc[0] >= 'a' && desc[0] <= 'z' {
+			continue
+		}
+		// Skip journal page-header lines (e.g. "Monday , November 3 , 2025 424").
+		if motionDescJournalHeaderRe.MatchString(desc) {
+			continue
+		}
+		// Skip leaked voter-name patterns: a single capital initial followed by an
+		// ALL_CAPS surname (e.g. "E WASKO and Hon") from an adjacent division's list.
+		if motionDescVoterLeakRe.MatchString(desc) {
 			continue
 		}
 		if len(desc) > 220 {

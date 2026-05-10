@@ -193,3 +193,140 @@ func TestNewBrunswickDescriptionFromContext_FiltersMovedByHonFragment(t *testing
 		t.Errorf("desc=%q; truncated 'moved by Hon' attribution should be filtered", desc)
 	}
 }
+
+// ── Parliamentary motion classifier tests ────────────────────────────────────
+
+func TestClassifyParliamentaryMotion(t *testing.T) {
+	cases := []struct {
+		snippet string
+		want    string
+	}{
+		// Bill readings
+		{"THAT Bill No. 10 be now read a first time", "First Reading: Bill 10"},
+		{"THAT the Bill be now read a first time", "First Reading"},
+		{"THAT Bill No. 5, An Act Respecting X, be now read a second time", "Second Reading: Bill 5"},
+		{"THAT Bill No. 3 be now read a third time and passed", "Third Reading: Bill 3"},
+		// Amendments to readings — "not now read"
+		{"THAT Bill No. 3 be not now read a second time but that the order for second reading be discharged", "Amendment to Second Reading: Bill 3"},
+		{"Bill No. 13, An Act to Amend the Executive Council Act, be not now read a second time", "Amendment to Second Reading: Bill 13"},
+		// Amendments to readings — "motion for Nth reading be amended"
+		{"THAT the motion for second reading be amended by deleting all of Bill No. 13", "Amendment to Second Reading: Bill 13"},
+		{"THAT the motion for third reading of Bill No. 7 be amended", "Amendment to Third Reading: Bill 7"},
+		// OCR artifact: "fo r" instead of "for"
+		{"THAT the motion fo r third reading be amended", "Amendment to Third Reading"},
+		// Bill passes (third reading passage)
+		{"that the said Bill does pass", "Third Reading"},
+		{"THAT Bill No. 10 be now read a third time and that the said Bill does pass", "Third Reading: Bill 10"},
+		// Address in Reply
+		{"That the Motion for an Address in Reply to the Speech from the Throne be amended as follows", "Address in Reply: Amendment"},
+		{"THAT the Address in Reply to the Throne Speech be adopted", "Address in Reply to the Throne Speech"},
+		// Committee of the Whole
+		{"THAT the House resolve itself into a Committee of the Whole", "Committee of the Whole"},
+		// Budget vote (Manitoba-specific)
+		{"That this House approves in general the budgetary policy of the government", "Budget Vote"},
+		// Manitoba backslash PDF artifacts
+		{"THAT Bill No. 210\\ The Indigenous Veterans Day Act\\ be now read a Second Time", "Second Reading: Bill 210"},
+		// No match — generic text falls through
+		{"Some unclassifiable procedural text", ""},
+		{"THAT the proposed amendment be accepted", ""},
+	}
+	for _, c := range cases {
+		got := classifyParliamentaryMotion(c.snippet)
+		if got != c.want {
+			t.Errorf("classifyParliamentaryMotion(%q)=%q, want %q", c.snippet, got, c.want)
+		}
+	}
+}
+
+func TestNewBrunswickDescriptionFromContext_ClassifiesReadings(t *testing.T) {
+	cases := []struct {
+		label string
+		text  string
+		want  string
+	}{
+		{
+			"second reading",
+			"THAT Bill No. 5, An Act to Amend X, be now read a second time. And the question being put: YEAS - 25",
+			"Second Reading: Bill 5",
+		},
+		{
+			"amendment to second reading",
+			"THAT Bill No. 3, An Act to Amend The Residential Tenancies Act, be not now read a second time but that the order for second reading be discharged. YEAS - 15",
+			"Amendment to Second Reading: Bill 3",
+		},
+		{
+			"amendment motion with 'fo r' OCR artifact",
+			"THAT the motion fo r third reading be amended by deleting all Bill No. 7. YEAS - 17",
+			"Amendment to Third Reading: Bill 7",
+		},
+		{
+			"bill passes",
+			"that the said Bill does pass. YEAS - 29",
+			"Third Reading",
+		},
+	}
+	for _, c := range cases {
+		matchStart := strings.Index(c.text, "YEAS")
+		if matchStart < 0 {
+			matchStart = len(c.text)
+		}
+		got := newBrunswickDescriptionFromContext(c.text, matchStart)
+		if got != c.want {
+			t.Errorf("[%s] newBrunswickDescriptionFromContext()=%q, want %q", c.label, got, c.want)
+		}
+	}
+}
+
+func TestNewBrunswickDescriptionFromContext_ManitobaBackslashArtifacts(t *testing.T) {
+	// MB journal PDFs use backslash as a line-break separator. These must be
+	// stripped before classification so reading-stage patterns still fire.
+	text := `THAT Bill No. 210\ The Indigenous Veterans Day Act Commemoration of Days\ be now read a Second Time. AYE`
+	matchStart := strings.Index(text, "AYE")
+	got := newBrunswickDescriptionFromContext(text, matchStart)
+	if got != "Second Reading: Bill 210" {
+		t.Errorf("got=%q, want %q", got, "Second Reading: Bill 210")
+	}
+}
+
+func TestNewBrunswickDescriptionFromContext_FiltersLowercaseFragment(t *testing.T) {
+	// A sentence fragment starting with a lowercase letter is a tail of a split
+	// sentence (e.g. "r Honour" from "Your Honour...") and must be skipped.
+	text := `Your Honour for the gracious speech. r Honour has addressed us. YEAS - 27`
+	matchStart := strings.Index(text, "YEAS")
+	got := newBrunswickDescriptionFromContext(text, matchStart)
+	if strings.HasPrefix(got, "r ") {
+		t.Errorf("got=%q; lowercase-start fragment should be filtered", got)
+	}
+}
+
+func TestNewBrunswickDescriptionFromContext_FiltersJournalDateHeader(t *testing.T) {
+	// Journal page headers like "Monday , November 3 , 2025 424" must not be
+	// returned as descriptions when they leak into the context window.
+	text := `Monday , November 3 , 2025 424 YEAS - 21`
+	matchStart := strings.Index(text, "YEAS")
+	got := newBrunswickDescriptionFromContext(text, matchStart)
+	if strings.Contains(strings.ToLower(got), "monday") {
+		t.Errorf("got=%q; journal date header should be filtered", got)
+	}
+}
+
+func TestNewBrunswickDescriptionFromContext_FiltersVoterNameLeak(t *testing.T) {
+	// When a previous division's voter list leaks into the context window, a
+	// "single initial + ALL_CAPS surname" token must not be returned as description.
+	text := `E WASKO and Hon. Some other context here. YEAS - 20`
+	matchStart := strings.Index(text, "YEAS")
+	got := newBrunswickDescriptionFromContext(text, matchStart)
+	if strings.HasPrefix(got, "E ") {
+		t.Errorf("got=%q; voter initial+surname leak should be filtered", got)
+	}
+}
+
+func TestNewBrunswickDescriptionFromContext_ManitobaBudgetVote(t *testing.T) {
+	// MB journals include budget votes with "budgetary policy" language.
+	text := `That this House approves in general the budgetary policy of the government having been read. AYE`
+	matchStart := strings.Index(text, "AYE")
+	got := newBrunswickDescriptionFromContext(text, matchStart)
+	if got != "Budget Vote" {
+		t.Errorf("got=%q, want %q", got, "Budget Vote")
+	}
+}
