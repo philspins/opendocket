@@ -71,6 +71,31 @@ func TestParseManitobaAyeNayDivisions_CurrentLayout(t *testing.T) {
 	}
 }
 
+func TestParseManitobaAyeNayDivisions_BillDescriptionAcrossAdjacentDivisions(t *testing.T) {
+	// Reproduces the real-world case where two divisions appear on the same PDF page:
+	// the second division's AYE marker is preceded by the first division's NAY voter
+	// names (filling the 1200-char default window).  The bill description
+	// ("THAT Bill (No. 5)...") is more than 1200 chars back from the second AYE,
+	// so the wide-context search (3000 chars) must find it.
+	// The NAY voter names must NOT appear as the second division's description.
+	firstNAYNames := strings.Repeat("BALCAEN BYRAM COOK EWASKO GUENTER HIEBERT JOHNSON KHAN KING NARTH ", 6) // ~600 chars
+	text := `THAT Bill (No. 5) – The Accessibility for Manitobans Amendment Act/Loi modifiant la Loi sur l'accessibilite pour les Manitobains, be now read a Third Time and passed. And the Question being put. It was agreed to, on the following division: AYE ASAGWARA BLASHKO BRAR BUSHIE CABLE ..................................... 33 NAY ` +
+		firstNAYNames + `....20 And the Question being put on the next motion. It was agreed to, on the following division: AYE SMITH JONES BROWN .....3 NAY WILSON ....1`
+
+	divs := ParseManitobaAyeNayDivisionsForTest(text, "https://example.com/votes_test.pdf", 43, 3, 1, "2026-04-09")
+	if len(divs) < 2 {
+		t.Fatalf("len(divs)=%d, want >=2", len(divs))
+	}
+	// First division: description must reference the bill.
+	if !strings.Contains(divs[0].Division.Description, "Bill (No. 5)") {
+		t.Errorf("div[0].description=%q; expected Bill (No. 5)", divs[0].Division.Description)
+	}
+	// Second division: all-caps NAY voter names must NOT be the description.
+	if strings.Contains(divs[1].Division.Description, "BALCAEN") || strings.Contains(divs[1].Division.Description, "EWASKO") {
+		t.Errorf("div[1].description=%q; voter names from adjacent division should not appear as description", divs[1].Division.Description)
+	}
+}
+
 func TestParseManitobaAyeNayDivisions_LiveNoParensBillFormat(t *testing.T) {
 	text := `Pursuant to sub-rule 24(7), the division on the proposed motion of MLA LAMOUREUX was deferred to take place today at 11:55 a.m. THAT Bill No. 232 The Autism Strategy Act/Loi sur la strategie sur l'autisme, be now read a Second Time and be referred to a Committee of this House. And the Question being put. It was agreed to, on the following division: AYE BALCAEN BEREZA BLASHKO BRAR BUSHIE BYRAM CABLE COMPTON COOK CORBETT CROSS DELA CRUZ DEVGAN EWASKO GUENTER HIEBERT JOHNSON KENNEDY KHAN KING KOSTYSHYN LAMOUREUX MALOWAY MARCELINO MOROZ MOSES MOYES NARTH NESBITT OXENHAM PERCHOTTE REDHEAD ROBBINS SALA SANDHU SCHMIDT SCHOTT SCHULER SIMARD SMITH STONE WASYLIW WHARTON WIEBE WOWCHUK ..................................... 46 NAY ......................................................... 0`
 	divs := ParseManitobaAyeNayDivisionsForTest(text, "https://example.com/votes_031.pdf", 43, 3, 1, "2026-03-19")

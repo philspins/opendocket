@@ -38,7 +38,7 @@ func CrawlNewBrunswickBills(indexURL string, legislature, session int, client *h
 
 // ── New Brunswick votes ───────────────────────────────────────────────────────
 
-func crawlNewBrunswickVotesFromPDF(indexURL string, legislature, session int, client *http.Client) ([]ProvincialDivisionResult, error) {
+func crawlNewBrunswickVotesFromPDF(indexURL string, legislature, session int, client *http.Client, allSittings bool) ([]ProvincialDivisionResult, error) {
 	indexDoc, err := fetchDoc(indexURL, client)
 	if err != nil {
 		return nil, err
@@ -67,7 +67,7 @@ func crawlNewBrunswickVotesFromPDF(indexURL string, legislature, session int, cl
 	}
 
 	sort.Strings(pdfLinks)
-	if len(pdfLinks) > 60 {
+	if !allSittings && len(pdfLinks) > 60 {
 		pdfLinks = pdfLinks[len(pdfLinks)-60:]
 	}
 	if len(pdfLinks) == 0 {
@@ -111,9 +111,6 @@ func discoverNewBrunswickJournalSessionLinks(doc *goquery.Document, baseURL stri
 		links = append(links, full)
 	})
 	sort.Strings(links)
-	if len(links) > 6 {
-		links = links[len(links)-6:]
-	}
 	return links
 }
 
@@ -295,20 +292,20 @@ func ParseNewBrunswickPDFDivisionsForTest(text, detailURL string, legislature, s
 	return parseNewBrunswickPDFDivisions(text, detailURL, legislature, session, startDivisionNumber, date)
 }
 
-// CrawlNewBrunswickVotes crawls NB journals/votes pages.
-func crawlNewBrunswickVotes(indexURL string, legislature, session int, client *http.Client) ([]ProvincialDivisionResult, error) {
+// crawlNewBrunswickVotes crawls NB journals/votes pages.
+func crawlNewBrunswickVotes(indexURL string, legislature, session int, client *http.Client, allSittings bool) ([]ProvincialDivisionResult, error) {
 	if indexURL == "" {
 		indexURL = "https://www.legnb.ca/en/house-business/journals"
 	}
 	if client == nil {
 		client = utils.NewHTTPClient()
 	}
-	return crawlNewBrunswickVotesFromPDF(indexURL, legislature, session, client)
+	return crawlNewBrunswickVotesFromPDF(indexURL, legislature, session, client, allSittings)
 }
 
 // CrawlNewBrunswickVotes crawls New Brunswick votes/proceedings pages.
 func CrawlNewBrunswickVotes(indexURL string, legislature, session int, client *http.Client) ([]ProvincialDivisionResult, error) {
-	return crawlNewBrunswickVotes(indexURL, legislature, session, client)
+	return crawlNewBrunswickVotes(indexURL, legislature, session, client, false)
 }
 
 // parseNewBrunswickVoteNames extracts names from NB-style vote blocks (Hon. Mr./Ms. prefix format).

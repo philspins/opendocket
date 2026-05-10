@@ -397,7 +397,7 @@ func manitobaSessionPageMatches(href string, legislature, session int) bool {
 // crawlManitobaVotesFromPDF performs a two-level crawl:
 //
 //	votes_proceedings.html → 43rd/43rd_3rd.html → 3rd/votes_NNN.pdf → parsePDFDivisionsYeasNays
-func crawlManitobaVotesFromPDF(indexURL string, legislature, session int, client *http.Client) ([]ProvincialDivisionResult, error) {
+func crawlManitobaVotesFromPDF(indexURL string, legislature, session int, client *http.Client, allSittings bool) ([]ProvincialDivisionResult, error) {
 	if client == nil {
 		client = utils.NewHTTPClient()
 	}
@@ -462,7 +462,7 @@ func crawlManitobaVotesFromPDF(indexURL string, legislature, session int, client
 	}
 
 	sort.Strings(pdfLinks)
-	if len(pdfLinks) > 80 {
+	if !allSittings && len(pdfLinks) > 80 {
 		pdfLinks = pdfLinks[len(pdfLinks)-80:]
 	}
 	if len(pdfLinks) == 0 {
@@ -556,6 +556,18 @@ func extractManitobaDivisionDescription(text string, markerStart int) string {
 	if matches := mbMotionDescriptionRe.FindAllStringSubmatch(context, -1); len(matches) > 0 {
 		return strings.TrimSpace(matches[len(matches)-1][1])
 	}
+	// The bill motion may be further back when a full AYE/NAY block from the
+	// previous division falls between the THAT clause and this division's AYE.
+	wideStart := markerStart - 3000
+	if wideStart < 0 {
+		wideStart = 0
+	}
+	if wideStart < start {
+		wideCtx := strings.TrimSpace(strings.Join(strings.Fields(strings.ReplaceAll(text[wideStart:markerStart], "\u00a0", " ")), " "))
+		if matches := mbMotionDescriptionRe.FindAllStringSubmatch(wideCtx, -1); len(matches) > 0 {
+			return strings.TrimSpace(matches[len(matches)-1][1])
+		}
+	}
 	return newBrunswickDescriptionFromContext(text, markerStart)
 }
 
@@ -569,14 +581,14 @@ func ParseManitobaAyeNayDivisionsForTest(text, detailURL string, legislature, se
 // (e.g. 43rd/43rd_3rd.html) → per-day PDF (e.g. 3rd/votes_041.pdf).
 // Each PDF is parsed for YEAS/NAYS recorded divisions using a format
 // adapted from the New Brunswick journal parser.
-func crawlManitobaVotes(indexURL string, legislature, session int, client *http.Client) ([]ProvincialDivisionResult, error) {
+func crawlManitobaVotes(indexURL string, legislature, session int, client *http.Client, allSittings bool) ([]ProvincialDivisionResult, error) {
 	if indexURL == "" {
 		indexURL = "https://www.gov.mb.ca/legislature/business/votes_proceedings.html"
 	}
-	return crawlManitobaVotesFromPDF(indexURL, legislature, session, client)
+	return crawlManitobaVotesFromPDF(indexURL, legislature, session, client, allSittings)
 }
 
 // CrawlManitobaVotes crawls Manitoba votes/proceedings pages.
 func CrawlManitobaVotes(indexURL string, legislature, session int, client *http.Client) ([]ProvincialDivisionResult, error) {
-	return crawlManitobaVotes(indexURL, legislature, session, client)
+	return crawlManitobaVotes(indexURL, legislature, session, client, false)
 }
