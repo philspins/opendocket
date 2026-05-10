@@ -1,6 +1,8 @@
 package provincial
 
 import (
+	"crypto/tls"
+	"crypto/x509"
 	"encoding/json"
 	"fmt"
 	"io"
@@ -16,6 +18,97 @@ import (
 	"github.com/philspins/opendocket/internal/clog"
 	"github.com/philspins/opendocket/internal/utils"
 )
+
+// ── Quebec TLS client ─────────────────────────────────────────────────────────
+
+// sectigoIntermediatePEM is the Sectigo Public Server Authentication CA OV R40
+// intermediate certificate. assnat.qc.ca's server omits it from the TLS
+// handshake, so Go's x509 verifier can't build a chain to a trusted root.
+// Valid until 2040-05-13. Fetched via AIA from the leaf cert.
+const sectigoIntermediatePEM = `-----BEGIN CERTIFICATE-----
+MIIGOzCCBCOgAwIBAgIRAJtQo9lL5MczAhJFS8xoc3gwDQYJKoZIhvcNAQEMBQAw
+XzELMAkGA1UEBhMCR0IxGDAWBgNVBAoTD1NlY3RpZ28gTGltaXRlZDE2MDQGA1UE
+AxMtU2VjdGlnbyBQdWJsaWMgU2VydmVyIEF1dGhlbnRpY2F0aW9uIFJvb3QgUjQ2
+MB4XDTI1MDUxNDAwMDAwMFoXDTQwMDUxMzIzNTk1OVowYDELMAkGA1UEBhMCR0Ix
+GDAWBgNVBAoTD1NlY3RpZ28gTGltaXRlZDE3MDUGA1UEAxMuU2VjdGlnbyBQdWJs
+aWMgU2VydmVyIEF1dGhlbnRpY2F0aW9uIENBIE9WIFI0MDCCAaIwDQYJKoZIhvcN
+AQEBBQADggGPADCCAYoCggGBAIlSHqpFAFB5FVW5J1XfsOxTmd5YQvl3LTnrYYVf
+eoamvgK7A71WHHX4RXMFelolbXULkHL2NwTGKHIiykTQTqnvSRaU0NAWGw/zTSbw
+VK6TN2tw5Lhys2PF+nGJTXkii5fqTchwesB0Il/94vkbbvNIEN3i/4RoRDpIAqRP
+SINzKOwhKrZ5yejAVM5gS0bOi8yn5j4c74PPEmr+qJ8rp04d9BEnXKGYQNk069f1
+KTwlSgvc0n0ZmloYp6LUomjBYiX53jSYJAsmacshPUw5VZ6ti/tlVmTeq9yi0ICe
+XJhStXMmH8zFut4hr3G77JTT1swJF+w0VnwMIhVuQKDmIpVmuJvgBsKB3ffS94C+
+SilLXyWFt+zr7KMFKWg3ElsQRpJzqUYfeKZKQ04RIjBNf+eScSUebEpwV6tcf4mw
+5tDisbAjgyn1ST5WlascokKYW93RMv6NinELJ5WEsO/J7OC8rw34H4YhyMJfUe68
+ZmPaF6Q72NzBaoxpPROtUPn6CQIDAQABo4IBbzCCAWswHwYDVR0jBBgwFoAUVnNY
+ZJX5khqwEioEYnmhQBWIIUkwHQYDVR0OBBYEFHviSaFgtLvoQubGp1QRHGFkU1XR
+MA4GA1UdDwEB/wQEAwIBhjASBgNVHRMBAf8ECDAGAQH/AgEAMBMGA1UdJQQMMAoG
+CCsGAQUFBwMBMBMGA1UdIAQMMAowCAYGZ4EMAQICMFQGA1UdHwRNMEswSaBHoEWG
+Q2h0dHA6Ly9jcmwuc2VjdGlnby5jb20vU2VjdGlnb1B1YmxpY1NlcnZlckF1dGhl
+bnRpY2F0aW9uUm9vdFI0Ni5jcmwwgYQGCCsGAQUFBwEBBHgwdjBPBggrBgEFBQcw
+AoZDaHR0cDovL2NydC5zZWN0aWdvLmNvbS9TZWN0aWdvUHVibGljU2VydmVyQXV0
+aGVudGljYXRpb25Sb290UjQ2LnA3YzAjBggrBgEFBQcwAYYXaHR0cDovL29jc3Au
+c2VjdGlnby5jb20wDQYJKoZIhvcNAQEMBQADggIBAFAufRwhEW91VWsDvjejAhWg
+drPqDVSh7gNeo40fI+V2dT557ABemJ7/NnzylJvjX5bYeToiUGI+MladTJQL4aOB
+glG2hfQXOT++PM9eM8+gztEzCoNdqe1phQA64DqulrabuzMUNQfUqTZJlswiGh3L
+XZXyrxodS+G2duhPhuWIQTfIZHSSYjiFMsuZHFyjm+plHQDVhK7BI3fSrtFVny0q
+gpolbiha1TuaCo6P7/7l5j54HBOLO7byq8uc9D83I9mW+ZLN9ZaC82maxdmvXWln
+Ubc8BUClomt9iIxNLmwE3w9bp+0hFVHc+Ud6AI5ZFeTDQ+f6HNpDY26GXFAx48Sg
+z+/+jDfGIDLhZ9cI8jGy2m+AR9T+K9JVszzyXrZI6P6VZGgHh8V+tZ5NDWG5yLLW
+N+9pKKmkY4tpQ8Gmb26dnbdD+x+I7Y6S4Cc9HcstpM5v+wKt/JJly9eU31GHucfg
+cd+G1b2BFuN5p0mLHh6t5R9MZG3xG3GEqNYSM5049FDOl5ZaMGRqk0uN31obMJ8w
+mAzRNWgEm28ebPhbVgfCmcCxn06xdoZ8G1AkeSWwVzbH05tEK5ly2pWJ5QSzIW/c
+Joxchdy1k8eXj0Eu0yaqlKZDh95Tlhuq37ZbFWwzynqUIvAYKjI8PQwIIR8EoOx8
+M2A5O6N9rci7TeBnWdo+
+-----END CERTIFICATE-----`
+
+type qcTransport struct {
+	base http.RoundTripper
+}
+
+func (t *qcTransport) RoundTrip(req *http.Request) (*http.Response, error) {
+	clone := req.Clone(req.Context())
+	clone.Header.Set("User-Agent", utils.AppUserAgent)
+	if clone.Header.Get("Accept") == "" {
+		clone.Header.Set("Accept", "text/html,application/xhtml+xml,application/xml;q=0.9,application/json,*/*;q=0.8")
+	}
+	return t.base.RoundTrip(clone)
+}
+
+func newQCHTTPClient(timeout time.Duration) *http.Client {
+	pool, err := x509.SystemCertPool()
+	if err != nil {
+		pool = x509.NewCertPool()
+	}
+	pool.AppendCertsFromPEM([]byte(sectigoIntermediatePEM))
+	base := http.DefaultTransport.(*http.Transport).Clone()
+	base.TLSClientConfig = &tls.Config{RootCAs: pool}
+	return &http.Client{
+		Timeout:   timeout,
+		Transport: &qcTransport{base: base},
+	}
+}
+
+// NewQCHTTPClient creates an HTTP client that includes the Sectigo intermediate
+// CA certificate which assnat.qc.ca omits from its TLS handshake. Use this
+// whenever fetching from assnat.qc.ca outside the provincial crawler.
+func NewQCHTTPClient(timeout time.Duration) *http.Client {
+	return newQCHTTPClient(timeout)
+}
+
+// qcSourceClient returns a QC-specific HTTP client that includes the Sectigo
+// intermediate CA, which assnat.qc.ca omits from its TLS handshake.
+// For local/test URLs the original client is returned unchanged.
+func qcSourceClient(indexURL string, client *http.Client) *http.Client {
+	if strings.HasPrefix(indexURL, "http://127.0.0.1") || strings.HasPrefix(indexURL, "http://localhost") {
+		return client
+	}
+	timeout := 15 * time.Second
+	if client != nil && client.Timeout > 0 {
+		timeout = client.Timeout
+	}
+	return newQCHTTPClient(timeout)
+}
 
 // ── Quebec regexps ────────────────────────────────────────────────────────────
 
@@ -214,7 +307,7 @@ func crawlQuebecVotes(indexURL string, legislature, session int, client *http.Cl
 		indexURL = "https://www.assnat.qc.ca/en/travaux-parlementaires/registre-des-votes/index.html"
 	}
 	if client == nil {
-		client = utils.NewHTTPClient()
+		client = newQCHTTPClient(15 * time.Second)
 	}
 
 	indexDoc, err := fetchDoc(indexURL, client)

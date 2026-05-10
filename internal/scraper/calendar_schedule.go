@@ -77,6 +77,16 @@ func CrawlAndPersistLegislatureCalendars(conn *sql.DB, client *http.Client) erro
 func crawlLegislatureCalendarDates(client *http.Client, jurisdiction, url string) ([]string, error) {
 	year := time.Now().UTC().Year()
 
+	// assnat.qc.ca omits its intermediate CA from the TLS handshake; use the
+	// QC-specific client that embeds it.
+	if jurisdiction == "provincial-QC" {
+		timeout := 15 * time.Second
+		if client != nil && client.Timeout > 0 {
+			timeout = client.Timeout
+		}
+		client = provincial.NewQCHTTPClient(timeout)
+	}
+
 	// Jurisdictions that need custom fetching (multiple pages or dynamically constructed URLs).
 	switch jurisdiction {
 	case "provincial-NS":

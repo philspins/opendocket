@@ -1,10 +1,14 @@
 package scraper
 
 import (
+	"fmt"
 	"image"
 	"image/color"
+	"net/http"
+	"net/http/httptest"
 	"sort"
 	"strings"
+	"sync/atomic"
 	"testing"
 	"time"
 )
@@ -245,5 +249,88 @@ func TestCluster1D_FailsWithZeroClusters(t *testing.T) {
 	_, ok := cluster1D([]float64{1.0, 2.0, 3.0}, 0)
 	if ok {
 		t.Fatal("expected cluster1D to fail with k=0")
+	}
+}
+
+// ── QC calendar TLS client tests ──────────────────────────────────────────────
+
+// countingTransport records how many requests it handled so tests can verify
+// whether the original client was bypassed (QC) or used (other jurisdictions).
+type countingTransport struct {
+	count atomic.Int32
+	base  http.RoundTripper
+}
+
+func (t *countingTransport) RoundTrip(req *http.Request) (*http.Response, error) {
+	t.count.Add(1)
+	return t.base.RoundTrip(req)
+}
+
+// TestCrawlLegislatureCalendarDates_QC_DoesNotUsePassedClient verifies that
+// crawlLegislatureCalendarDates replaces the caller's client with a QC-specific
+// one for "provincial-QC". The passed transport must never be invoked.
+func TestCrawlLegislatureCalendarDates_QC_DoesNotUsePassedClient(t *testing.T) {
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		fmt.Fprint(w, "not a pdf")
+	}))
+	defer srv.Close()
+
+	tracker := &countingTransport{base: srv.Client().Transport}
+	passedClient := &http.Client{Transport: tracker}
+
+	// crawlLegislatureCalendarDates will fail to parse a PDF, but that's fine —
+	// we only care that the passed transport was never called.
+	_, _ = crawlLegislatureCalendarDates(passedClient, "provincial-QC", srv.URL)
+
+	if n := tracker.count.Load(); n != 0 {
+		t.Errorf("passed client transport was called %d time(s); expected 0 for provincial-QC", n)
+	}
+}
+
+// TestCrawlLegislatureCalendarDates_NonQC_UsesPassedClient is the mirror test:
+// non-QC jurisdictions must use the caller's client unchanged.
+func TestCrawlLegislatureCalendarDates_NonQC_UsesPassedClient(t *testing.T) {
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		fmt.Fprint(w, "2026-09-15")
+	}))
+	defer srv.Close()
+
+	tracker := &countingTransport{base: srv.Client().Transport}
+	passedClient := &http.Client{Transport: tracker}
+
+	// Use a non-QC jurisdiction that goes through the generic date-extraction path.
+	_, _ = crawlLegislatureCalendarDates(passedClient, "provincial-AB", srv.URL)
+
+	if n := tracker.count.Load(); n == 0 {
+		t.Error("passed client transport was never called; expected it to be used for non-QC jurisdictions")
+	}
+}
+
+// TestCrawlLegislatureCalendarDates_QC_ReachesLocalServer confirms that the
+// QC-specific client can still reach a plain-HTTP local server. The PDF parse
+// will fail (body is not a PDF), but no transport/TLS error should occur.
+func TestCrawlLegislatureCalendarDates_QC_ReachesLocalServer(t *testing.T) {
+	reached := make(chan struct{}, 1)
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		reached <- struct{}{}
+		fmt.Fprint(w, "not a pdf")
+	}))
+	defer srv.Close()
+
+	_, err := crawlLegislatureCalendarDates(srv.Client(), "provincial-QC", srv.URL)
+
+	select {
+	case <-reached:
+		// server was reached — transport is working
+	default:
+		t.Fatal("local server was not reached by the QC client")
+	}
+
+	// The error must be a parsing failure, not a TLS/connection failure.
+	if err == nil {
+		t.Fatal("expected a PDF-parse error, got nil")
+	}
+	if strings.Contains(err.Error(), "tls") || strings.Contains(err.Error(), "certificate") {
+		t.Errorf("got TLS error instead of parse error: %v", err)
 	}
 }
