@@ -59,7 +59,7 @@ func TestParseSaskatchewanBillsFromProgressText_CurrentLayout(t *testing.T) {
 
 func TestIsSaskatchewanSittingLike(t *testing.T) {
 	tests := []struct {
-		name string
+		name    string
 		r, g, b uint8
 		want    bool
 	}{

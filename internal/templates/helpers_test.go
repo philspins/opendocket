@@ -355,14 +355,14 @@ func TestInitial(t *testing.T) {
 
 func TestNewPageInfo(t *testing.T) {
 	tests := []struct {
-		name              string
-		page, total, per  int
-		wantCurrent       int
-		wantTotal         int
-		wantHasPrev       bool
-		wantHasNext       bool
-		wantPrevPage      int
-		wantNextPage      int
+		name             string
+		page, total, per int
+		wantCurrent      int
+		wantTotal        int
+		wantHasPrev      bool
+		wantHasNext      bool
+		wantPrevPage     int
+		wantNextPage     int
 	}{
 		{"first page of 10", 1, 100, 10, 1, 10, false, true, 0, 2},
 		{"last page of 10", 10, 100, 10, 10, 10, true, false, 9, 11},
@@ -485,8 +485,8 @@ func TestReactionPercent(t *testing.T) {
 		{1, 3, 33},
 		{0, 100, 0},
 		{100, 100, 100},
-		{0, 0, 0},  // zero total → 0 (no divide-by-zero)
-		{5, 0, 0},  // zero total with non-zero count → 0
+		{0, 0, 0}, // zero total → 0 (no divide-by-zero)
+		{5, 0, 0}, // zero total with non-zero count → 0
 	}
 	for _, tt := range tests {
 		if got := ReactionPercent(tt.count, tt.total); got != tt.want {
@@ -528,7 +528,7 @@ func TestGovernmentLevelBadge(t *testing.T) {
 		contains string
 	}{
 		{"federal", "Federal"},
-		{"Federal", "Federal"},   // case-insensitive via strings.ToLower
+		{"Federal", "Federal"}, // case-insensitive via strings.ToLower
 		{"FEDERAL", "Federal"},
 		{"provincial", "Provincial"},
 		{"Provincial", "Provincial"},

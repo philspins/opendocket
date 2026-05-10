@@ -154,7 +154,7 @@ func (s *Store) ListBills(f BillFilter) ([]BillRow, int, error) {
 			&b.SponsorID, &b.SponsorName,
 			&b.CurrentStage, &b.CurrentStatus,
 			&b.Category, &b.SummaryAI,
-						&b.FullTextURL, &b.LegisInfoURL,
+			&b.FullTextURL, &b.LegisInfoURL,
 			&b.IntroducedDate, &b.LastActivityDate,
 		); err != nil {
 			return nil, 0, fmt.Errorf("ListBills scan: %w", err)
@@ -207,7 +207,7 @@ func (s *Store) GetBill(id string) (BillRow, error) {
 		&b.SponsorID, &b.SponsorName,
 		&b.CurrentStage, &b.CurrentStatus,
 		&b.Category, &b.SummaryAI,
-					&b.FullTextURL, &b.LegisInfoURL,
+		&b.FullTextURL, &b.LegisInfoURL,
 		&b.IntroducedDate, &b.LastActivityDate,
 	)
 	if errors.Is(err, sql.ErrNoRows) {
@@ -1667,4 +1667,41 @@ func (s *Store) IsUserSubscribedToBill(userID, billID string) (bool, error) {
 	var count int
 	err := s.db.QueryRow(`SELECT COUNT(1) FROM user_bill_subscriptions WHERE user_id = ? AND bill_id = ?`, userID, billID).Scan(&count)
 	return count > 0, err
+}
+
+// CompleteTutorialActivity records that the given user completed an activity.
+// Idempotent: re-completing an activity is a no-op.
+func (s *Store) CompleteTutorialActivity(userID, activity string) error {
+	_, err := s.db.Exec(`
+INSERT OR IGNORE INTO user_tutorial_progress (user_id, activity)
+VALUES (?, ?)`, userID, activity)
+	return err
+}
+
+// GetTutorialProgress returns the walkthrough state for the given user.
+func (s *Store) GetTutorialProgress(userID string) (TutorialProgress, error) {
+	rows, err := s.db.Query(`
+SELECT activity FROM user_tutorial_progress WHERE user_id = ?`, userID)
+	if err != nil {
+		return TutorialProgress{}, err
+	}
+	defer rows.Close()
+	tp := TutorialProgress{Done: make(map[string]bool)}
+	for rows.Next() {
+		var act string
+		if err := rows.Scan(&act); err != nil {
+			return tp, err
+		}
+		if act == "dismissed" {
+			tp.Dismissed = true
+		} else {
+			tp.Done[act] = true
+		}
+	}
+	return tp, rows.Err()
+}
+
+// DismissTutorial marks the walkthrough as dismissed for the given user.
+func (s *Store) DismissTutorial(userID string) error {
+	return s.CompleteTutorialActivity(userID, "dismissed")
 }

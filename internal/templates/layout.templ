@@ -1147,6 +1147,25 @@ templ Layout(title string, ps store.ParliamentStatus) {
 						</div>
 					</div>
 					<div class="nav-actions">
+						<!-- Tutorial bell icon (shown by JS for signed-in users with outstanding steps) -->
+						<div id="tutorial-bell-wrap" style="position:relative;display:none;">
+							<button id="tutorial-bell-btn" aria-label="Getting started" aria-expanded="false" style="position:relative;background:transparent;border:none;cursor:pointer;color:rgba(255,255,255,0.85);padding:3px;display:flex;align-items:center;line-height:1;">
+								<svg xmlns="http://www.w3.org/2000/svg" width="22" height="22" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="1.8" aria-hidden="true">
+									<path stroke-linecap="round" stroke-linejoin="round" d="M15 17h5l-1.405-1.405A2.032 2.032 0 0118 14.158V11a6.002 6.002 0 00-4-5.659V5a2 2 0 10-4 0v.341C7.67 6.165 6 8.388 6 11v3.159c0 .538-.214 1.055-.595 1.436L4 17h5m6 0v1a3 3 0 11-6 0v-1m6 0H9"></path>
+								</svg>
+								<span id="tutorial-badge" style="display:none;position:absolute;top:-3px;right:-3px;min-width:15px;height:15px;border-radius:8px;background:var(--color-alert);color:#fff;font-size:9px;font-weight:700;line-height:15px;text-align:center;padding:0 3px;font-family:'DM Sans',sans-serif;box-sizing:border-box;"></span>
+							</button>
+							<div id="tutorial-dropdown" role="menu" aria-label="Getting started checklist" style="display:none;position:absolute;top:calc(100% + 10px);right:0;width:288px;background:var(--color-surface-1);border:1px solid var(--color-border);box-shadow:0 8px 32px rgba(0,0,0,0.18);z-index:200;padding:14px 16px 16px;">
+								<div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:10px;">
+									<span style="font-size:0.72rem;font-weight:600;text-transform:uppercase;letter-spacing:0.07em;color:var(--color-text-secondary);font-family:'Inconsolata',monospace;">Getting Started</span>
+									<button id="tutorial-dismiss-btn" type="button" style="font-size:0.75rem;color:var(--color-text-secondary);background:none;border:none;cursor:pointer;padding:2px 0;font-family:'DM Sans',sans-serif;">Dismiss</button>
+								</div>
+								<div style="height:4px;background:var(--color-border);margin-bottom:12px;border-radius:2px;overflow:hidden;">
+									<div id="tutorial-progress-fill" style="height:100%;background:var(--color-primary);width:0%;transition:width 350ms ease;border-radius:2px;"></div>
+								</div>
+								<ul id="tutorial-steps-list" style="margin:0;padding:0;list-style:none;display:flex;flex-direction:column;gap:7px;"></ul>
+							</div>
+						</div>
 						<!-- Theme toggle pill -->
 						<div class="theme-toggle" id="theme-toggle" role="group" aria-label="Toggle color theme">
 							<button class="theme-toggle-btn" id="theme-light-btn" aria-label="Light mode" title="Light mode">☀</button>
@@ -1237,6 +1256,76 @@ templ Layout(title string, ps store.ParliamentStatus) {
 						if (searchForm && (user.FederalRidingID || user.ProvincialRidingID)) {
 							searchForm.style.display = "none";
 						}
+
+						// Fetch tutorial progress and wire up the bell icon.
+						fetch("/api/tutorial-progress", {
+							credentials: "same-origin",
+							headers: {"Accept": "application/json"},
+						}).then(function(r) { return r.ok ? r.json() : null; }).then(function(tp) {
+							if (!tp || tp.dismissed || tp.total === 0) return;
+							var remaining = tp.total - tp.doneCount;
+							if (remaining <= 0) return;
+							var wrap  = document.getElementById("tutorial-bell-wrap");
+							var badge = document.getElementById("tutorial-badge");
+							var fill  = document.getElementById("tutorial-progress-fill");
+							var list  = document.getElementById("tutorial-steps-list");
+							if (!wrap || !badge || !fill || !list) return;
+
+							// Show bell + badge count.
+							wrap.style.display = "block";
+							badge.textContent = remaining;
+							badge.style.display = "inline-block";
+							fill.style.width = (tp.doneCount / tp.total * 100).toFixed(1) + "%";
+
+							// Build checklist rows.
+							tp.steps.forEach(function(step) {
+								var li = document.createElement("li");
+								li.style.cssText = "display:flex;align-items:center;gap:9px;font-size:0.875rem;";
+								var icon = document.createElement("span");
+								if (step.done) {
+									icon.style.cssText = "width:18px;height:18px;border-radius:50%;background:#16a34a;color:#fff;font-size:10px;font-weight:700;display:inline-flex;align-items:center;justify-content:center;flex-shrink:0;";
+									icon.textContent = "\u2713";
+								} else {
+									icon.style.cssText = "width:18px;height:18px;border-radius:50%;border:2px solid var(--color-border);flex-shrink:0;";
+								}
+								li.appendChild(icon);
+								var a = document.createElement("a");
+								a.href = step.url;
+								a.textContent = step.label;
+								a.style.cssText = step.done
+									? "text-decoration:line-through;color:var(--color-text-secondary);"
+									: "color:var(--color-text-primary);";
+								li.appendChild(a);
+								list.appendChild(li);
+							});
+
+							// Bell toggle.
+							var bellBtn  = document.getElementById("tutorial-bell-btn");
+							var dropdown = document.getElementById("tutorial-dropdown");
+							bellBtn.addEventListener("click", function(e) {
+								e.stopPropagation();
+								var isOpen = dropdown.style.display !== "none";
+								dropdown.style.display = isOpen ? "none" : "block";
+								bellBtn.setAttribute("aria-expanded", isOpen ? "false" : "true");
+							});
+
+							// Dismiss.
+							document.getElementById("tutorial-dismiss-btn").addEventListener("click", function() {
+								fetch("/api/dismiss-tutorial", {method: "POST", credentials: "same-origin"})
+									.then(function() {
+										wrap.style.display = "none";
+										dropdown.style.display = "none";
+									}).catch(function() {});
+							});
+
+							// Close on outside click.
+							document.addEventListener("click", function(e) {
+								if (dropdown.style.display !== "none" && !wrap.contains(e.target)) {
+									dropdown.style.display = "none";
+									bellBtn.setAttribute("aria-expanded", "false");
+								}
+							});
+						}).catch(function() {});
 					}).catch(() => {
 						// Keep default sign up / login buttons when auth check fails.
 					});

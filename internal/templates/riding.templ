@@ -1,15 +1,16 @@
 package templates
 
 import (
+	"strings"
 	"github.com/philspins/opendocket/internal/opennorth"
 	"github.com/philspins/opendocket/internal/store"
 )
 
-templ RidingLookup(ps store.ParliamentStatus, address string, reps []opennorth.Representative, lookupErr string, placesApiKey string) {
+templ RidingLookup(ps store.ParliamentStatus, address string, federalRep opennorth.Representative, provincialRep opennorth.Representative, federalMember store.MemberRow, provincialMember store.MemberRow, lookupErr string, placesApiKey string, isLoggedIn bool, federalRidings []string, provincialRidings []string) {
 	@Layout("Find My Representatives", ps) {
 		<div class="space-y-6">
 			<h1 class="text-2xl font-bold text-gray-900">Find Your Representatives</h1>
-			<p class="section-lead max-w-2xl">Enter your address to find your federal MP, provincial MLA/MPP/MNA, and local representatives.</p>
+			<p class="section-lead">Enter your address to find your federal MP, provincial MLA/MPP/MNA, and local representatives.</p>
 
 			<form method="GET" action="/riding" class="flex flex-wrap gap-3 items-center">
 				<input type="text" id="riding-address-input" name="address" value={ address }
@@ -26,21 +27,171 @@ templ RidingLookup(ps store.ParliamentStatus, address string, reps []opennorth.R
 			}
 
 			if address != "" && lookupErr == "" {
-				if len(reps) > 0 {
-					<div>
-						<h2 class="text-lg font-semibold text-gray-800 mb-3">Representatives for "{ address }"</h2>
-						<div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
-							for _, rep := range reps {
-								@openNorthRepCard(rep)
+				{{
+					hasFederalRep := strings.TrimSpace(federalRep.Name) != ""
+					hasProvincialRep := strings.TrimSpace(provincialRep.Name) != ""
+					fedParty := federalRep.PartyName
+					provParty := provincialRep.PartyName
+				}}
+				<div>
+					<h2 class="text-lg font-semibold text-gray-800 mb-3">Representatives for "{ address }"</h2>
+					<section class="rep-grid">
+						<div>
+							if !hasProvincialRep {
+								<div class="surface-card p-6 flex flex-col items-center text-center space-y-3 h-full">
+									<p class="text-base font-semibold">Provincial representative not found</p>
+									if isLoggedIn {
+										<p class="section-lead text-sm max-w-xs">Your provincial representative could not be found automatically. Please manually select your riding on your profile page.</p>
+										<a href="/profile" class="btn btn-primary text-sm">Go to Profile</a>
+									} else {
+										<p class="section-lead text-sm max-w-xs">Couldn&#39;t auto-detect your provincial rep. Select your riding manually:</p>
+										<form method="POST" action="/riding" class="w-full space-y-3">
+											<select name="provincial_riding" class="input-field w-full px-3 py-2 text-sm">
+												<option value="">— select provincial riding —</option>
+												for _, r := range provincialRidings {
+													<option value={ r }>{ r }</option>
+												}
+											</select>
+											<button type="submit" class="btn btn-primary text-sm w-full">Save &amp; Continue</button>
+										</form>
+									}
+								</div>
+							} else if provincialMember.ID != "" {
+								<div class="h-full p-2 sm:p-4 lg:p-[6.25%]">
+									<div class="h-full flex items-start gap-6 p-6">
+										@memberSummaryCardInner(provincialMember)
+									</div>
+								</div>
+							} else {
+								{{
+									provName, provRole := homeRepresentativeNameRole(provincialRep, "Your current provincial representative", "Provincial representative")
+								}}
+								<div class="h-full p-2 sm:p-4 lg:p-[6.25%]">
+									<div class="surface-card overflow-hidden h-full">
+										<div class="px-5 py-3 text-sm" style={ partyBannerStyle(provParty) }>
+											<div class="flex items-start justify-between gap-3">
+												<h3 class="text-base font-bold leading-tight">
+													if strings.TrimSpace(provincialRep.LocalMemberID) != "" {
+														<a href={ templ.SafeURL("/members/" + strings.TrimSpace(provincialRep.LocalMemberID)) } class="hover:underline">{ provName }</a>
+													} else {
+														{ provName }
+													}
+													if provRole != "" {
+														{ " (" + provRole + ")" }
+													}
+												</h3>
+												if strings.TrimSpace(provincialRep.DistrictName) != "" {
+													<h4 class="text-sm font-semibold text-right leading-tight">{ strings.TrimSpace(provincialRep.DistrictName) }</h4>
+												}
+											</div>
+											if strings.TrimSpace(provParty) != "" {
+												<h4 class="mt-1 text-sm font-semibold leading-tight">{ strings.TrimSpace(provParty) }</h4>
+											}
+										</div>
+										<div class="p-4">
+											<div class="flex flex-wrap gap-3">
+												if provincialRep.Email != "" {
+													<a href={ safeMailtoURL(provincialRep.Email) } class="text-xs text-blue-600 hover:underline">Email</a>
+												}
+												if provincialRep.URL != "" {
+													<a href={ safeExternalURL(provincialRep.URL) } target="_blank" rel="noopener" class="text-xs text-blue-600 hover:underline">Profile</a>
+												}
+											</div>
+										</div>
+									</div>
+								</div>
 							}
 						</div>
-					</div>
-				} else {
-					<div class="bg-yellow-50 border border-yellow-200 p-4 text-yellow-800">
-						<p>No representatives found for "{ address }".</p>
-						<p class="text-sm mt-1">Make sure the address is in Canada and includes a city or province.</p>
-					</div>
-				}
+						<div>
+							if !hasFederalRep {
+								<div class="surface-card p-6 flex flex-col items-center text-center space-y-3 h-full">
+									<p class="text-base font-semibold">Federal representative not found</p>
+									if isLoggedIn {
+										<p class="section-lead text-sm max-w-xs">Your federal representative could not be found automatically. Please manually select your riding on your profile page.</p>
+										<a href="/profile" class="btn btn-primary text-sm">Go to Profile</a>
+									} else {
+										<p class="section-lead text-sm max-w-xs">Couldn&#39;t auto-detect your federal rep. Select your riding manually:</p>
+										<form method="POST" action="/riding" class="w-full space-y-3">
+											<select name="federal_riding" class="input-field w-full px-3 py-2 text-sm">
+												<option value="">— select federal riding —</option>
+												for _, r := range federalRidings {
+													<option value={ r }>{ r }</option>
+												}
+											</select>
+											<button type="submit" class="btn btn-primary text-sm w-full">Save &amp; Continue</button>
+										</form>
+									}
+								</div>
+							} else if federalMember.ID != "" {
+								<div class="h-full p-2 sm:p-4 lg:p-[6.25%]">
+									<div class="h-full flex items-start gap-6 p-6">
+										@memberSummaryCardInner(federalMember)
+									</div>
+								</div>
+							} else {
+								{{
+									fedName, fedRole := homeRepresentativeNameRole(federalRep, "Your current federal representative", "Federal representative")
+								}}
+								<div class="h-full p-2 sm:p-4 lg:p-[6.25%]">
+									<div class="surface-card overflow-hidden h-full">
+										<div class="px-5 py-3 text-sm" style={ partyBannerStyle(fedParty) }>
+											<div class="flex items-start justify-between gap-3">
+												<h3 class="text-base font-bold leading-tight">
+													if strings.TrimSpace(federalRep.LocalMemberID) != "" {
+														<a href={ templ.SafeURL("/members/" + strings.TrimSpace(federalRep.LocalMemberID)) } class="hover:underline">{ fedName }</a>
+													} else {
+														{ fedName }
+													}
+													if fedRole != "" {
+														{ " (" + fedRole + ")" }
+													}
+												</h3>
+												if strings.TrimSpace(federalRep.DistrictName) != "" {
+													<h4 class="text-sm font-semibold text-right leading-tight">{ strings.TrimSpace(federalRep.DistrictName) }</h4>
+												}
+											</div>
+											if strings.TrimSpace(fedParty) != "" {
+												<h4 class="mt-1 text-sm font-semibold leading-tight">{ strings.TrimSpace(fedParty) }</h4>
+											}
+										</div>
+										<div class="p-4">
+											<div class="flex flex-wrap gap-3">
+												if federalRep.Email != "" {
+													<a href={ safeMailtoURL(federalRep.Email) } class="text-xs text-blue-600 hover:underline">Email</a>
+												}
+												if federalRep.URL != "" {
+													<a href={ safeExternalURL(federalRep.URL) } target="_blank" rel="noopener" class="text-xs text-blue-600 hover:underline">Profile</a>
+												}
+											</div>
+										</div>
+									</div>
+								</div>
+							}
+						</div>
+					</section>
+					<section class="surface-card p-6 mt-2">
+						<h2 class="text-xl font-semibold text-gray-900">What to do next</h2>
+						<p class="section-lead mt-2 max-w-2xl">You&#39;ve found your reps — now explore everything the site has to offer:</p>
+						<ul class="mt-4 space-y-3 text-sm">
+							<li>
+								<a href="/votes" class="font-semibold text-blue-700 hover:underline">See how your reps voted →</a>
+								<span class="text-gray-600"> — browse every recorded division in federal Parliament and all ten provincial legislatures.</span>
+							</li>
+							<li>
+								<a href="/bills" class="font-semibold text-blue-700 hover:underline">View bills →</a>
+								<span class="text-gray-600"> — track legislation moving through Parliament and the provincial assemblies.</span>
+							</li>
+							<li>
+								<a href="/compare" class="font-semibold text-blue-700 hover:underline">Compare your rep with others →</a>
+								<span class="text-gray-600"> — see how your representative's voting record stacks up against their colleagues.</span>
+							</li>
+							<li>
+								<a href="/members" class="font-semibold text-blue-700 hover:underline">Browse all members →</a>
+								<span class="text-gray-600"> — explore profiles for every federal MP across the country.</span>
+							</li>
+						</ul>
+					</section>
+				</div>
 			}
 		</div>
 	}

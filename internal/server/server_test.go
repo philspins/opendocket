@@ -2084,3 +2084,377 @@ func TestHandleRiding_LookupFailsRepresentatives(t *testing.T) {
 		t.Fatalf("status=%d want %d", rr.Code, http.StatusOK)
 	}
 }
+
+func TestHandleRiding_ShowsHighlightedRepCards(t *testing.T) {
+	srv, _ := newTestServer(t)
+
+	// Successful lookup with both federal and provincial reps.
+	srv.riding.SetLookups(
+		func(_ context.Context, _ string, _ string) (float64, float64, error) {
+			return 45.0, -75.0, nil
+		},
+		func(_ context.Context, _, _ float64) ([]opennorth.Representative, error) {
+			return []opennorth.Representative{
+				{Name: "Jane MP", ElectedOffice: "MP", DistrictName: "Ottawa Centre", PartyName: "Liberal"},
+				{Name: "John MPP", ElectedOffice: "MPP (ON)", DistrictName: "Ottawa South", PartyName: "NDP"},
+			}, nil
+		},
+	)
+
+	req := httptest.NewRequest(http.MethodGet, "/riding?address=123+Main+St,+Ottawa,+ON", nil)
+	rr := httptest.NewRecorder()
+	srv.ServeHTTP(rr, req)
+
+	if rr.Code != http.StatusOK {
+		t.Fatalf("status=%d want %d", rr.Code, http.StatusOK)
+	}
+	body := rr.Body.String()
+	// Both highlighted reps should appear.
+	if !strings.Contains(body, "Jane MP") {
+		t.Errorf("expected federal rep 'Jane MP' in body")
+	}
+	if !strings.Contains(body, "John MPP") {
+		t.Errorf("expected provincial rep 'John MPP' in body")
+	}
+	// Should NOT show "not found" prompts when both reps are present.
+	if strings.Contains(body, "Federal representative not found") {
+		t.Errorf("unexpected 'Federal representative not found' in body")
+	}
+	if strings.Contains(body, "Provincial representative not found") {
+		t.Errorf("unexpected 'Provincial representative not found' in body")
+	}
+}
+
+// Unauthenticated visitor sees inline riding selectors when reps are absent.
+func TestHandleRiding_ShowsInlineSelectorForGuestWhenRepsAbsent(t *testing.T) {
+	srv, _ := newTestServer(t)
+
+	srv.riding.SetLookups(
+		func(_ context.Context, _ string, _ string) (float64, float64, error) {
+			return 45.0, -75.0, nil
+		},
+		func(_ context.Context, _, _ float64) ([]opennorth.Representative, error) {
+			return []opennorth.Representative{}, nil
+		},
+	)
+
+	// No session cookie → guest visitor.
+	req := httptest.NewRequest(http.MethodGet, "/riding?address=123+Main+St,+Ottawa,+ON", nil)
+	rr := httptest.NewRecorder()
+	srv.ServeHTTP(rr, req)
+
+	if rr.Code != http.StatusOK {
+		t.Fatalf("status=%d want %d", rr.Code, http.StatusOK)
+	}
+	body := rr.Body.String()
+	if !strings.Contains(body, "Federal representative not found") {
+		t.Errorf("expected 'Federal representative not found' in body")
+	}
+	if !strings.Contains(body, "Provincial representative not found") {
+		t.Errorf("expected 'Provincial representative not found' in body")
+	}
+	// Guest: should see inline selectors (select elements), not "Go to Profile".
+	if strings.Contains(body, "Go to Profile") {
+		t.Errorf("unexpected 'Go to Profile' link for guest visitor")
+	}
+	if !strings.Contains(body, `name="federal_riding"`) {
+		t.Errorf("expected federal riding select in body for guest")
+	}
+	if !strings.Contains(body, `name="provincial_riding"`) {
+		t.Errorf("expected provincial riding select in body for guest")
+	}
+}
+
+// Authenticated user sees "Go to Profile" prompt when reps are absent.
+func TestHandleRiding_ShowsGoToProfileForAuthUserWhenRepsAbsent(t *testing.T) {
+	srv, st := newTestServer(t)
+	u, err := st.UpsertUser("riding-notfound@example.com")
+	if err != nil {
+		t.Fatalf("UpsertUser: %v", err)
+	}
+	sid, err := st.CreateSession(u.ID, time.Hour)
+	if err != nil {
+		t.Fatalf("CreateSession: %v", err)
+	}
+
+	srv.riding.SetLookups(
+		func(_ context.Context, _ string, _ string) (float64, float64, error) {
+			return 45.0, -75.0, nil
+		},
+		func(_ context.Context, _, _ float64) ([]opennorth.Representative, error) {
+			return []opennorth.Representative{}, nil
+		},
+	)
+
+	req := httptest.NewRequest(http.MethodGet, "/riding?address=123+Main+St,+Ottawa,+ON", nil)
+	req.AddCookie(&http.Cookie{Name: "od_session", Value: sid})
+	rr := httptest.NewRecorder()
+	srv.ServeHTTP(rr, req)
+
+	if rr.Code != http.StatusOK {
+		t.Fatalf("status=%d want %d", rr.Code, http.StatusOK)
+	}
+	body := rr.Body.String()
+	// Authenticated: should see "Go to Profile", not inline selectors.
+	if count := strings.Count(body, "Go to Profile"); count < 2 {
+		t.Errorf("expected at least 2 'Go to Profile' links for logged-in user, got %d", count)
+	}
+	if strings.Contains(body, `name="federal_riding"`) {
+		t.Errorf("unexpected federal riding select for authenticated user")
+	}
+}
+
+// POST /riding sets cookies and redirects to / for a guest.
+func TestHandleRidingPost_GuestSetsRidingCookies(t *testing.T) {
+	srv, _ := newTestServer(t)
+
+	form := url.Values{}
+	form.Set("federal_riding", "Ottawa Centre")
+	form.Set("provincial_riding", "Ottawa South")
+	req := httptest.NewRequest(http.MethodPost, "/riding", strings.NewReader(form.Encode()))
+	req.Header.Set("Content-Type", "application/x-www-form-urlencoded")
+	rr := httptest.NewRecorder()
+	srv.ServeHTTP(rr, req)
+
+	if rr.Code != http.StatusSeeOther {
+		t.Fatalf("status=%d want %d", rr.Code, http.StatusSeeOther)
+	}
+	if rr.Header().Get("Location") != "/" {
+		t.Fatalf("Location=%q want /", rr.Header().Get("Location"))
+	}
+	var fedCookie, provCookie string
+	for _, c := range rr.Result().Cookies() {
+		switch c.Name {
+		case testGuestFederalRidingCookie:
+			fedCookie = c.Value
+		case testGuestProvincialRidingCookie:
+			provCookie = c.Value
+		}
+	}
+	if !strings.Contains(fedCookie, "Ottawa") {
+		t.Errorf("federal riding cookie=%q, want to contain 'Ottawa'", fedCookie)
+	}
+	if !strings.Contains(provCookie, "Ottawa") {
+		t.Errorf("provincial riding cookie=%q, want to contain 'Ottawa'", provCookie)
+	}
+}
+
+// POST /riding preserves an existing cookie when only one riding is submitted.
+func TestHandleRidingPost_PreservesExistingCookie(t *testing.T) {
+	srv, _ := newTestServer(t)
+
+	form := url.Values{}
+	form.Set("federal_riding", "Ottawa Centre")
+	// provincial_riding intentionally omitted.
+	req := httptest.NewRequest(http.MethodPost, "/riding", strings.NewReader(form.Encode()))
+	req.Header.Set("Content-Type", "application/x-www-form-urlencoded")
+	req.AddCookie(&http.Cookie{Name: testGuestProvincialRidingCookie, Value: url.QueryEscape("Ottawa South")})
+	rr := httptest.NewRecorder()
+	srv.ServeHTTP(rr, req)
+
+	if rr.Code != http.StatusSeeOther {
+		t.Fatalf("status=%d want %d", rr.Code, http.StatusSeeOther)
+	}
+	var provCookie string
+	for _, c := range rr.Result().Cookies() {
+		if c.Name == testGuestProvincialRidingCookie {
+			provCookie = c.Value
+		}
+	}
+	// Provincial cookie should be refreshed with the preserved value, not deleted.
+	if !strings.Contains(provCookie, "Ottawa") {
+		t.Errorf("provincial riding cookie=%q, want preserved 'Ottawa South'", provCookie)
+	}
+}
+
+func TestHandleRiding_ShowsNotFoundWithNoRepsAtAll(t *testing.T) {
+	srv, _ := newTestServer(t)
+
+	// Successful lookup but zero reps returned.
+	srv.riding.SetLookups(
+		func(_ context.Context, _ string, _ string) (float64, float64, error) {
+			return 45.0, -75.0, nil
+		},
+		func(_ context.Context, _, _ float64) ([]opennorth.Representative, error) {
+			return []opennorth.Representative{}, nil
+		},
+	)
+
+	req := httptest.NewRequest(http.MethodGet, "/riding?address=123+Main+St,+Ottawa,+ON", nil)
+	rr := httptest.NewRecorder()
+	srv.ServeHTTP(rr, req)
+
+	if rr.Code != http.StatusOK {
+		t.Fatalf("status=%d want %d", rr.Code, http.StatusOK)
+	}
+	body := rr.Body.String()
+	// Should show both "not found" prompts.
+	if !strings.Contains(body, "Federal representative not found") {
+		t.Errorf("expected 'Federal representative not found' in body")
+	}
+	if !strings.Contains(body, "Provincial representative not found") {
+		t.Errorf("expected 'Provincial representative not found' in body")
+	}
+}
+
+func TestHandleTutorialProgress_Unauthenticated(t *testing.T) {
+	srv, _ := newTestServer(t)
+
+	req := httptest.NewRequest(http.MethodGet, "/api/tutorial-progress", nil)
+	rr := httptest.NewRecorder()
+	srv.ServeHTTP(rr, req)
+
+	if rr.Code != http.StatusOK {
+		t.Fatalf("status=%d want %d", rr.Code, http.StatusOK)
+	}
+	body := rr.Body.String()
+	if !strings.Contains(body, `"dismissed":true`) {
+		t.Errorf("expected dismissed=true for unauthenticated, got %s", body)
+	}
+}
+
+func TestHandleTutorialProgress_Authenticated(t *testing.T) {
+	srv, st := newTestServer(t)
+
+	u, err := st.AuthenticateOAuth("google", "tut-user", "tut@example.com", true)
+	if err != nil {
+		t.Fatalf("AuthenticateOAuth: %v", err)
+	}
+	sid, err := st.CreateSession(u.ID, time.Hour)
+	if err != nil {
+		t.Fatalf("CreateSession: %v", err)
+	}
+
+	req := httptest.NewRequest(http.MethodGet, "/api/tutorial-progress", nil)
+	req.AddCookie(&http.Cookie{Name: "od_session", Value: sid})
+	rr := httptest.NewRecorder()
+	srv.ServeHTTP(rr, req)
+
+	if rr.Code != http.StatusOK {
+		t.Fatalf("status=%d want %d; body=%s", rr.Code, http.StatusOK, rr.Body.String())
+	}
+	body := rr.Body.String()
+	if !strings.Contains(body, `"dismissed":false`) {
+		t.Errorf("expected dismissed=false, got %s", body)
+	}
+	if !strings.Contains(body, `"doneCount":0`) {
+		t.Errorf("expected doneCount=0 initially, got %s", body)
+	}
+	if !strings.Contains(body, `"total":7`) {
+		t.Errorf("expected total=7, got %s", body)
+	}
+}
+
+func TestHandleDismissTutorial_Unauthenticated(t *testing.T) {
+	srv, _ := newTestServer(t)
+
+	req := httptest.NewRequest(http.MethodPost, "/api/dismiss-tutorial", nil)
+	rr := httptest.NewRecorder()
+	srv.ServeHTTP(rr, req)
+
+	if rr.Code != http.StatusUnauthorized {
+		t.Fatalf("status=%d want %d", rr.Code, http.StatusUnauthorized)
+	}
+}
+
+func TestHandleDismissTutorial_Authenticated(t *testing.T) {
+	srv, st := newTestServer(t)
+
+	u, err := st.AuthenticateOAuth("google", "dismiss-user", "dismiss@example.com", true)
+	if err != nil {
+		t.Fatalf("AuthenticateOAuth: %v", err)
+	}
+	sid, err := st.CreateSession(u.ID, time.Hour)
+	if err != nil {
+		t.Fatalf("CreateSession: %v", err)
+	}
+
+	req := httptest.NewRequest(http.MethodPost, "/api/dismiss-tutorial", nil)
+	req.AddCookie(&http.Cookie{Name: "od_session", Value: sid})
+	rr := httptest.NewRecorder()
+	srv.ServeHTTP(rr, req)
+
+	if rr.Code != http.StatusOK {
+		t.Fatalf("status=%d want %d; body=%s", rr.Code, http.StatusOK, rr.Body.String())
+	}
+	if body := rr.Body.String(); !strings.Contains(body, `"ok":true`) {
+		t.Errorf("expected ok=true, got %s", body)
+	}
+
+	// Verify persistence.
+	tp, err := st.GetTutorialProgress(u.ID)
+	if err != nil {
+		t.Fatalf("GetTutorialProgress: %v", err)
+	}
+	if !tp.Dismissed {
+		t.Error("expected dismissed=true after POST /api/dismiss-tutorial")
+	}
+}
+
+func TestHandleBillDetail_MarksTutorialViewBill(t *testing.T) {
+	srv, st, conn := newTestServerWithConn(t)
+
+	_, err := conn.Exec(`INSERT INTO bills (id, parliament, session, number, title, category, current_stage, chamber)
+VALUES ('tut-b1', 45, 1, 'C-99', 'Tutorial Bill', 'General', '1st_reading', 'commons')`)
+	if err != nil {
+		t.Fatalf("insert bill: %v", err)
+	}
+	u, err := st.AuthenticateOAuth("google", "bill-viewer", "billview@example.com", true)
+	if err != nil {
+		t.Fatalf("AuthenticateOAuth: %v", err)
+	}
+	sid, err := st.CreateSession(u.ID, time.Hour)
+	if err != nil {
+		t.Fatalf("CreateSession: %v", err)
+	}
+
+	req := httptest.NewRequest(http.MethodGet, "/bills/tut-b1", nil)
+	req.AddCookie(&http.Cookie{Name: "od_session", Value: sid})
+	rr := httptest.NewRecorder()
+	srv.ServeHTTP(rr, req)
+
+	if rr.Code != http.StatusOK {
+		t.Fatalf("status=%d want 200", rr.Code)
+	}
+	tp, err := st.GetTutorialProgress(u.ID)
+	if err != nil {
+		t.Fatalf("GetTutorialProgress: %v", err)
+	}
+	if !tp.Done["view_bill"] {
+		t.Error("expected view_bill marked done after visiting bill detail")
+	}
+}
+
+func TestHandleMemberProfile_MarksTutorialViewRep(t *testing.T) {
+	srv, st, conn := newTestServerWithConn(t)
+
+	_, err := conn.Exec(`INSERT INTO members (id, name, party, riding, province, chamber, active, government_level)
+VALUES ('tut-mp', 'Tutorial MP', 'Liberal', 'Ottawa Centre', 'Ontario', 'commons', 1, 'federal')`)
+	if err != nil {
+		t.Fatalf("insert member: %v", err)
+	}
+	u, err := st.AuthenticateOAuth("google", "rep-viewer", "repview@example.com", true)
+	if err != nil {
+		t.Fatalf("AuthenticateOAuth: %v", err)
+	}
+	sid, err := st.CreateSession(u.ID, time.Hour)
+	if err != nil {
+		t.Fatalf("CreateSession: %v", err)
+	}
+
+	req := httptest.NewRequest(http.MethodGet, "/members/tut-mp", nil)
+	req.AddCookie(&http.Cookie{Name: "od_session", Value: sid})
+	rr := httptest.NewRecorder()
+	srv.ServeHTTP(rr, req)
+
+	if rr.Code != http.StatusOK {
+		t.Fatalf("status=%d want 200", rr.Code)
+	}
+	tp, err := st.GetTutorialProgress(u.ID)
+	if err != nil {
+		t.Fatalf("GetTutorialProgress: %v", err)
+	}
+	if !tp.Done["view_rep"] {
+		t.Error("expected view_rep marked done after visiting member profile")
+	}
+}

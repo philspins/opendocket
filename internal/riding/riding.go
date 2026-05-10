@@ -133,8 +133,9 @@ func (s *Service) HandleLookup(w http.ResponseWriter, r *http.Request) {
 	address := strings.TrimSpace(r.URL.Query().Get("address"))
 	ps := s.parliamentStatus()
 	var (
-		reps      []opennorth.Representative
-		lookupErr string
+		federalRep    opennorth.Representative
+		provincialRep opennorth.Representative
+		lookupErr     string
 	)
 	if address != "" {
 		result, err := s.Lookup(r.Context(), address)
@@ -148,8 +149,28 @@ func (s *Service) HandleLookup(w http.ResponseWriter, r *http.Request) {
 				lookupErr = "Could not locate that address. Please try a more specific Canadian address."
 			}
 		} else {
-			reps = result.Representatives
+			federalRep = result.FederalRepresentative
+			provincialRep = result.ProvincialRepresentative
 		}
 	}
-	_ = templates.RidingLookup(ps, address, reps, lookupErr, s.placesApiKey).Render(r.Context(), w)
+	federalRidings, err := s.store.ListDistinctRidingsByLevel("federal")
+	if err != nil {
+		log.Printf("riding.HandleLookup: list federal ridings: %v", err)
+	}
+	provincialRidings, err := s.store.ListDistinctRidingsByLevel("provincial")
+	if err != nil {
+		log.Printf("riding.HandleLookup: list provincial ridings: %v", err)
+	}
+	var federalMember, provincialMember store.MemberRow
+	if federalRep.LocalMemberID != "" {
+		if m, err := s.store.GetMember(federalRep.LocalMemberID); err == nil {
+			federalMember = m
+		}
+	}
+	if provincialRep.LocalMemberID != "" {
+		if m, err := s.store.GetMember(provincialRep.LocalMemberID); err == nil {
+			provincialMember = m
+		}
+	}
+	_ = templates.RidingLookup(ps, address, federalRep, provincialRep, federalMember, provincialMember, lookupErr, s.placesApiKey, false, federalRidings, provincialRidings).Render(r.Context(), w)
 }

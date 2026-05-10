@@ -157,3 +157,38 @@ type MissedVoteRow struct {
 	PartyMajority string // "Yea", "Nay", or "Split"
 	Result        string
 }
+
+// Tutorial activity keys used in user_tutorial_progress.
+const (
+	TutorialFindRiding    = "find_riding"
+	TutorialViewBill      = "view_bill"
+	TutorialReactBill     = "react_bill"
+	TutorialSubscribeBill = "subscribe_bill"
+	TutorialViewRep       = "view_rep"
+	TutorialCompareRep    = "compare_rep"
+	TutorialSaveInterests = "save_interests"
+)
+
+// tutorialStepDef is the static definition for one onboarding step.
+type tutorialStepDef struct {
+	Key   string
+	Label string
+	URL   string
+}
+
+// AllTutorialStepDefs is the ordered list of walkthrough step definitions.
+var AllTutorialStepDefs = []tutorialStepDef{
+	{TutorialFindRiding, "Find your riding", "/riding"},
+	{TutorialViewBill, "View a bill", "/bills"},
+	{TutorialReactBill, "React to a bill", "/bills"},
+	{TutorialSubscribeBill, "Subscribe to a bill", "/bills"},
+	{TutorialViewRep, "View a representative", "/members"},
+	{TutorialCompareRep, "Compare representatives", "/compare"},
+	{TutorialSaveInterests, "Save your interests", "/profile"},
+}
+
+// TutorialProgress is the in-memory state of a user's onboarding walkthrough.
+type TutorialProgress struct {
+	Dismissed bool
+	Done      map[string]bool
+}

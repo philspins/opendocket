@@ -131,9 +131,11 @@ func memberMatchesLevel(member store.MemberRow, level string) bool {
 func (s *Server) handleRiding(w http.ResponseWriter, r *http.Request) {
 	address := strings.TrimSpace(r.URL.Query().Get("address"))
 	ps := s.parliamentStatus()
+	user, isLoggedIn := s.auth.SessionUser(r)
 	var (
-		reps      []opennorth.Representative
-		lookupErr string
+		federalRep    opennorth.Representative
+		provincialRep opennorth.Representative
+		lookupErr     string
 	)
 
 	if address != "" {
@@ -149,17 +151,69 @@ func (s *Server) handleRiding(w http.ResponseWriter, r *http.Request) {
 				lookupErr = "Could not locate that address. Please try a more specific Canadian address."
 			}
 		} else {
-			reps = result.Representatives
+			federalRep = result.FederalRepresentative
+			provincialRep = result.ProvincialRepresentative
 			s.setLocalRidingCookies(w, result.FederalRidingID, result.ProvincialRidingID)
-			if user, ok := s.auth.SessionUser(r); ok {
+			if isLoggedIn {
 				if _, saveErr := s.store.UpdateUserLocation(user.ID, result.FederalRidingID, result.ProvincialRidingID); saveErr != nil {
 					log.Printf("handleRiding save failed for user=%q: %v", user.ID, saveErr)
+				} else {
+					_ = s.store.CompleteTutorialActivity(user.ID, store.TutorialFindRiding)
 				}
 			}
 		}
 	}
 
-	_ = templates.RidingLookup(ps, address, reps, lookupErr, s.riding.PlacesAPIKey()).Render(r.Context(), w)
+	federalRidings, err := s.store.ListDistinctRidingsByLevel("federal")
+	if err != nil {
+		log.Printf("handleRiding: list federal ridings: %v", err)
+	}
+	provincialRidings, err := s.store.ListDistinctRidingsByLevel("provincial")
+	if err != nil {
+		log.Printf("handleRiding: list provincial ridings: %v", err)
+	}
+
+	var federalMember, provincialMember store.MemberRow
+	if federalRep.LocalMemberID != "" {
+		if m, err := s.store.GetMember(federalRep.LocalMemberID); err == nil {
+			federalMember = m
+		}
+	}
+	if provincialRep.LocalMemberID != "" {
+		if m, err := s.store.GetMember(provincialRep.LocalMemberID); err == nil {
+			provincialMember = m
+		}
+	}
+
+	_ = templates.RidingLookup(ps, address, federalRep, provincialRep, federalMember, provincialMember, lookupErr, s.riding.PlacesAPIKey(), isLoggedIn, federalRidings, provincialRidings).Render(r.Context(), w)
+}
+
+func (s *Server) handleRidingPost(w http.ResponseWriter, r *http.Request) {
+	if err := r.ParseForm(); err != nil {
+		http.Error(w, "bad request", http.StatusBadRequest)
+		return
+	}
+	federalRiding := strings.TrimSpace(r.FormValue("federal_riding"))
+	provincialRiding := strings.TrimSpace(r.FormValue("provincial_riding"))
+
+	// Preserve existing cookie values for fields not submitted.
+	v := visitor.FromRequest(r, s.auth)
+	if federalRiding == "" {
+		federalRiding = v.FederalRidingID
+	}
+	if provincialRiding == "" {
+		provincialRiding = v.ProvincialRidingID
+	}
+
+	s.setLocalRidingCookies(w, federalRiding, provincialRiding)
+	if user, ok := s.auth.SessionUser(r); ok {
+		if _, saveErr := s.store.UpdateUserLocation(user.ID, federalRiding, provincialRiding); saveErr != nil {
+			log.Printf("handleRidingPost save failed for user=%q: %v", user.ID, saveErr)
+		} else {
+			_ = s.store.CompleteTutorialActivity(user.ID, store.TutorialFindRiding)
+		}
+	}
+	http.Redirect(w, r, "/", http.StatusSeeOther)
 }
 
 func (s *Server) handleProfile(w http.ResponseWriter, r *http.Request) {
@@ -198,6 +252,7 @@ func (s *Server) handleProfile(w http.ResponseWriter, r *http.Request) {
 				http.Error(w, "failed to save profile", http.StatusInternalServerError)
 				return
 			}
+			_ = s.store.CompleteTutorialActivity(user.ID, store.TutorialFindRiding)
 			s.setLocalRidingCookies(w, result.FederalRidingID, result.ProvincialRidingID)
 			http.Redirect(w, r, "/profile?updated=1", http.StatusSeeOther)
 			return
@@ -209,6 +264,7 @@ func (s *Server) handleProfile(w http.ResponseWriter, r *http.Request) {
 				http.Error(w, "failed to save profile", http.StatusInternalServerError)
 				return
 			}
+			_ = s.store.CompleteTutorialActivity(user.ID, store.TutorialFindRiding)
 			s.setLocalRidingCookies(w, federalRiding, provincialRiding)
 			http.Redirect(w, r, "/profile?updated=1", http.StatusSeeOther)
 			return
