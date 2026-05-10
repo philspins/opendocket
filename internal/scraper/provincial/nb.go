@@ -16,6 +16,7 @@ import (
 
 var newBrunswickBillLinkRe = regexp.MustCompile(`(?i)(legis|bill|projet)`)
 var newBrunswickJournalSessionLinkRe = regexp.MustCompile(`(?i)/en/house-business/journals/\d+/\d+/?$`)
+var nbJournalSessionExtractRe = regexp.MustCompile(`/journals/(\d+)/(\d+)`)
 var newBrunswickJournalPDFLinkRe = regexp.MustCompile(`(?i)\.pdf(?:\?.*)?$`)
 var newBrunswickPDFVoteCountRe = regexp.MustCompile(`(?is)(?:YEAS?|POUR)\s*[:\-]?\s*(\d{1,3}).{0,280}?(?:NAYS?|CONTRE)\s*[:\-]?\s*(\d{1,3})`)
 var newBrunswickVoteSectionRe = regexp.MustCompile(`(?is)(?:RECORDED\s+DIVISION\s+)?(YEAS?|POUR)\s*[-:–]\s*\d{1,3}\s+`)
@@ -52,6 +53,13 @@ func crawlNewBrunswickVotesFromPDF(indexURL string, legislature, session int, cl
 	pdfLinks := make([]string, 0)
 	seenPDF := make(map[string]bool)
 	for _, sessionURL := range sessionLinks {
+		if allSittings {
+			if m := nbJournalSessionExtractRe.FindStringSubmatch(sessionURL); len(m) == 3 {
+				leg, _ := strconv.Atoi(m[1])
+				sess, _ := strconv.Atoi(m[2])
+				clog.Infof("[nb-votes] all-sittings: crawling legislature %d session %d", leg, sess)
+			}
+		}
 		doc, derr := fetchDoc(sessionURL, client)
 		if derr != nil {
 			clog.Infof("[nb-votes] skip session %s: %v", sessionURL, derr)

@@ -390,6 +390,10 @@ var mbSessionPageLinkRe = regexp.MustCompile(`(?i)\d+(?:rd|th|st|nd)/\d+(?:rd|th
 // page URL, e.g. ".../43rd/43rd_3rd.html" → capture group 1 = "43".
 var mbSessionLegislatureRe = regexp.MustCompile(`(?i)/(\d+)(?:rd|th|st|nd)/\d+(?:rd|th|st|nd)_\d+(?:rd|th|st|nd)\.html`)
 
+// mbSessionExtractRe extracts both legislature and session numbers from a MB
+// session page URL, e.g. ".../43rd/43rd_3rd.html" → groups 1="43", 2="3".
+var mbSessionExtractRe = regexp.MustCompile(`(?i)/(\d+)(?:rd|th|st|nd)/\d+(?:rd|th|st|nd)_(\d+)(?:rd|th|st|nd)\.html`)
+
 // filterMBSessionsToRecentLegislatures retains only session links belonging to
 // the n most recently numbered legislatures discovered in the link set.
 func filterMBSessionsToRecentLegislatures(links []string, n int) []string {
@@ -480,6 +484,13 @@ func crawlManitobaVotesFromPDF(indexURL string, legislature, session int, client
 	var pdfLinks []string
 	seenPDF := make(map[string]bool)
 	for _, sessURL := range sessionLinks {
+		if allSittings {
+			if m := mbSessionExtractRe.FindStringSubmatch(sessURL); len(m) == 3 {
+				leg, _ := strconv.Atoi(m[1])
+				sess, _ := strconv.Atoi(m[2])
+				clog.Infof("[mb-votes] all-sittings: crawling legislature %d session %d", leg, sess)
+			}
+		}
 		sessDoc, serr := fetchDoc(sessURL, client)
 		if serr != nil {
 			clog.Infof("[mb-votes] skip session %s: %v", sessURL, serr)

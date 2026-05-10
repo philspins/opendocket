@@ -449,7 +449,9 @@ func crawlAlbertaVotesFromPDF(indexURL string, legislature, session int, client 
 	})
 
 	sort.Strings(pdfLinks)
-	if !allSittings && len(pdfLinks) > 60 {
+	if allSittings {
+		clog.Infof("[ab-votes] all-sittings: crawling legislature %d session %d", legislature, session)
+	} else if len(pdfLinks) > 60 {
 		pdfLinks = pdfLinks[len(pdfLinks)-60:]
 	}
 	if len(pdfLinks) == 0 {
