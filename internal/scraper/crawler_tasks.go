@@ -370,13 +370,14 @@ func CrawlProvincialWithOpts(conn *sql.DB, client *http.Client, delay time.Durat
 		}
 		sources = patched
 	}
-	if parallelism < 1 {
-		parallelism = 1
-	}
-	g := new(errgroup.Group)
-	g.SetLimit(parallelism)
-	errMu := sync.Mutex{}
-	errs := make([]error, 0)
+	// One goroutine per province: each independently fetches+writes bills, then
+	// fetches+writes votes. No inter-province barrier — a province moves from bills
+	// to votes as soon as its own bills are done, regardless of other provinces.
+	var (
+		g     errgroup.Group
+		errMu sync.Mutex
+		errs  []error
+	)
 	for _, src := range sources {
 		src := src
 		g.Go(func() error {
