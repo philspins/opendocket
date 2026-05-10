@@ -463,7 +463,7 @@ func crawlQuebecAllSessionsVotes(indexURL string, client *http.Client) ([]Provin
 	clog.Infof("[qc-votes] all-sessions: found %d sessions to crawl", len(opts))
 	var allResults []ProvincialDivisionResult
 	for _, opt := range opts {
-		clog.Infof("[qc-votes] all-sessions: crawling legislature %d session %d", opt.Legislature, opt.Session)
+		clog.Debugf("[qc-votes] all-sessions: crawling legislature %d session %d", opt.Legislature, opt.Session)
 		firstPage, ferr := quebecSearchVotes(indexURL, opt.Value, 0, 25, true, client)
 		if ferr != nil {
 			clog.Infof("[qc-votes] all-sessions: legislature %d session %d search failed: %v", opt.Legislature, opt.Session, ferr)

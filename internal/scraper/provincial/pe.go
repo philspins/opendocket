@@ -1125,7 +1125,7 @@ func crawlPEIAllAssemblyVotes(indexURL string, legislature, session int, client 
 		}
 		assemblyHadResults := false
 		for sess := 1; sess <= maxSess; sess++ {
-			clog.Infof("[pe-votes] all-sittings: crawling legislature %d session %d", leg, sess)
+			clog.Debugf("[pe-votes] all-sittings: crawling legislature %d session %d", leg, sess)
 			results, err := crawlPEIVotesFromWorkflow(wdfBase, 0, leg, sess, client, delay)
 			if err != nil {
 				clog.Infof("[pe-votes] all-sittings: legislature %d session %d: %v", leg, sess, err)
@@ -1142,6 +1142,50 @@ func crawlPEIAllAssemblyVotes(indexURL string, legislature, session int, client 
 		}
 	}
 	return allResults, nil
+}
+
+// crawlPEIAllAssemblyBills fetches bills for all historical PEI assemblies using the
+// same backwards-iteration strategy as crawlPEIAllAssemblyVotes.
+func crawlPEIAllAssemblyBills(indexURL string, legislature, session int, client *http.Client) ([]ProvincialBillStub, error) {
+	delay := peiDefaultDelay
+	if client == nil {
+		client = newPEIHTTPClient(delay)
+	}
+	wdfBase := peiWDFAPIBase
+	if strings.HasPrefix(indexURL, "http://127.0.0.1") || strings.HasPrefix(indexURL, "http://localhost") {
+		wdfBase = indexURL
+	}
+
+	minAssembly := legislature - 6
+	if minAssembly < 62 {
+		minAssembly = 62
+	}
+
+	var allBills []ProvincialBillStub
+	for leg := legislature; leg >= minAssembly; leg-- {
+		maxSess := 4
+		if leg == legislature {
+			maxSess = session
+		}
+		assemblyHadResults := false
+		for sess := 1; sess <= maxSess; sess++ {
+			clog.Debugf("[pe-bills] all-sittings: crawling legislature %d session %d", leg, sess)
+			bills, err := crawlPEIBillsFromWorkflow(wdfBase, 0, leg, sess, client, delay)
+			if err != nil {
+				clog.Infof("[pe-bills] all-sittings: legislature %d session %d: %v", leg, sess, err)
+				continue
+			}
+			if len(bills) > 0 {
+				assemblyHadResults = true
+				allBills = append(allBills, bills...)
+			}
+		}
+		if leg < legislature && !assemblyHadResults {
+			clog.Infof("[pe-bills] all-sittings: no data for legislature %d; stopping", leg)
+			break
+		}
+	}
+	return allBills, nil
 }
 
 var peiCalendarPDFURLRe = regexp.MustCompile(`(?i)https?://[^\s"']*parliamentary[^\s"']*calendar[^\s"']*\.pdf`)

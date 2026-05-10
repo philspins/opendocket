@@ -569,7 +569,7 @@ func crawlNovaScotiaVotes(indexURL string, legislature, session int, client *htt
 	sessions := discoverNovaScotiaAllSessions(client)
 	var allResults []ProvincialDivisionResult
 	for _, s := range sessions {
-		clog.Infof("[ns-votes] all-sittings: crawling assembly %d session %d", s.leg, s.sess)
+		clog.Debugf("[ns-votes] all-sittings: crawling assembly %d session %d", s.leg, s.sess)
 		results, err := crawlOneSession("", s.leg, s.sess)
 		if err != nil {
 			clog.Infof("[ns-votes] all-sittings: assembly %d session %d: %v", s.leg, s.sess, err)

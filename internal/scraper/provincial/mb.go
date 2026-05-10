@@ -488,7 +488,7 @@ func crawlManitobaVotesFromPDF(indexURL string, legislature, session int, client
 			if m := mbSessionExtractRe.FindStringSubmatch(sessURL); len(m) == 3 {
 				leg, _ := strconv.Atoi(m[1])
 				sess, _ := strconv.Atoi(m[2])
-				clog.Infof("[mb-votes] all-sittings: crawling legislature %d session %d", leg, sess)
+				clog.Debugf("[mb-votes] all-sittings: crawling legislature %d session %d", leg, sess)
 			}
 		}
 		sessDoc, serr := fetchDoc(sessURL, client)

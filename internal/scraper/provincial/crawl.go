@@ -165,7 +165,13 @@ func BuildCrawlPlan(conn *sql.DB, client *http.Client, delay time.Duration, src 
 func buildSessionPlan(conn *sql.DB, client *http.Client, delay time.Duration, src ProvincialSource, legislature, session int, allowPreviousSessionFallback bool) (SessionPlan, error) {
 	sp := SessionPlan{Legislature: legislature, Session: session}
 
-	bills, berr := crawlBillsForSource(src, legislature, session, client)
+	var bills []ProvincialBillStub
+	var berr error
+	if src.AllSittings {
+		bills, berr = crawlAllSittingsBillsForSource(src, legislature, session, client)
+	} else {
+		bills, berr = crawlBillsForSource(src, legislature, session, client)
+	}
 	if allowPreviousSessionFallback && berr == nil && len(bills) == 0 && session > 1 && provinceBillCountInDB(conn, src.Code) == 0 {
 		clog.Infof("[provincial][%s] 0 bills for session %d; retrying with previous session %d to seed DB", src.Code, session, session-1)
 		prevBills, prevErr := crawlBillsForSource(src, legislature, session-1, client)
@@ -191,7 +197,7 @@ func buildSessionPlan(conn *sql.DB, client *http.Client, delay time.Duration, sr
 		divs = ontarioDivs
 	case "sk":
 		if src.AllSittings {
-			clog.Infof("[sk-votes] all-sittings: crawling legislature %d session %d", legislature, session)
+			clog.Debugf("[sk-votes] all-sittings: crawling legislature %d session %d", legislature, session)
 		}
 		links, err := CrawlSaskatchewanMinutesLinks(src.VotesURL, client)
 		if err != nil {
@@ -295,7 +301,7 @@ func executeSessionPlan(conn *sql.DB, client *http.Client, delay time.Duration, 
 	wiki := newProvincialWikiLookup(src.Code, client)
 
 	for _, res := range sp.Divisions {
-		billID := provincialBillIDFromDescription(conn, src.Code, sp.Legislature, sp.Session, res.Division.Description)
+		billID := provincialBillIDFromDescription(conn, src.Code, res.Division.Parliament, res.Division.Session, res.Division.Description)
 		if err := store.UpsertDivision(conn, store.DivisionRecord{
 			ID:          res.Division.ID,
 			Parliament:  res.Division.Parliament,
@@ -514,7 +520,7 @@ func CrawlProvinceSource(conn *sql.DB, client *http.Client, delay time.Duration,
 			divs = ontarioDivs
 		case "sk":
 			if src.AllSittings {
-				clog.Infof("[sk-votes] all-sittings: crawling legislature %d session %d", legislature, effectiveSession)
+				clog.Debugf("[sk-votes] all-sittings: crawling legislature %d session %d", legislature, effectiveSession)
 			}
 			links, err := CrawlSaskatchewanMinutesLinks(src.VotesURL, client)
 			if err != nil {
@@ -663,6 +669,17 @@ func crawlBillsForSource(src ProvincialSource, legislature, session int, client 
 		return crawler.CrawlBills(src.BillsURL, legislature, session, client)
 	}
 	return CrawlProvincialBillsFromIndex(src.BillsURL, src.Code, legislature, session, src.Chamber, client)
+}
+
+// crawlAllSittingsBillsForSource crawls bills for all historical sessions when
+// src.AllSittings is true, for provinces whose bill APIs support historical lookups.
+// Falls back to the regular single-session crawl for other provinces.
+func crawlAllSittingsBillsForSource(src ProvincialSource, legislature, session int, client *http.Client) ([]ProvincialBillStub, error) {
+	switch src.Code {
+	case "pe":
+		return crawlPEIAllAssemblyBills(src.BillsURL, legislature, session, peiSourceClient(src.BillsURL, client))
+	}
+	return crawlBillsForSource(src, legislature, session, client)
 }
 
 // crawlDivisionsForSource dispatches to the correct province-specific votes crawler

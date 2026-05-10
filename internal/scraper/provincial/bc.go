@@ -530,7 +530,7 @@ func crawlBritishColumbiaVotes(indexURL string, legislature, session int, client
 
 	var allResults []ProvincialDivisionResult
 	for _, s := range sessions {
-		clog.Infof("[bc-votes] all-sittings: crawling parliament %d session %d", s.Legislature, s.Session)
+		clog.Debugf("[bc-votes] all-sittings: crawling parliament %d session %d", s.Legislature, s.Session)
 		parl := parliamentOrdinal(s.Legislature)
 		sess := parliamentOrdinal(s.Session)
 		results, rerr := crawlBritishColumbiaVotesFromLIMS(limsBase, parl, sess, s.Legislature, s.Session, client)

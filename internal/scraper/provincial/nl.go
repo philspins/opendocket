@@ -350,7 +350,7 @@ func crawlNLVotesFromPDF(indexURL string, legislature, session int, client *http
 			if m := nlSessionExtractRe.FindStringSubmatch(dirURL); len(m) == 3 {
 				leg, _ := strconv.Atoi(m[1])
 				sess, _ := strconv.Atoi(m[2])
-				clog.Infof("[nl-votes] all-sittings: crawling legislature %d session %d", leg, sess)
+				clog.Debugf("[nl-votes] all-sittings: crawling legislature %d session %d", leg, sess)
 			}
 		}
 		dirDoc, derr := fetchDoc(dirURL, client)

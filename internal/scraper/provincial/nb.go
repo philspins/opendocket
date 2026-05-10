@@ -57,7 +57,7 @@ func crawlNewBrunswickVotesFromPDF(indexURL string, legislature, session int, cl
 			if m := nbJournalSessionExtractRe.FindStringSubmatch(sessionURL); len(m) == 3 {
 				leg, _ := strconv.Atoi(m[1])
 				sess, _ := strconv.Atoi(m[2])
-				clog.Infof("[nb-votes] all-sittings: crawling legislature %d session %d", leg, sess)
+				clog.Debugf("[nb-votes] all-sittings: crawling legislature %d session %d", leg, sess)
 			}
 		}
 		doc, derr := fetchDoc(sessionURL, client)
