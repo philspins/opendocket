@@ -24,6 +24,9 @@ templ VotesFeed(ps store.ParliamentStatus, divs []store.DivisionRow, total int, 
 							<th class="px-4 py-3 text-right">Nays</th>
 							<th class="px-4 py-3">Result</th>
 							<th class="px-4 py-3">Chamber</th>
+							<th class="px-4 py-3 text-right">Legislature</th>
+							<th class="px-4 py-3 text-right">Session</th>
+							<th class="px-4 py-3 text-right">Division</th>
 						</tr>
 					</thead>
 					<tbody>
@@ -45,12 +48,29 @@ templ VotesFeed(ps store.ParliamentStatus, divs []store.DivisionRow, total int, 
 								<td class="px-4 py-2.5 col-yea text-right">{ fmt.Sprint(d.Yeas) }</td>
 								<td class="px-4 py-2.5 col-nay text-right">{ fmt.Sprint(d.Nays) }</td>
 								<td class="px-4 py-2.5 col-result col-meta">{ d.Result }</td>
-								<td class="px-4 py-2.5 col-chamber col-meta capitalize">{ d.Chamber }</td>
+								<td class="px-4 py-2.5 col-chamber col-meta">{ ChamberLabel(d.Chamber) }</td>
+								<td class="px-4 py-2.5 col-legislature col-meta text-right text-xs">
+									{ fmt.Sprint(d.Parliament) }
+								</td>
+								<td class="px-4 py-2.5 col-session col-meta text-right text-xs">
+									if sessURL := sessionSourceURL(d.Chamber, d.Parliament, d.Session); sessURL != "" {
+										<a href={ safeExternalURL(sessURL) } target="_blank" rel="noopener" class="hover:underline">{ fmt.Sprint(d.Session) }</a>
+									} else {
+										{ fmt.Sprint(d.Session) }
+									}
+								</td>
+								<td class="px-4 py-2.5 col-division col-meta text-right text-xs">
+									if d.SittingURL != "" {
+										<a href={ safeExternalURL(d.SittingURL) } target="_blank" rel="noopener" class="hover:underline">{ fmt.Sprint(d.Number) }</a>
+									} else {
+										{ fmt.Sprint(d.Number) }
+									}
+								</td>
 							</tr>
 						}
 						if len(divs) == 0 {
 							<tr>
-								<td colspan="7" class="px-4 py-8 text-center text-gray-500">No votes recorded yet.</td>
+								<td colspan="10" class="px-4 py-8 text-center text-gray-500">No votes recorded yet.</td>
 							</tr>
 						}
 					</tbody>

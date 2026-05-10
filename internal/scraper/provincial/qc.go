@@ -404,6 +404,136 @@ func CrawlQuebecVotes(indexURL string, legislature, session int, client *http.Cl
 	return crawlQuebecVotes(indexURL, legislature, session, client)
 }
 
+type qcSessionOption struct {
+	Value       string
+	Legislature int
+	Session     int
+}
+
+// quebecAllSessionOptions returns all legislature/session option values from the
+// registre-des-votes index page dropdown, ordered newest-first as they appear on the page.
+func quebecAllSessionOptions(doc *goquery.Document) []qcSessionOption {
+	legSessionRe := regexp.MustCompile(`(?i)\b(\d{1,3})(?:st|nd|rd|th)?\s*(?:legislature|législature)\b.{0,60}?\b(\d{1,2})(?:st|nd|rd|th)?\s*session\b`)
+	var opts []qcSessionOption
+	seen := map[string]bool{}
+	doc.Find("select.sessionLegislature option").Each(func(_ int, opt *goquery.Selection) {
+		val, _ := opt.Attr("value")
+		val = strings.TrimSpace(val)
+		if val == "" || val == "-1" || seen[val] {
+			return
+		}
+		seen[val] = true
+		title, _ := opt.Attr("title")
+		text := strings.TrimSpace(title + " " + opt.Text())
+		m := legSessionRe.FindStringSubmatch(text)
+		if m == nil {
+			return
+		}
+		leg, lerr := strconv.Atoi(m[1])
+		sess, serr := strconv.Atoi(m[2])
+		if lerr != nil || serr != nil || leg <= 0 || sess <= 0 {
+			return
+		}
+		opts = append(opts, qcSessionOption{Value: val, Legislature: leg, Session: sess})
+	})
+	return opts
+}
+
+// crawlQuebecAllSessionsVotes crawls votes for every legislature/session listed in
+// the QC index page dropdown and returns combined results.
+func crawlQuebecAllSessionsVotes(indexURL string, client *http.Client) ([]ProvincialDivisionResult, error) {
+	if indexURL == "" {
+		indexURL = "https://www.assnat.qc.ca/en/travaux-parlementaires/registre-des-votes/index.html"
+	}
+	if client == nil {
+		client = newQCHTTPClient(15 * time.Second)
+	}
+
+	indexDoc, err := fetchDoc(indexURL, client)
+	if err != nil {
+		return nil, fmt.Errorf("qc votes index: %w", err)
+	}
+
+	opts := quebecAllSessionOptions(indexDoc)
+	if len(opts) == 0 {
+		clog.Infof("[qc-votes] all-sessions: no session options found; falling back to current session")
+		return crawlQuebecVotes(indexURL, 0, 0, client)
+	}
+
+	clog.Infof("[qc-votes] all-sessions: found %d sessions to crawl", len(opts))
+	var allResults []ProvincialDivisionResult
+	for _, opt := range opts {
+		clog.Infof("[qc-votes] all-sessions: crawling legislature %d session %d", opt.Legislature, opt.Session)
+		firstPage, ferr := quebecSearchVotes(indexURL, opt.Value, 0, 25, true, client)
+		if ferr != nil {
+			clog.Infof("[qc-votes] all-sessions: legislature %d session %d search failed: %v", opt.Legislature, opt.Session, ferr)
+			continue
+		}
+		votes := append([]quebecVoteListing{}, firstPage.Donnees...)
+		if firstPage.NombreTotalDonnees > len(firstPage.Donnees) {
+			totalPages := (firstPage.NombreTotalDonnees + firstPage.QuantiteParPage - 1) / firstPage.QuantiteParPage
+			for page := 1; page < totalPages; page++ {
+				nextPage, perr := quebecPaginateVotes(indexURL, firstPage.NomRequete, page, firstPage.QuantiteParPage, client)
+				if perr != nil {
+					clog.Infof("[qc-votes] all-sessions: leg=%d sess=%d page=%d failed: %v", opt.Legislature, opt.Session, page, perr)
+					continue
+				}
+				votes = append(votes, nextPage.Donnees...)
+			}
+		}
+
+		fallbackNum := 0
+		for _, v := range votes {
+			fallbackNum++
+			divNum, _ := strconv.Atoi(strings.TrimSpace(v.Numero))
+			if divNum <= 0 {
+				divNum = fallbackNum
+			}
+			detailURL := resolveRelativeURL(indexURL, strings.TrimSpace(v.VoteURL))
+			if detailURL == "" {
+				continue
+			}
+			date := strings.TrimSpace(v.DateVote)
+			if date == "" {
+				date = extractDateFromURL(detailURL)
+			}
+			if date == "" {
+				date = utils.TodayISO()
+			}
+			detailDoc, derr := fetchDoc(detailURL, client)
+			if derr != nil {
+				clog.Infof("[qc-votes] all-sessions: skip vote detail %s: %v", detailURL, derr)
+				continue
+			}
+			divID := ProvincialDivisionID("qc", opt.Legislature, opt.Session, divNum, date)
+			memberVotes, yeas, nays := parseQuebecVoteDetailDoc(detailDoc, divID)
+			result := "Carried"
+			if nays > yeas {
+				result = "Negatived"
+			}
+			allResults = append(allResults, ProvincialDivisionResult{
+				Division: DivisionStub{
+					ID:          divID,
+					Parliament:  opt.Legislature,
+					Session:     opt.Session,
+					Number:      divNum,
+					Date:        date,
+					Description: strings.TrimSpace(strings.Join(strings.Fields(v.Titre), " ")),
+					Yeas:        yeas,
+					Nays:        nays,
+					Result:      result,
+					Chamber:     "quebec",
+					DetailURL:   detailURL,
+					LastScraped: utils.NowISO(),
+				},
+				Votes: memberVotes,
+			})
+		}
+	}
+	clog.Debugf("[qc-votes] all-sessions: parsed %d total divisions", len(allResults))
+	return allResults, nil
+}
+
 // QuebecCalendarDatesFromPDF extracts Quebec assembly sitting dates from the calendar PDF.
 func QuebecCalendarDatesFromPDF(pdfBytes []byte, year int) ([]string, bool) {
 	text, err := extractPDFTextPages(pdfBytes, 2, 2)

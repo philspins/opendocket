@@ -690,6 +690,10 @@ func crawlDivisionsForSource(src ProvincialSource, legislature, session int, cli
 		if src.AllSittings {
 			return crawlPEIAllAssemblyVotes(src.VotesURL, legislature, session, peiSourceClient(src.VotesURL, client))
 		}
+	case "qc":
+		if src.AllSittings {
+			return crawlQuebecAllSessionsVotes(src.VotesURL, qcSourceClient(src.VotesURL, client))
+		}
 	}
 	if crawler, ok := provinceCrawlers[src.Code]; ok && crawler != nil {
 		if votes, err := crawler.CrawlVotes(src.VotesURL, legislature, session, client); err != nil || votes != nil {

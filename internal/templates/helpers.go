@@ -600,6 +600,35 @@ func safeMailtoURL(email string) templ.SafeURL {
 	return templ.SafeURL("mailto:" + email)
 }
 
+// sessionSourceURL returns the province's session overview URL for the given
+// legislature/session numbers, or "" if no canonical URL pattern is known.
+func sessionSourceURL(chamber string, parliament, session int) string {
+	if parliament <= 0 || session <= 0 {
+		return ""
+	}
+	switch chamber {
+	case "new_brunswick":
+		return fmt.Sprintf("https://www.legnb.ca/en/house-business/journals/%d/%d", parliament, session)
+	case "nova_scotia":
+		return fmt.Sprintf("https://nslegislature.ca/legislative-business/hansard-debates/assembly-%d-session-%d", parliament, session)
+	case "manitoba":
+		p := fmt.Sprintf("%d%s", parliament, ordinal(parliament))
+		s := fmt.Sprintf("%d%s", session, ordinal(session))
+		return fmt.Sprintf("https://www.gov.mb.ca/legislature/business/%s/%s_%s.html", p, p, s)
+	case "british_columbia":
+		p := fmt.Sprintf("%d%s", parliament, ordinal(parliament))
+		s := fmt.Sprintf("%d%s", session, ordinal(session))
+		return fmt.Sprintf("https://www.leg.bc.ca/parliamentary-business/overview/%s-parliament/%s-session/votes-and-proceedings", p, s)
+	case "newfoundland_labrador":
+		return fmt.Sprintf("https://www.assembly.nl.ca/HouseBusiness/Journals/%d-%d/", parliament, session)
+	case "alberta":
+		return fmt.Sprintf("https://www.assembly.ab.ca/assembly-business/assembly-records/votes-and-proceedings?leg=%d&sess=%d", parliament, session)
+	case "pei":
+		return fmt.Sprintf("https://www.assembly.pe.ca/legislative-business/house-records/journals/%d/%d", parliament, session)
+	}
+	return ""
+}
+
 // PlacesAPIKey returns the Google Maps API key used for the Places autocomplete
 // widget. It reads GOOGLE_MAPS_API_KEY from the environment so the layout can
 // inject the autocomplete script on every page without extra template parameters.

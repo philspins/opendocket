@@ -23,6 +23,7 @@ import (
 )
 
 var errNonPDFResponse = errors.New("non-pdf response")
+var errRateLimited = errors.New("rate limited")
 
 // ── types ─────────────────────────────────────────────────────────────────────
 
@@ -51,7 +52,7 @@ func ProvincialDivisionID(province string, legislature, session, num int, date s
 // ── PDF extraction ────────────────────────────────────────────────────────────
 
 func downloadAndExtractPDFText(pdfURL, province string, client *http.Client) (string, error) {
-	const attempts = 3
+	const attempts = 5
 	var lastErr error
 	for attempt := 1; attempt <= attempts; attempt++ {
 		text, err := downloadAndExtractPDFTextOnce(pdfURL, province, client)
@@ -59,9 +60,18 @@ func downloadAndExtractPDFText(pdfURL, province string, client *http.Client) (st
 			return text, nil
 		}
 		lastErr = err
-		if attempt < attempts && isTransientPDFError(err) {
-			time.Sleep(time.Duration(attempt) * 250 * time.Millisecond)
-			continue
+		if attempt < attempts {
+			if errors.Is(err, errRateLimited) {
+				// Exponential backoff for 429: 5s, 10s, 20s, 40s
+				sleep := time.Duration(5<<(attempt-1)) * time.Second
+				clog.Infof("[pdf] rate limited fetching %s; retrying in %s (attempt %d/%d)", pdfURL, sleep, attempt, attempts)
+				time.Sleep(sleep)
+				continue
+			}
+			if isTransientPDFError(err) {
+				time.Sleep(time.Duration(attempt) * 250 * time.Millisecond)
+				continue
+			}
 		}
 		return "", err
 	}
@@ -77,6 +87,10 @@ func downloadAndExtractPDFTextOnce(pdfURL, province string, client *http.Client)
 		return "", fmt.Errorf("GET %q: %w", pdfURL, err)
 	}
 	defer resp.Body.Close()
+	if resp.StatusCode == http.StatusTooManyRequests {
+		_, _ = io.ReadAll(resp.Body)
+		return "", fmt.Errorf("%w: GET %q", errRateLimited, pdfURL)
+	}
 	if resp.StatusCode != http.StatusOK {
 		snippet, _ := io.ReadAll(io.LimitReader(resp.Body, 512))
 		return "", fmt.Errorf("GET %q: status %d - %s", pdfURL, resp.StatusCode, strings.TrimSpace(string(snippet)))
