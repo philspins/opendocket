@@ -152,6 +152,13 @@ The `opendocket-crawler` binary fetches data from Canadian public government sou
 
 # Sitting calendar only
 ./opendocket-crawler --calendar
+
+# All provincial bills and votes
+./opendocket-crawler --provincial
+
+# One province only (comma-separated; implies --provincial)
+./opendocket-crawler --province mb
+./opendocket-crawler --province mb,nb,pe
 ```
 
 ### Flags
@@ -161,8 +168,32 @@ The `opendocket-crawler` binary fetches data from Canadian public government sou
 | `--db PATH` | `opendocket.db` | Path to the SQLite database file |
 | `--delay MS` | `500` | Milliseconds to sleep between HTTP requests |
 | `--parallelism N` | `5` | Max domain crawlers running concurrently (env: `CRAWLER_PARALLELISM`) |
+| `--province CODES` | — | Comma-separated province codes to crawl (e.g. `mb,nb`). Implies `--provincial`. |
+| `--legislature N` | — | Force a specific legislature number for the provincial crawl. Must be used with `--session`. |
+| `--session N` | — | Force a specific session number for the provincial crawl. Must be used with `--legislature`. |
+| `--all-sittings` | — | Bypass per-province recent-PDF window limits (MB/NL: last 80, AB/NB: last 60). Fetches the full archive. |
 | `--schedule` | — | Run the background scheduler (blocks indefinitely) |
-| `-v` | — | Verbose logging |
+| `--log-level LEVEL` | `info` | Log verbosity: `info` or `debug` |
+
+### Re-crawling provincial archives
+
+By default the provincial scrapers fetch only recent PDFs (last 60–80 sittings) to keep routine crawls fast. Use `--all-sittings` to bypass this window and re-scrape the full archive — useful when descriptions or vote data need to be fixed retroactively.
+
+```bash
+# Re-crawl all Manitoba sittings (bypasses the 80-PDF window)
+./opendocket-crawler --provincial --province mb --all-sittings
+
+# Re-crawl a specific older session (legislature 43, session 2)
+./opendocket-crawler --provincial --province mb --legislature 43 --session 2
+
+# Re-crawl all PDFs from a specific older session
+./opendocket-crawler --provincial --province mb --legislature 43 --session 2 --all-sittings
+
+# Re-crawl full archives for multiple provinces
+./opendocket-crawler --provincial --province nb,ab --all-sittings
+```
+
+`--legislature` and `--session` must always be used together. They bypass the website-based session auto-detection, targeting the supplied values directly. `--all-sittings` is independent and can be combined freely with or without a forced session.
 
 ### Parallelism
 

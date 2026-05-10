@@ -300,7 +300,7 @@ func ParseNLJournalDivisionsForTest(text, detailURL string, legislature, session
 // crawlNLVotesFromPDF performs a two-level crawl of the NL assembly journals:
 //
 //	/HouseBusiness/Journals/ → ga51session1/ → YY-MM-DD.pdf → parseNLJournalDivisions
-func crawlNLVotesFromPDF(indexURL string, legislature, session int, client *http.Client) ([]ProvincialDivisionResult, error) {
+func crawlNLVotesFromPDF(indexURL string, legislature, session int, client *http.Client, allSittings bool) ([]ProvincialDivisionResult, error) {
 	if client == nil {
 		client = utils.NewHTTPClient()
 	}
@@ -361,7 +361,7 @@ func crawlNLVotesFromPDF(indexURL string, legislature, session int, client *http
 	}
 
 	sort.Strings(pdfLinks)
-	if len(pdfLinks) > 80 {
+	if !allSittings && len(pdfLinks) > 80 {
 		pdfLinks = pdfLinks[len(pdfLinks)-80:]
 	}
 	if len(pdfLinks) == 0 {
@@ -406,14 +406,14 @@ func crawlNLVotesFromPDF(indexURL string, legislature, session int, client *http
 // present in the accessible static PDF format. Division results (Carried/Negatived) are
 // extracted from the motion outcome text; yea/nay counts are not available.
 // Two-level crawl: /HouseBusiness/Journals/ → ga51session1/ → YY-MM-DD.pdf
-func crawlNewfoundlandAndLabradorVotes(indexURL string, legislature, session int, client *http.Client) ([]ProvincialDivisionResult, error) {
+func crawlNewfoundlandAndLabradorVotes(indexURL string, legislature, session int, client *http.Client, allSittings bool) ([]ProvincialDivisionResult, error) {
 	if indexURL == "" {
 		indexURL = "https://www.assembly.nl.ca/HouseBusiness/Journals/"
 	}
-	return crawlNLVotesFromPDF(indexURL, legislature, session, client)
+	return crawlNLVotesFromPDF(indexURL, legislature, session, client, allSittings)
 }
 
 // CrawlNewfoundlandAndLabradorVotes crawls Newfoundland and Labrador votes/proceedings pages.
 func CrawlNewfoundlandAndLabradorVotes(indexURL string, legislature, session int, client *http.Client) ([]ProvincialDivisionResult, error) {
-	return crawlNewfoundlandAndLabradorVotes(indexURL, legislature, session, client)
+	return crawlNewfoundlandAndLabradorVotes(indexURL, legislature, session, client, false)
 }

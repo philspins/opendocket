@@ -14,6 +14,12 @@
 //	--provincial         Crawl all provincial bills and votes
 //	--province CODES     Comma-separated province codes to crawl (e.g. pe,on,bc).
 //	                     Implies --provincial; ignored when --provincial is not set.
+//	--legislature N      Force a specific legislature number for the provincial crawl.
+//	                     Must be used together with --session.
+//	--session N          Force a specific session number for the provincial crawl.
+//	                     Must be used together with --legislature.
+//	--all-sittings       Bypass the per-province recent-PDF window (MB/NB/AB/NL default
+//	                     to the last 60–80 PDFs). Use this to re-crawl the full archive.
 //	--schedule           Run the background scheduler (blocks indefinitely)
 //	--db PATH            Path to SQLite database file (default: opendocket.db)
 //	--delay MS           Milliseconds between HTTP requests (default: 500)
@@ -51,6 +57,9 @@ func main() {
 	senateFlag := flag.Bool("senate", false, "Crawl Senate votes only")
 	provincialFlag := flag.Bool("provincial", false, "Crawl provincial bills and votes")
 	provinceCodes := flag.String("province", "", "Comma-separated province codes to crawl (e.g. pe,on,bc); implies --provincial")
+	legislature := flag.Int("legislature", 0, "Force legislature number for provincial crawl (must be used with --session)")
+	session := flag.Int("session", 0, "Force session number for provincial crawl (must be used with --legislature)")
+	allSittings := flag.Bool("all-sittings", false, "Bypass per-province recent-PDF window; re-crawls the full archive")
 	membersFlag := flag.Bool("members", false, "Crawl MP profiles only")
 	calendarFlag := flag.Bool("calendar", false, "Crawl sitting calendar only")
 	dbPath := flag.String("db", db.DefaultPath, "Path to SQLite database file")
@@ -58,6 +67,10 @@ func main() {
 	parallelism := flag.Int("parallelism", scraper.DefaultParallelism(), "Max domain crawlers to run concurrently (env: CRAWLER_PARALLELISM)")
 	logLevel := flag.String("log-level", "info", "Log verbosity: info or debug")
 	flag.Parse()
+
+	if (*legislature > 0) != (*session > 0) {
+		log.Fatalf("--legislature and --session must be used together")
+	}
 
 	if strings.ToLower(*logLevel) == "debug" {
 		clog.SetLevel(clog.LevelDebug)
@@ -143,8 +156,14 @@ func main() {
 		if shouldRunAll {
 			filter = nil
 		}
+		provOpts := scraper.ProvincialCrawlOpts{
+			Codes:       filter,
+			Legislature: *legislature,
+			Session:     *session,
+			AllSittings: *allSittings,
+		}
 		phaseTwoTasks = append(phaseTwoTasks, crawlTask{"provincial", func() error {
-			return scraper.CrawlProvincial(conn, client, delay, *parallelism, filter, func(billID, billTitle, fullTextURL, lastActivityDate string) {
+			return scraper.CrawlProvincialWithOpts(conn, client, delay, *parallelism, provOpts, func(billID, billTitle, fullTextURL, lastActivityDate string) {
 				if summaryRequests == nil || strings.TrimSpace(fullTextURL) == "" {
 					return
 				}

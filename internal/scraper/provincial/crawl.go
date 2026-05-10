@@ -27,6 +27,10 @@ type ProvincialSource struct {
 	BillsURL string
 	VotesURL string
 	Special  string // "on" | "sk" | ""
+	// CLI overrides — zero values mean "use defaults".
+	ForcedLegislature int  // bypass auto-detection when > 0 (requires ForcedSession > 0)
+	ForcedSession     int  // bypass auto-detection when > 0 (requires ForcedLegislature > 0)
+	AllSittings       bool // bypass per-province recent-PDF window limits
 }
 
 // BillSummaryEnqueue is an optional callback used to feed crawled provincial
@@ -105,7 +109,14 @@ var provinceCrawlers = map[string]ProvinceCrawler{
 			return CrawlPrinceEdwardIslandVotes(indexURL, legislature, session, peiSourceClient(indexURL, client))
 		},
 	},
-	"qc": provinceCrawlerFuncs{bills: CrawlQuebecBills, votes: CrawlQuebecVotes},
+	"qc": provinceCrawlerFuncs{
+		bills: func(indexURL string, legislature, session int, client *http.Client) ([]ProvincialBillStub, error) {
+			return CrawlQuebecBills(indexURL, legislature, session, qcSourceClient(indexURL, client))
+		},
+		votes: func(indexURL string, legislature, session int, client *http.Client) ([]ProvincialDivisionResult, error) {
+			return CrawlQuebecVotes(indexURL, legislature, session, qcSourceClient(indexURL, client))
+		},
+	},
 	"sk": provinceCrawlerFuncs{bills: CrawlSaskatchewanBills},
 }
 
@@ -191,9 +202,11 @@ func buildSessionPlan(conn *sql.DB, client *http.Client, delay time.Duration, sr
 		if err != nil {
 			return sp, err
 		}
-		if allowPreviousSessionFallback && len(parsed) == 0 && session > 1 && provinceDivisionCountInDB(conn, src.Code) == 0 {
-			clog.Infof("[provincial][%s] 0 divisions for session %d; retrying with previous session %d to seed DB", src.Code, session, session-1)
-			prevParsed, prevErr := crawlDivisionsForSource(src, legislature, session-1, client)
+		prevSession := session - 1
+		if allowPreviousSessionFallback && len(parsed) == 0 && session > 1 &&
+			(provinceDivisionCountInDB(conn, src.Code) == 0 || provinceSessionDivisionCountInDB(conn, src.Code, legislature, prevSession) == 0) {
+			clog.Infof("[provincial][%s] 0 divisions for session %d; retrying with previous session %d to seed DB", src.Code, session, prevSession)
+			prevParsed, prevErr := crawlDivisionsForSource(src, legislature, prevSession, client)
 			if prevErr == nil && len(prevParsed) > 0 {
 				parsed = prevParsed
 			}
@@ -509,9 +522,11 @@ func CrawlProvinceSource(conn *sql.DB, client *http.Client, delay time.Duration,
 			if err != nil {
 				return err
 			}
-			if allowPreviousSessionFallback && len(parsed) == 0 && effectiveSession > 1 && provinceDivisionCountInDB(conn, src.Code) == 0 {
-				clog.Infof("[provincial][%s] 0 divisions for session %d; retrying with previous session %d to seed DB", src.Code, effectiveSession, effectiveSession-1)
-				prevParsed, prevErr := crawlDivisionsForSource(src, legislature, effectiveSession-1, client)
+			prevSession := effectiveSession - 1
+			if allowPreviousSessionFallback && len(parsed) == 0 && effectiveSession > 1 &&
+				(provinceDivisionCountInDB(conn, src.Code) == 0 || provinceSessionDivisionCountInDB(conn, src.Code, legislature, prevSession) == 0) {
+				clog.Infof("[provincial][%s] 0 divisions for session %d; retrying with previous session %d to seed DB", src.Code, effectiveSession, prevSession)
+				prevParsed, prevErr := crawlDivisionsForSource(src, legislature, prevSession, client)
 				if prevErr == nil && len(prevParsed) > 0 {
 					parsed = prevParsed
 				}
@@ -643,15 +658,30 @@ func crawlBillsForSource(src ProvincialSource, legislature, session int, client 
 // for all non-special provinces (i.e. excluding ON and SK which use their own multi-step
 // logic in CrawlProvinceSource).
 func crawlDivisionsForSource(src ProvincialSource, legislature, session int, client *http.Client) ([]ProvincialDivisionResult, error) {
+	// For provinces with PDF-window limits, call the internal function directly so
+	// src.AllSittings can bypass the recent-only cap.
+	switch src.Code {
+	case "mb":
+		return crawlManitobaVotes(src.VotesURL, legislature, session, client, src.AllSittings)
+	case "nb":
+		return crawlNewBrunswickVotes(src.VotesURL, legislature, session, client, src.AllSittings)
+	case "ab":
+		return crawlAlbertaVotes(src.VotesURL, legislature, session, client, src.AllSittings)
+	case "nl":
+		return crawlNewfoundlandAndLabradorVotes(src.VotesURL, legislature, session, client, src.AllSittings)
+	}
 	if crawler, ok := provinceCrawlers[src.Code]; ok && crawler != nil {
 		if votes, err := crawler.CrawlVotes(src.VotesURL, legislature, session, client); err != nil || votes != nil {
 			return votes, err
 		}
 	}
-	return CrawlGenericProvincialVotes(src.VotesURL, src.Code, src.Chamber, legislature, session, client)
+	return crawlGenericProvincialVotesWithAllSittings(src.VotesURL, src.Code, src.Chamber, legislature, session, client, src.AllSittings, genericVotesLinkRe)
 }
 
 func resolveProvincialLegislatureSession(conn *sql.DB, src ProvincialSource, client *http.Client) (int, int) {
+	if src.ForcedLegislature > 0 && src.ForcedSession > 0 {
+		return src.ForcedLegislature, src.ForcedSession
+	}
 	if client == nil {
 		client = http.DefaultClient
 	}
@@ -741,6 +771,19 @@ func provinceDivisionCountInDB(conn *sql.DB, provinceCode string) int {
 	}
 	var n int
 	_ = conn.QueryRow(`SELECT COUNT(1) FROM divisions WHERE id LIKE ?`, provinceCode+"-%").Scan(&n)
+	return n
+}
+
+// provinceSessionDivisionCountInDB counts divisions for one specific
+// legislature/session, e.g. "qc-43-2-%" to check whether session 2 data
+// has been seeded before deciding whether to fall back to it.
+func provinceSessionDivisionCountInDB(conn *sql.DB, provinceCode string, legislature, session int) int {
+	if conn == nil {
+		return 0
+	}
+	prefix := fmt.Sprintf("%s-%d-%d-%%", provinceCode, legislature, session)
+	var n int
+	_ = conn.QueryRow(`SELECT COUNT(1) FROM divisions WHERE id LIKE ?`, prefix).Scan(&n)
 	return n
 }
 
