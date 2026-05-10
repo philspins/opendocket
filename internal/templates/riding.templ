@@ -57,7 +57,11 @@ templ RidingLookup(ps store.ParliamentStatus, address string, federalRep opennor
 									}
 								</div>
 							} else if provincialMember.ID != "" {
-								@MemberSummaryCard(provincialMember)
+								<div class="h-full p-2 sm:p-4 lg:p-[6.25%]">
+									<div class="h-full flex items-start gap-6 p-6">
+										@memberSummaryCardInner(provincialMember)
+									</div>
+								</div>
 							} else {
 								{{
 									provName, provRole := homeRepresentativeNameRole(provincialRep, "Your current provincial representative", "Provincial representative")
@@ -119,7 +123,11 @@ templ RidingLookup(ps store.ParliamentStatus, address string, federalRep opennor
 									}
 								</div>
 							} else if federalMember.ID != "" {
-								@MemberSummaryCard(federalMember)
+								<div class="h-full p-2 sm:p-4 lg:p-[6.25%]">
+									<div class="h-full flex items-start gap-6 p-6">
+										@memberSummaryCardInner(federalMember)
+									</div>
+								</div>
 							} else {
 								{{
 									fedName, fedRole := homeRepresentativeNameRole(federalRep, "Your current federal representative", "Federal representative")
