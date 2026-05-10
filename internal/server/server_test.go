@@ -2298,163 +2298,163 @@ func TestHandleRiding_ShowsNotFoundWithNoRepsAtAll(t *testing.T) {
 }
 
 func TestHandleTutorialProgress_Unauthenticated(t *testing.T) {
-srv, _ := newTestServer(t)
+	srv, _ := newTestServer(t)
 
-req := httptest.NewRequest(http.MethodGet, "/api/tutorial-progress", nil)
-rr := httptest.NewRecorder()
-srv.ServeHTTP(rr, req)
+	req := httptest.NewRequest(http.MethodGet, "/api/tutorial-progress", nil)
+	rr := httptest.NewRecorder()
+	srv.ServeHTTP(rr, req)
 
-if rr.Code != http.StatusOK {
-t.Fatalf("status=%d want %d", rr.Code, http.StatusOK)
-}
-body := rr.Body.String()
-if !strings.Contains(body, `"dismissed":true`) {
-t.Errorf("expected dismissed=true for unauthenticated, got %s", body)
-}
+	if rr.Code != http.StatusOK {
+		t.Fatalf("status=%d want %d", rr.Code, http.StatusOK)
+	}
+	body := rr.Body.String()
+	if !strings.Contains(body, `"dismissed":true`) {
+		t.Errorf("expected dismissed=true for unauthenticated, got %s", body)
+	}
 }
 
 func TestHandleTutorialProgress_Authenticated(t *testing.T) {
-srv, st := newTestServer(t)
+	srv, st := newTestServer(t)
 
-u, err := st.AuthenticateOAuth("google", "tut-user", "tut@example.com", true)
-if err != nil {
-t.Fatalf("AuthenticateOAuth: %v", err)
-}
-sid, err := st.CreateSession(u.ID, time.Hour)
-if err != nil {
-t.Fatalf("CreateSession: %v", err)
-}
+	u, err := st.AuthenticateOAuth("google", "tut-user", "tut@example.com", true)
+	if err != nil {
+		t.Fatalf("AuthenticateOAuth: %v", err)
+	}
+	sid, err := st.CreateSession(u.ID, time.Hour)
+	if err != nil {
+		t.Fatalf("CreateSession: %v", err)
+	}
 
-req := httptest.NewRequest(http.MethodGet, "/api/tutorial-progress", nil)
-req.AddCookie(&http.Cookie{Name: "od_session", Value: sid})
-rr := httptest.NewRecorder()
-srv.ServeHTTP(rr, req)
+	req := httptest.NewRequest(http.MethodGet, "/api/tutorial-progress", nil)
+	req.AddCookie(&http.Cookie{Name: "od_session", Value: sid})
+	rr := httptest.NewRecorder()
+	srv.ServeHTTP(rr, req)
 
-if rr.Code != http.StatusOK {
-t.Fatalf("status=%d want %d; body=%s", rr.Code, http.StatusOK, rr.Body.String())
-}
-body := rr.Body.String()
-if !strings.Contains(body, `"dismissed":false`) {
-t.Errorf("expected dismissed=false, got %s", body)
-}
-if !strings.Contains(body, `"doneCount":0`) {
-t.Errorf("expected doneCount=0 initially, got %s", body)
-}
-if !strings.Contains(body, `"total":7`) {
-t.Errorf("expected total=7, got %s", body)
-}
+	if rr.Code != http.StatusOK {
+		t.Fatalf("status=%d want %d; body=%s", rr.Code, http.StatusOK, rr.Body.String())
+	}
+	body := rr.Body.String()
+	if !strings.Contains(body, `"dismissed":false`) {
+		t.Errorf("expected dismissed=false, got %s", body)
+	}
+	if !strings.Contains(body, `"doneCount":0`) {
+		t.Errorf("expected doneCount=0 initially, got %s", body)
+	}
+	if !strings.Contains(body, `"total":7`) {
+		t.Errorf("expected total=7, got %s", body)
+	}
 }
 
 func TestHandleDismissTutorial_Unauthenticated(t *testing.T) {
-srv, _ := newTestServer(t)
+	srv, _ := newTestServer(t)
 
-req := httptest.NewRequest(http.MethodPost, "/api/dismiss-tutorial", nil)
-rr := httptest.NewRecorder()
-srv.ServeHTTP(rr, req)
+	req := httptest.NewRequest(http.MethodPost, "/api/dismiss-tutorial", nil)
+	rr := httptest.NewRecorder()
+	srv.ServeHTTP(rr, req)
 
-if rr.Code != http.StatusUnauthorized {
-t.Fatalf("status=%d want %d", rr.Code, http.StatusUnauthorized)
-}
+	if rr.Code != http.StatusUnauthorized {
+		t.Fatalf("status=%d want %d", rr.Code, http.StatusUnauthorized)
+	}
 }
 
 func TestHandleDismissTutorial_Authenticated(t *testing.T) {
-srv, st := newTestServer(t)
+	srv, st := newTestServer(t)
 
-u, err := st.AuthenticateOAuth("google", "dismiss-user", "dismiss@example.com", true)
-if err != nil {
-t.Fatalf("AuthenticateOAuth: %v", err)
-}
-sid, err := st.CreateSession(u.ID, time.Hour)
-if err != nil {
-t.Fatalf("CreateSession: %v", err)
-}
+	u, err := st.AuthenticateOAuth("google", "dismiss-user", "dismiss@example.com", true)
+	if err != nil {
+		t.Fatalf("AuthenticateOAuth: %v", err)
+	}
+	sid, err := st.CreateSession(u.ID, time.Hour)
+	if err != nil {
+		t.Fatalf("CreateSession: %v", err)
+	}
 
-req := httptest.NewRequest(http.MethodPost, "/api/dismiss-tutorial", nil)
-req.AddCookie(&http.Cookie{Name: "od_session", Value: sid})
-rr := httptest.NewRecorder()
-srv.ServeHTTP(rr, req)
+	req := httptest.NewRequest(http.MethodPost, "/api/dismiss-tutorial", nil)
+	req.AddCookie(&http.Cookie{Name: "od_session", Value: sid})
+	rr := httptest.NewRecorder()
+	srv.ServeHTTP(rr, req)
 
-if rr.Code != http.StatusOK {
-t.Fatalf("status=%d want %d; body=%s", rr.Code, http.StatusOK, rr.Body.String())
-}
-if body := rr.Body.String(); !strings.Contains(body, `"ok":true`) {
-t.Errorf("expected ok=true, got %s", body)
-}
+	if rr.Code != http.StatusOK {
+		t.Fatalf("status=%d want %d; body=%s", rr.Code, http.StatusOK, rr.Body.String())
+	}
+	if body := rr.Body.String(); !strings.Contains(body, `"ok":true`) {
+		t.Errorf("expected ok=true, got %s", body)
+	}
 
-// Verify persistence.
-tp, err := st.GetTutorialProgress(u.ID)
-if err != nil {
-t.Fatalf("GetTutorialProgress: %v", err)
-}
-if !tp.Dismissed {
-t.Error("expected dismissed=true after POST /api/dismiss-tutorial")
-}
+	// Verify persistence.
+	tp, err := st.GetTutorialProgress(u.ID)
+	if err != nil {
+		t.Fatalf("GetTutorialProgress: %v", err)
+	}
+	if !tp.Dismissed {
+		t.Error("expected dismissed=true after POST /api/dismiss-tutorial")
+	}
 }
 
 func TestHandleBillDetail_MarksTutorialViewBill(t *testing.T) {
-srv, st, conn := newTestServerWithConn(t)
+	srv, st, conn := newTestServerWithConn(t)
 
-_, err := conn.Exec(`INSERT INTO bills (id, parliament, session, number, title, category, current_stage, chamber)
+	_, err := conn.Exec(`INSERT INTO bills (id, parliament, session, number, title, category, current_stage, chamber)
 VALUES ('tut-b1', 45, 1, 'C-99', 'Tutorial Bill', 'General', '1st_reading', 'commons')`)
-if err != nil {
-t.Fatalf("insert bill: %v", err)
-}
-u, err := st.AuthenticateOAuth("google", "bill-viewer", "billview@example.com", true)
-if err != nil {
-t.Fatalf("AuthenticateOAuth: %v", err)
-}
-sid, err := st.CreateSession(u.ID, time.Hour)
-if err != nil {
-t.Fatalf("CreateSession: %v", err)
-}
+	if err != nil {
+		t.Fatalf("insert bill: %v", err)
+	}
+	u, err := st.AuthenticateOAuth("google", "bill-viewer", "billview@example.com", true)
+	if err != nil {
+		t.Fatalf("AuthenticateOAuth: %v", err)
+	}
+	sid, err := st.CreateSession(u.ID, time.Hour)
+	if err != nil {
+		t.Fatalf("CreateSession: %v", err)
+	}
 
-req := httptest.NewRequest(http.MethodGet, "/bills/tut-b1", nil)
-req.AddCookie(&http.Cookie{Name: "od_session", Value: sid})
-rr := httptest.NewRecorder()
-srv.ServeHTTP(rr, req)
+	req := httptest.NewRequest(http.MethodGet, "/bills/tut-b1", nil)
+	req.AddCookie(&http.Cookie{Name: "od_session", Value: sid})
+	rr := httptest.NewRecorder()
+	srv.ServeHTTP(rr, req)
 
-if rr.Code != http.StatusOK {
-t.Fatalf("status=%d want 200", rr.Code)
-}
-tp, err := st.GetTutorialProgress(u.ID)
-if err != nil {
-t.Fatalf("GetTutorialProgress: %v", err)
-}
-if !tp.Done["view_bill"] {
-t.Error("expected view_bill marked done after visiting bill detail")
-}
+	if rr.Code != http.StatusOK {
+		t.Fatalf("status=%d want 200", rr.Code)
+	}
+	tp, err := st.GetTutorialProgress(u.ID)
+	if err != nil {
+		t.Fatalf("GetTutorialProgress: %v", err)
+	}
+	if !tp.Done["view_bill"] {
+		t.Error("expected view_bill marked done after visiting bill detail")
+	}
 }
 
 func TestHandleMemberProfile_MarksTutorialViewRep(t *testing.T) {
-srv, st, conn := newTestServerWithConn(t)
+	srv, st, conn := newTestServerWithConn(t)
 
-_, err := conn.Exec(`INSERT INTO members (id, name, party, riding, province, chamber, active, government_level)
+	_, err := conn.Exec(`INSERT INTO members (id, name, party, riding, province, chamber, active, government_level)
 VALUES ('tut-mp', 'Tutorial MP', 'Liberal', 'Ottawa Centre', 'Ontario', 'commons', 1, 'federal')`)
-if err != nil {
-t.Fatalf("insert member: %v", err)
-}
-u, err := st.AuthenticateOAuth("google", "rep-viewer", "repview@example.com", true)
-if err != nil {
-t.Fatalf("AuthenticateOAuth: %v", err)
-}
-sid, err := st.CreateSession(u.ID, time.Hour)
-if err != nil {
-t.Fatalf("CreateSession: %v", err)
-}
+	if err != nil {
+		t.Fatalf("insert member: %v", err)
+	}
+	u, err := st.AuthenticateOAuth("google", "rep-viewer", "repview@example.com", true)
+	if err != nil {
+		t.Fatalf("AuthenticateOAuth: %v", err)
+	}
+	sid, err := st.CreateSession(u.ID, time.Hour)
+	if err != nil {
+		t.Fatalf("CreateSession: %v", err)
+	}
 
-req := httptest.NewRequest(http.MethodGet, "/members/tut-mp", nil)
-req.AddCookie(&http.Cookie{Name: "od_session", Value: sid})
-rr := httptest.NewRecorder()
-srv.ServeHTTP(rr, req)
+	req := httptest.NewRequest(http.MethodGet, "/members/tut-mp", nil)
+	req.AddCookie(&http.Cookie{Name: "od_session", Value: sid})
+	rr := httptest.NewRecorder()
+	srv.ServeHTTP(rr, req)
 
-if rr.Code != http.StatusOK {
-t.Fatalf("status=%d want 200", rr.Code)
-}
-tp, err := st.GetTutorialProgress(u.ID)
-if err != nil {
-t.Fatalf("GetTutorialProgress: %v", err)
-}
-if !tp.Done["view_rep"] {
-t.Error("expected view_rep marked done after visiting member profile")
-}
+	if rr.Code != http.StatusOK {
+		t.Fatalf("status=%d want 200", rr.Code)
+	}
+	tp, err := st.GetTutorialProgress(u.ID)
+	if err != nil {
+		t.Fatalf("GetTutorialProgress: %v", err)
+	}
+	if !tp.Done["view_rep"] {
+		t.Error("expected view_rep marked done after visiting member profile")
+	}
 }

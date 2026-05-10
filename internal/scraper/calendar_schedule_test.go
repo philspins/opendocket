@@ -183,11 +183,11 @@ func TestNearestClusterIndex(t *testing.T) {
 		value float64
 		want  int
 	}{
-		{8.0, 0},   // clearly closest to 10
-		{33.0, 1},  // 17 from 50, 23 from 10
-		{75.0, 2},  // 15 from 90, 25 from 50
-		{50.0, 1},  // exact centre
-		{49.9, 1},  // just below centre
+		{8.0, 0},  // clearly closest to 10
+		{33.0, 1}, // 17 from 50, 23 from 10
+		{75.0, 2}, // 15 from 90, 25 from 50
+		{50.0, 1}, // exact centre
+		{49.9, 1}, // just below centre
 	}
 	for _, tt := range tests {
 		got := nearestClusterIndex(tt.value, centers)

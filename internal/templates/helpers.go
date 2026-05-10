@@ -265,18 +265,18 @@ func BillLevelLabel(b store.BillRow) string {
 // chamberDisplayNames maps raw chamber values (as stored in the DB) to human-readable names.
 // Multi-word provincial chambers are stored as snake_case, which CSS capitalize cannot fix.
 var chamberDisplayNames = map[string]string{
-	"commons":                 "House of Commons",
-	"senate":                  "Senate",
-	"alberta":                 "Alberta",
-	"british_columbia":        "British Columbia",
-	"manitoba":                "Manitoba",
-	"new_brunswick":           "New Brunswick",
-	"newfoundland_labrador":   "Newfoundland and Labrador",
-	"nova_scotia":             "Nova Scotia",
-	"ontario":                 "Ontario",
-	"pei":                     "Prince Edward Island",
-	"quebec":                  "Quebec",
-	"saskatchewan":            "Saskatchewan",
+	"commons":               "House of Commons",
+	"senate":                "Senate",
+	"alberta":               "Alberta",
+	"british_columbia":      "British Columbia",
+	"manitoba":              "Manitoba",
+	"new_brunswick":         "New Brunswick",
+	"newfoundland_labrador": "Newfoundland and Labrador",
+	"nova_scotia":           "Nova Scotia",
+	"ontario":               "Ontario",
+	"pei":                   "Prince Edward Island",
+	"quebec":                "Quebec",
+	"saskatchewan":          "Saskatchewan",
 }
 
 // ChamberLabel converts a raw chamber value to a display name.
