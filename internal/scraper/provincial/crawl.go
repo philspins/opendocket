@@ -190,6 +190,9 @@ func buildSessionPlan(conn *sql.DB, client *http.Client, delay time.Duration, sr
 		ontarioDivs, _ := crawlOntarioDaysConcurrently(dates, legislature, session, client, delay)
 		divs = ontarioDivs
 	case "sk":
+		if src.AllSittings {
+			clog.Infof("[sk-votes] all-sittings: crawling legislature %d session %d", legislature, session)
+		}
 		links, err := CrawlSaskatchewanMinutesLinks(src.VotesURL, client)
 		if err != nil {
 			clog.Infof("[provincial] sk: cannot discover minutes links (archive URL may have changed): %v", err)
@@ -510,6 +513,9 @@ func CrawlProvinceSource(conn *sql.DB, client *http.Client, delay time.Duration,
 			ontarioDivs, _ := crawlOntarioDaysConcurrently(dates, legislature, effectiveSession, client, delay)
 			divs = ontarioDivs
 		case "sk":
+			if src.AllSittings {
+				clog.Infof("[sk-votes] all-sittings: crawling legislature %d session %d", legislature, effectiveSession)
+			}
 			links, err := CrawlSaskatchewanMinutesLinks(src.VotesURL, client)
 			if err != nil {
 				clog.Infof("[provincial] sk: cannot discover minutes links (archive URL may have changed): %v", err)
@@ -556,6 +562,11 @@ func CrawlProvinceSource(conn *sql.DB, client *http.Client, delay time.Duration,
 }
 
 func sessionsToCrawlForSource(src ProvincialSource, currentSession int) []int {
+	// For PE with all-sittings, all-assembly iteration is handled internally by
+	// crawlPEIAllAssemblyVotes; the outer loop only needs to run once.
+	if src.Code == "pe" && src.AllSittings {
+		return []int{currentSession}
+	}
 	if src.Code != "pe" || currentSession <= 1 {
 		return []int{currentSession}
 	}
@@ -675,6 +686,10 @@ func crawlDivisionsForSource(src ProvincialSource, legislature, session int, cli
 		return crawlNovaScotiaVotes(src.VotesURL, legislature, session, client, src.AllSittings)
 	case "bc":
 		return crawlBritishColumbiaVotes(src.VotesURL, legislature, session, client, src.AllSittings)
+	case "pe":
+		if src.AllSittings {
+			return crawlPEIAllAssemblyVotes(src.VotesURL, legislature, session, peiSourceClient(src.VotesURL, client))
+		}
 	}
 	if crawler, ok := provinceCrawlers[src.Code]; ok && crawler != nil {
 		if votes, err := crawler.CrawlVotes(src.VotesURL, legislature, session, client); err != nil || votes != nil {

@@ -1098,6 +1098,52 @@ func CrawlPrinceEdwardIslandVotes(indexURL string, legislature, session int, cli
 	return crawlPrinceEdwardIslandVotes(indexURL, legislature, session, client)
 }
 
+// crawlPEIAllAssemblyVotes fetches votes for all historical PEI assemblies.
+// It iterates backwards from the current legislature, probing each session via
+// the WDF API, and stops early when a previous assembly returns no data at all.
+func crawlPEIAllAssemblyVotes(indexURL string, legislature, session int, client *http.Client) ([]ProvincialDivisionResult, error) {
+	delay := peiDefaultDelay
+	if client == nil {
+		client = newPEIHTTPClient(delay)
+	}
+	wdfBase := peiWDFAPIBase
+	if strings.HasPrefix(indexURL, "http://127.0.0.1") || strings.HasPrefix(indexURL, "http://localhost") {
+		wdfBase = indexURL
+	}
+
+	// Cover roughly 10 years (~6 assemblies back). PEI assemblies rarely exceed 4 sessions.
+	minAssembly := legislature - 6
+	if minAssembly < 62 {
+		minAssembly = 62
+	}
+
+	var allResults []ProvincialDivisionResult
+	for leg := legislature; leg >= minAssembly; leg-- {
+		maxSess := 4
+		if leg == legislature {
+			maxSess = session
+		}
+		assemblyHadResults := false
+		for sess := 1; sess <= maxSess; sess++ {
+			clog.Infof("[pe-votes] all-sittings: crawling legislature %d session %d", leg, sess)
+			results, err := crawlPEIVotesFromWorkflow(wdfBase, 0, leg, sess, client, delay)
+			if err != nil {
+				clog.Infof("[pe-votes] all-sittings: legislature %d session %d: %v", leg, sess, err)
+				continue
+			}
+			if len(results) > 0 {
+				assemblyHadResults = true
+				allResults = append(allResults, results...)
+			}
+		}
+		if leg < legislature && !assemblyHadResults {
+			clog.Infof("[pe-votes] all-sittings: no data for legislature %d; stopping", leg)
+			break
+		}
+	}
+	return allResults, nil
+}
+
 var peiCalendarPDFURLRe = regexp.MustCompile(`(?i)https?://[^\s"']*parliamentary[^\s"']*calendar[^\s"']*\.pdf`)
 var peiMarchBreakRangeRe = regexp.MustCompile(`(?i)March\s+(\d{1,2})\s*[-–]\s*(\d{1,2}),\s*(\d{4})`)
 var peiSessionOpeningDateRe = regexp.MustCompile(`(?i)opening\s+of\s+the\s+\d+(?:st|nd|rd|th)\s+Session[^\n]*?([A-Za-z]+\s+\d{1,2},\s+\d{4})`)
