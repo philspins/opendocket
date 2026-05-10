@@ -111,6 +111,120 @@ func TestParseNSHansardHTMLPage_SkipsNonVoteTables(t *testing.T) {
 	}
 }
 
+func TestParseNSParagraphVoteRow(t *testing.T) {
+	cases := []struct {
+		text     string
+		wantYea  string
+		wantNay  string
+	}{
+		// "Hon." title: double-space after it in yea column
+		{"  Hon.  Alice Smith  Bob Jones", "Hon. Alice Smith", "Bob Jones"},
+		// Both sides Hon. — nay's "Hon." uses single space so stays as one token
+		{"  Hon.  Keith Colwell  Hon. Pat Dunn", "Hon. Keith Colwell", "Hon. Pat Dunn"},
+		// No title, first+last split by double-space, nay is full name
+		{"  Rafah  DiCostanzo  Tim Houston", "Rafah DiCostanzo", "Tim Houston"},
+		// No title, four single-word tokens
+		{"  Bill  Horne  Karla  MacFarlane", "Bill Horne", "Karla MacFarlane"},
+		// Yea only — Hon. prefix
+		{"  Hon.  Iain Rankin", "Hon. Iain Rankin", ""},
+		// Yea only — no title
+		{"  Hugh  MacKay", "Hugh MacKay", ""},
+	}
+	for _, c := range cases {
+		gotYea, gotNay := parseNSParagraphVoteRow(c.text)
+		if gotYea != c.wantYea || gotNay != c.wantNay {
+			t.Errorf("parseNSParagraphVoteRow(%q)=(%q,%q), want (%q,%q)",
+				c.text, gotYea, gotNay, c.wantYea, c.wantNay)
+		}
+	}
+}
+
+func TestParseNSHansardHTMLPage_ParagraphFormat(t *testing.T) {
+	// Replicates the assembly 61–63 paragraph vote format:
+	// - bold "YEAS  NAYS" header paragraph
+	// - subsequent paragraphs with two-space-separated yea/nay columns
+	// - terminated by "THE CLERK: For, N, Against, M." paragraph
+	const html = `<html><body>
+<p><b>Bill No. 42 - An Act respecting Something.</b></p>
+<p>THE SPEAKER: Recorded vote.</p>
+<p>[The Clerk calls the roll.]</p>
+<p><b>YEAS  NAYS</b></p>
+<p>  Hon.  Alice Smith  Bob Jones</p>
+<p>  Carol  Brown  Dave White</p>
+<p>  Eve  Taylor</p>
+<p>  THE CLERK: For, 3. Against, 2.</p>
+</body></html>`
+
+	doc := mustDocFromHTML(t, html)
+	results := parseNSHansardHTMLPage(doc, "https://nslegislature.ca/house_21apr19", 63, 3, 1)
+
+	if len(results) != 1 {
+		t.Fatalf("len(results)=%d want 1", len(results))
+	}
+	div := results[0].Division
+	if div.Yeas != 3 {
+		t.Errorf("Yeas=%d want 3", div.Yeas)
+	}
+	if div.Nays != 2 {
+		t.Errorf("Nays=%d want 2", div.Nays)
+	}
+	if div.Date != "2021-04-19" {
+		t.Errorf("Date=%q want 2021-04-19", div.Date)
+	}
+	if div.Description != "Bill No. 42 - An Act respecting Something." {
+		t.Errorf("Description=%q unexpected", div.Description)
+	}
+
+	byName := map[string]string{}
+	for _, v := range results[0].Votes {
+		byName[v.MemberName] = v.Vote
+	}
+	for name, wantVote := range map[string]string{
+		"Hon. Alice Smith": "Yea",
+		"Carol Brown":      "Yea",
+		"Eve Taylor":       "Yea",
+		"Bob Jones":        "Nay",
+		"Dave White":       "Nay",
+	} {
+		if got := byName[name]; got != wantVote {
+			t.Errorf("%s: vote=%q want %q", name, got, wantVote)
+		}
+	}
+}
+
+func TestParseNSHansardHTMLPage_ParagraphFormat_MultipleVotes(t *testing.T) {
+	const html = `<html><body>
+<p><b>Bill No. 1 - First Act.</b></p>
+<p><b>YEAS  NAYS</b></p>
+<p>  Alice  Smith  Bob  Jones</p>
+<p>  THE CLERK: For, 1. Against, 1.</p>
+<p><b>Bill No. 2 - Second Act.</b></p>
+<p><b>YEAS  NAYS</b></p>
+<p>  Carol  Brown  Dave  White</p>
+<p>  Eve  Taylor</p>
+<p>  THE CLERK: For, 2. Against, 1.</p>
+</body></html>`
+
+	doc := mustDocFromHTML(t, html)
+	results := parseNSHansardHTMLPage(doc, "https://nslegislature.ca/house_21apr19", 63, 3, 1)
+
+	if len(results) != 2 {
+		t.Fatalf("len(results)=%d want 2", len(results))
+	}
+	if results[0].Division.Yeas != 1 || results[0].Division.Nays != 1 {
+		t.Errorf("div1: yeas=%d nays=%d want 1/1", results[0].Division.Yeas, results[0].Division.Nays)
+	}
+	if results[1].Division.Yeas != 2 || results[1].Division.Nays != 1 {
+		t.Errorf("div2: yeas=%d nays=%d want 2/1", results[1].Division.Yeas, results[1].Division.Nays)
+	}
+	if results[0].Division.Description != "Bill No. 1 - First Act." {
+		t.Errorf("div1 desc=%q", results[0].Division.Description)
+	}
+	if results[1].Division.Description != "Bill No. 2 - Second Act." {
+		t.Errorf("div2 desc=%q", results[1].Division.Description)
+	}
+}
+
 func TestDiscoverNovaScotiaVotePDFLinks(t *testing.T) {
 	doc := mustDocFromHTML(t, `<html><body>
 		<a href="/sites/default/files/pdfs/proceedings/hansard/64-1/h111apr04.pdf?4058">Hansard PDF</a>

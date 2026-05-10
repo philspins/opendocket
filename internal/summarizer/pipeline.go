@@ -785,7 +785,12 @@ func fetchBillText(ctx context.Context, billID, url string) (string, error) {
 }
 
 func fetchBillTextWithFallback(ctx context.Context, billID, url string, allowPERefresh bool) (string, error) {
-	client := utils.NewHTTPClient()
+	var client *http.Client
+	if strings.Contains(url, "assnat.qc.ca") {
+		client = provincial.NewQCHTTPClient(15 * time.Second)
+	} else {
+		client = utils.NewHTTPClient()
+	}
 	req, err := http.NewRequestWithContext(ctx, http.MethodGet, url, nil)
 	if err != nil {
 		return "", err

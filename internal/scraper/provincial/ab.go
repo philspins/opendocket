@@ -423,7 +423,7 @@ func ParseAlbertaVPDivisionsForTest(text, detailURL string, legislature, session
 
 // crawlAlbertaVotesFromPDF fetches the AB V&P index page, discovers per-day PDF links
 // (fixing the backslash-escaped hrefs), and parses each PDF.
-func crawlAlbertaVotesFromPDF(indexURL string, legislature, session int, client *http.Client) ([]ProvincialDivisionResult, error) {
+func crawlAlbertaVotesFromPDF(indexURL string, legislature, session int, client *http.Client, allSittings bool) ([]ProvincialDivisionResult, error) {
 	if client == nil {
 		client = utils.NewHTTPClient()
 	}
@@ -449,7 +449,9 @@ func crawlAlbertaVotesFromPDF(indexURL string, legislature, session int, client 
 	})
 
 	sort.Strings(pdfLinks)
-	if len(pdfLinks) > 60 {
+	if allSittings {
+		clog.Infof("[ab-votes] all-sittings: crawling legislature %d session %d", legislature, session)
+	} else if len(pdfLinks) > 60 {
 		pdfLinks = pdfLinks[len(pdfLinks)-60:]
 	}
 	if len(pdfLinks) == 0 {
@@ -487,14 +489,14 @@ func crawlAlbertaVotesFromPDF(indexURL string, legislature, session int, client 
 // The AB assembly page links to per-day VP PDFs via backslash-escaped hrefs; this
 // function normalises those hrefs and parses each PDF using the Alberta-specific
 // "For the [phrase]: N / Against the [phrase]: N" vote format.
-func crawlAlbertaVotes(indexURL string, legislature, session int, client *http.Client) ([]ProvincialDivisionResult, error) {
+func crawlAlbertaVotes(indexURL string, legislature, session int, client *http.Client, allSittings bool) ([]ProvincialDivisionResult, error) {
 	if indexURL == "" {
 		indexURL = "https://www.assembly.ab.ca/assembly-business/assembly-records/votes-and-proceedings"
 	}
-	return crawlAlbertaVotesFromPDF(indexURL, legislature, session, client)
+	return crawlAlbertaVotesFromPDF(indexURL, legislature, session, client, allSittings)
 }
 
 // CrawlAlbertaVotes crawls Alberta votes/proceedings pages.
 func CrawlAlbertaVotes(indexURL string, legislature, session int, client *http.Client) ([]ProvincialDivisionResult, error) {
-	return crawlAlbertaVotes(indexURL, legislature, session, client)
+	return crawlAlbertaVotes(indexURL, legislature, session, client, false)
 }

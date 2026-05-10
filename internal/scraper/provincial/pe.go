@@ -635,6 +635,7 @@ var peiJournalPageHeaderRe = regexp.MustCompile(`JOURNAL OF THE LEGISLATIVE ASSE
 var peiOctalEscapeRe = regexp.MustCompile(`\\(\d{3})`)
 var peiPremierRe = regexp.MustCompile(`(?i)Hon\.\s+Premier`)
 var peiDivisionBoilerplateRe = regexp.MustCompile(`(?i)^(?:and\s+the\s+question\s+being\s+put.*|the\s+question\s+being\s+put.*|hon\.\s+mr\.\s+speaker\s+put\s+the\s+question.*|motion\s+resolved.*|the\s+motion\s+was.*)$`)
+var peiBillNoInContextRe = regexp.MustCompile(`(?i)\bBill\s+No\.?\s*(\d+\w*)`)
 
 var peiTitlePrefixes = []string{
 	"Hon. Leader of the Opposition",
@@ -752,8 +753,51 @@ func parsePEIJournalDivisions(rawText, pdfURL string, legislature, session, star
 	return results
 }
 
+// peiBillDescriptionFromContext returns "TITLE (Bill N)" for the last
+// "Bill No. N" match found in ctx, walking backward to collect the
+// all-uppercase title words that precede it. Returns "" if no match.
+func peiBillDescriptionFromContext(ctx string) string {
+	matches := peiBillNoInContextRe.FindAllStringSubmatchIndex(ctx, -1)
+	if len(matches) == 0 {
+		return ""
+	}
+	// Use the LAST match (handles omnibus sessions where multiple bills appear).
+	last := matches[len(matches)-1]
+	billNo := ctx[last[2]:last[3]] // capture group 1 = bill number
+
+	// Walk backward from the match start collecting all-uppercase words for the title.
+	before := ctx[:last[0]]
+	words := strings.Fields(before)
+	var titleWords []string
+	for i := len(words) - 1; i >= 0; i-- {
+		w := words[i]
+		// Stop at the first word that is not all-uppercase letters (allows hyphens).
+		if !isAllCaps(w) {
+			break
+		}
+		titleWords = append([]string{w}, titleWords...)
+	}
+	if len(titleWords) == 0 {
+		return fmt.Sprintf("Bill %s", billNo)
+	}
+	return fmt.Sprintf("%s (Bill %s)", strings.Join(titleWords, " "), billNo)
+}
+
+// isAllCaps reports whether s consists entirely of uppercase ASCII letters and hyphens.
+func isAllCaps(s string) bool {
+	if s == "" {
+		return false
+	}
+	for _, r := range s {
+		if r != '-' && (r < 'A' || r > 'Z') {
+			return false
+		}
+	}
+	return true
+}
+
 func extractPEIDivisionDescription(text string, triggerStart int) string {
-	const contextWindow = 500
+	const contextWindow = 900
 	const maxDescriptionLen = 240
 
 	start := triggerStart - contextWindow
@@ -763,6 +807,10 @@ func extractPEIDivisionDescription(text string, triggerStart int) string {
 	ctx := strings.TrimSpace(strings.Join(strings.Fields(text[start:triggerStart]), " "))
 	if ctx == "" {
 		return "Recorded division"
+	}
+
+	if desc := peiBillDescriptionFromContext(ctx); desc != "" {
+		return desc
 	}
 
 	parts := strings.FieldsFunc(ctx, func(r rune) bool {
@@ -1048,6 +1096,52 @@ func crawlPrinceEdwardIslandVotes(indexURL string, legislature, session int, cli
 // CrawlPrinceEdwardIslandVotes crawls PEI votes/proceedings pages.
 func CrawlPrinceEdwardIslandVotes(indexURL string, legislature, session int, client *http.Client) ([]ProvincialDivisionResult, error) {
 	return crawlPrinceEdwardIslandVotes(indexURL, legislature, session, client)
+}
+
+// crawlPEIAllAssemblyVotes fetches votes for all historical PEI assemblies.
+// It iterates backwards from the current legislature, probing each session via
+// the WDF API, and stops early when a previous assembly returns no data at all.
+func crawlPEIAllAssemblyVotes(indexURL string, legislature, session int, client *http.Client) ([]ProvincialDivisionResult, error) {
+	delay := peiDefaultDelay
+	if client == nil {
+		client = newPEIHTTPClient(delay)
+	}
+	wdfBase := peiWDFAPIBase
+	if strings.HasPrefix(indexURL, "http://127.0.0.1") || strings.HasPrefix(indexURL, "http://localhost") {
+		wdfBase = indexURL
+	}
+
+	// Cover roughly 10 years (~6 assemblies back). PEI assemblies rarely exceed 4 sessions.
+	minAssembly := legislature - 6
+	if minAssembly < 62 {
+		minAssembly = 62
+	}
+
+	var allResults []ProvincialDivisionResult
+	for leg := legislature; leg >= minAssembly; leg-- {
+		maxSess := 4
+		if leg == legislature {
+			maxSess = session
+		}
+		assemblyHadResults := false
+		for sess := 1; sess <= maxSess; sess++ {
+			clog.Infof("[pe-votes] all-sittings: crawling legislature %d session %d", leg, sess)
+			results, err := crawlPEIVotesFromWorkflow(wdfBase, 0, leg, sess, client, delay)
+			if err != nil {
+				clog.Infof("[pe-votes] all-sittings: legislature %d session %d: %v", leg, sess, err)
+				continue
+			}
+			if len(results) > 0 {
+				assemblyHadResults = true
+				allResults = append(allResults, results...)
+			}
+		}
+		if leg < legislature && !assemblyHadResults {
+			clog.Infof("[pe-votes] all-sittings: no data for legislature %d; stopping", leg)
+			break
+		}
+	}
+	return allResults, nil
 }
 
 var peiCalendarPDFURLRe = regexp.MustCompile(`(?i)https?://[^\s"']*parliamentary[^\s"']*calendar[^\s"']*\.pdf`)

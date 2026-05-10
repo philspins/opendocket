@@ -331,15 +331,27 @@ func CrawlSenate(conn *sql.DB, client *http.Client, delay time.Duration, indexUR
 // CrawlProvincial runs configured provincial crawlers with bounded concurrency.
 // If codes is non-empty only the named province codes (e.g. "pe", "on") are
 // crawled; otherwise all sources in ProvincialSources run.
+// ProvincialCrawlOpts holds optional overrides for CrawlProvincial.
+type ProvincialCrawlOpts struct {
+	Codes       []string // province codes to crawl; nil = all
+	Legislature int      // force legislature number (requires Session > 0)
+	Session     int      // force session number (requires Legislature > 0)
+	AllSittings bool     // bypass per-province recent-PDF window limits
+}
+
 func CrawlProvincial(conn *sql.DB, client *http.Client, delay time.Duration, parallelism int, codes []string, enqueueSummary BillSummaryEnqueue) error {
+	return CrawlProvincialWithOpts(conn, client, delay, parallelism, ProvincialCrawlOpts{Codes: codes}, enqueueSummary)
+}
+
+func CrawlProvincialWithOpts(conn *sql.DB, client *http.Client, delay time.Duration, parallelism int, opts ProvincialCrawlOpts, enqueueSummary BillSummaryEnqueue) error {
 	clog.Infof("[provincial] crawling provincial sources")
 	sources := provincial.ProvincialSources
-	if len(codes) > 0 {
-		set := make(map[string]bool, len(codes))
-		for _, c := range codes {
+	if len(opts.Codes) > 0 {
+		set := make(map[string]bool, len(opts.Codes))
+		for _, c := range opts.Codes {
 			set[strings.ToLower(strings.TrimSpace(c))] = true
 		}
-		filtered := make([]ProvincialSource, 0, len(codes))
+		filtered := make([]ProvincialSource, 0, len(opts.Codes))
 		for _, src := range provincial.ProvincialSources {
 			if set[src.Code] {
 				filtered = append(filtered, src)
@@ -347,13 +359,25 @@ func CrawlProvincial(conn *sql.DB, client *http.Client, delay time.Duration, par
 		}
 		sources = filtered
 	}
-	if parallelism < 1 {
-		parallelism = 1
+	// Apply CLI overrides to every source being crawled.
+	if opts.Legislature > 0 && opts.Session > 0 || opts.AllSittings {
+		patched := make([]ProvincialSource, len(sources))
+		for i, src := range sources {
+			src.ForcedLegislature = opts.Legislature
+			src.ForcedSession = opts.Session
+			src.AllSittings = opts.AllSittings
+			patched[i] = src
+		}
+		sources = patched
 	}
-	g := new(errgroup.Group)
-	g.SetLimit(parallelism)
-	errMu := sync.Mutex{}
-	errs := make([]error, 0)
+	// One goroutine per province: each independently fetches+writes bills, then
+	// fetches+writes votes. No inter-province barrier — a province moves from bills
+	// to votes as soon as its own bills are done, regardless of other provinces.
+	var (
+		g     errgroup.Group
+		errMu sync.Mutex
+		errs  []error
+	)
 	for _, src := range sources {
 		src := src
 		g.Go(func() error {

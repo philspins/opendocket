@@ -16,6 +16,7 @@ import (
 
 var newBrunswickBillLinkRe = regexp.MustCompile(`(?i)(legis|bill|projet)`)
 var newBrunswickJournalSessionLinkRe = regexp.MustCompile(`(?i)/en/house-business/journals/\d+/\d+/?$`)
+var nbJournalSessionExtractRe = regexp.MustCompile(`/journals/(\d+)/(\d+)`)
 var newBrunswickJournalPDFLinkRe = regexp.MustCompile(`(?i)\.pdf(?:\?.*)?$`)
 var newBrunswickPDFVoteCountRe = regexp.MustCompile(`(?is)(?:YEAS?|POUR)\s*[:\-]?\s*(\d{1,3}).{0,280}?(?:NAYS?|CONTRE)\s*[:\-]?\s*(\d{1,3})`)
 var newBrunswickVoteSectionRe = regexp.MustCompile(`(?is)(?:RECORDED\s+DIVISION\s+)?(YEAS?|POUR)\s*[-:–]\s*\d{1,3}\s+`)
@@ -38,7 +39,7 @@ func CrawlNewBrunswickBills(indexURL string, legislature, session int, client *h
 
 // ── New Brunswick votes ───────────────────────────────────────────────────────
 
-func crawlNewBrunswickVotesFromPDF(indexURL string, legislature, session int, client *http.Client) ([]ProvincialDivisionResult, error) {
+func crawlNewBrunswickVotesFromPDF(indexURL string, legislature, session int, client *http.Client, allSittings bool) ([]ProvincialDivisionResult, error) {
 	indexDoc, err := fetchDoc(indexURL, client)
 	if err != nil {
 		return nil, err
@@ -52,6 +53,13 @@ func crawlNewBrunswickVotesFromPDF(indexURL string, legislature, session int, cl
 	pdfLinks := make([]string, 0)
 	seenPDF := make(map[string]bool)
 	for _, sessionURL := range sessionLinks {
+		if allSittings {
+			if m := nbJournalSessionExtractRe.FindStringSubmatch(sessionURL); len(m) == 3 {
+				leg, _ := strconv.Atoi(m[1])
+				sess, _ := strconv.Atoi(m[2])
+				clog.Infof("[nb-votes] all-sittings: crawling legislature %d session %d", leg, sess)
+			}
+		}
 		doc, derr := fetchDoc(sessionURL, client)
 		if derr != nil {
 			clog.Infof("[nb-votes] skip session %s: %v", sessionURL, derr)
@@ -67,7 +75,7 @@ func crawlNewBrunswickVotesFromPDF(indexURL string, legislature, session int, cl
 	}
 
 	sort.Strings(pdfLinks)
-	if len(pdfLinks) > 60 {
+	if !allSittings && len(pdfLinks) > 60 {
 		pdfLinks = pdfLinks[len(pdfLinks)-60:]
 	}
 	if len(pdfLinks) == 0 {
@@ -111,9 +119,6 @@ func discoverNewBrunswickJournalSessionLinks(doc *goquery.Document, baseURL stri
 		links = append(links, full)
 	})
 	sort.Strings(links)
-	if len(links) > 6 {
-		links = links[len(links)-6:]
-	}
 	return links
 }
 
@@ -295,20 +300,20 @@ func ParseNewBrunswickPDFDivisionsForTest(text, detailURL string, legislature, s
 	return parseNewBrunswickPDFDivisions(text, detailURL, legislature, session, startDivisionNumber, date)
 }
 
-// CrawlNewBrunswickVotes crawls NB journals/votes pages.
-func crawlNewBrunswickVotes(indexURL string, legislature, session int, client *http.Client) ([]ProvincialDivisionResult, error) {
+// crawlNewBrunswickVotes crawls NB journals/votes pages.
+func crawlNewBrunswickVotes(indexURL string, legislature, session int, client *http.Client, allSittings bool) ([]ProvincialDivisionResult, error) {
 	if indexURL == "" {
 		indexURL = "https://www.legnb.ca/en/house-business/journals"
 	}
 	if client == nil {
 		client = utils.NewHTTPClient()
 	}
-	return crawlNewBrunswickVotesFromPDF(indexURL, legislature, session, client)
+	return crawlNewBrunswickVotesFromPDF(indexURL, legislature, session, client, allSittings)
 }
 
 // CrawlNewBrunswickVotes crawls New Brunswick votes/proceedings pages.
 func CrawlNewBrunswickVotes(indexURL string, legislature, session int, client *http.Client) ([]ProvincialDivisionResult, error) {
-	return crawlNewBrunswickVotes(indexURL, legislature, session, client)
+	return crawlNewBrunswickVotes(indexURL, legislature, session, client, false)
 }
 
 // parseNewBrunswickVoteNames extracts names from NB-style vote blocks (Hon. Mr./Ms. prefix format).

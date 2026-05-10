@@ -57,6 +57,60 @@ type bcGraphQLParliamentResponse struct {
 	} `json:"data"`
 }
 
+// bcLIMSAllParliamentsResponse is the GraphQL response shape when querying all
+// parliaments and their sessions from the BC LIMS /graphql endpoint.
+type bcLIMSAllParliamentsResponse struct {
+	Data struct {
+		AllParliaments struct {
+			Nodes []struct {
+				Number   int `json:"number"`
+				Sessions struct {
+					Nodes []struct {
+						Number int `json:"number"`
+					} `json:"nodes"`
+				} `json:"sessionsByParliamentId"`
+			} `json:"nodes"`
+		} `json:"allParliaments"`
+	} `json:"data"`
+}
+
+type bcParliamentSession struct{ Legislature, Session int }
+
+// fetchBritishColumbiaAllSessions queries the BC LIMS GraphQL API for every
+// parliament/session combination, returned in ascending order.
+func fetchBritishColumbiaAllSessions(client *http.Client) ([]bcParliamentSession, error) {
+	body, err := json.Marshal(map[string]string{
+		"query": `query { allParliaments(orderBy: NUMBER_ASC) { nodes { number sessionsByParliamentId(orderBy: NUMBER_ASC) { nodes { number } } } } }`,
+	})
+	if err != nil {
+		return nil, err
+	}
+	req, err := http.NewRequest(http.MethodPost, bcLIMSBase+"/graphql", bytes.NewReader(body))
+	if err != nil {
+		return nil, err
+	}
+	req.Header.Set("Content-Type", "application/json")
+	resp, err := client.Do(req)
+	if err != nil {
+		return nil, fmt.Errorf("bc graphql all sessions: %w", err)
+	}
+	defer resp.Body.Close()
+	if resp.StatusCode != http.StatusOK {
+		return nil, fmt.Errorf("bc graphql all sessions: status %d", resp.StatusCode)
+	}
+	var payload bcLIMSAllParliamentsResponse
+	if err := json.NewDecoder(resp.Body).Decode(&payload); err != nil {
+		return nil, fmt.Errorf("bc graphql all sessions decode: %w", err)
+	}
+	var sessions []bcParliamentSession
+	for _, p := range payload.Data.AllParliaments.Nodes {
+		for _, s := range p.Sessions.Nodes {
+			sessions = append(sessions, bcParliamentSession{Legislature: p.Number, Session: s.Number})
+		}
+	}
+	return sessions, nil
+}
+
 // ── BC bills ──────────────────────────────────────────────────────────────────
 
 var bcDynProgressIframeRe = regexp.MustCompile(`https?://dyn\.leg\.bc\.ca/progress-of-bills\?parliament=[^"']+&session=[^"']+`)
@@ -447,7 +501,11 @@ func crawlBritishColumbiaVotesFromLIMS(limsBase, parliament, session string, leg
 //
 // indexURL, when non-empty, overrides the LIMS base URL. This is used in tests to
 // point the scraper at a local HTTP server instead of lims.leg.bc.ca.
-func crawlBritishColumbiaVotes(indexURL string, legislature, session int, client *http.Client) ([]ProvincialDivisionResult, error) {
+// crawlBritishColumbiaVotes crawls BC V&P data from the LIMS document-store API.
+// When allSittings is true it queries the LIMS GraphQL endpoint for every known
+// parliament/session and crawls each; otherwise only the current parliament/session
+// is crawled.
+func crawlBritishColumbiaVotes(indexURL string, legislature, session int, client *http.Client, allSittings bool) ([]ProvincialDivisionResult, error) {
 	if client == nil {
 		client = utils.NewHTTPClient()
 	}
@@ -455,9 +513,34 @@ func crawlBritishColumbiaVotes(indexURL string, legislature, session int, client
 	if indexURL != "" {
 		limsBase = indexURL
 	}
-	parl := parliamentOrdinal(legislature)
-	sess := parliamentOrdinal(session)
-	return crawlBritishColumbiaVotesFromLIMS(limsBase, parl, sess, legislature, session, client)
+
+	if !allSittings {
+		parl := parliamentOrdinal(legislature)
+		sess := parliamentOrdinal(session)
+		return crawlBritishColumbiaVotesFromLIMS(limsBase, parl, sess, legislature, session, client)
+	}
+
+	sessions, err := fetchBritishColumbiaAllSessions(client)
+	if err != nil {
+		clog.Infof("[bc-votes] all-sittings: could not enumerate sessions: %v; falling back to current session", err)
+		parl := parliamentOrdinal(legislature)
+		sess := parliamentOrdinal(session)
+		return crawlBritishColumbiaVotesFromLIMS(limsBase, parl, sess, legislature, session, client)
+	}
+
+	var allResults []ProvincialDivisionResult
+	for _, s := range sessions {
+		clog.Infof("[bc-votes] all-sittings: crawling parliament %d session %d", s.Legislature, s.Session)
+		parl := parliamentOrdinal(s.Legislature)
+		sess := parliamentOrdinal(s.Session)
+		results, rerr := crawlBritishColumbiaVotesFromLIMS(limsBase, parl, sess, s.Legislature, s.Session, client)
+		if rerr != nil {
+			clog.Infof("[bc-votes] all-sittings: parliament %d session %d: %v", s.Legislature, s.Session, rerr)
+			continue
+		}
+		allResults = append(allResults, results...)
+	}
+	return allResults, nil
 }
 
 // ParseBCVotesDivisionsForTest is test-only access to the BC VP HTML division parser.
@@ -475,5 +558,5 @@ func ParliamentOrdinalForTest(n int) string { return parliamentOrdinal(n) }
 
 // CrawlBritishColumbiaVotes crawls British Columbia votes/proceedings pages.
 func CrawlBritishColumbiaVotes(indexURL string, legislature, session int, client *http.Client) ([]ProvincialDivisionResult, error) {
-	return crawlBritishColumbiaVotes(indexURL, legislature, session, client)
+	return crawlBritishColumbiaVotes(indexURL, legislature, session, client, false)
 }

@@ -5,6 +5,7 @@ import (
 	"net/http"
 	"regexp"
 	"sort"
+	"strconv"
 	"strings"
 
 	"github.com/PuerkitoBio/goquery"
@@ -92,6 +93,10 @@ func CrawlNewfoundlandAndLabradorBills(indexURL string, legislature, session int
 
 // nlSessionDirLinkRe matches NL journal session-directory links like "ga51session1/".
 var nlSessionDirLinkRe = regexp.MustCompile(`(?i)ga\d+session\d+/?$`)
+
+// nlSessionExtractRe extracts legislature and session from an NL session dir URL,
+// e.g. ".../ga51session1/" → groups 1="51", 2="1".
+var nlSessionExtractRe = regexp.MustCompile(`(?i)ga(\d+)session(\d+)`)
 
 // nlJournalPDFLinkRe matches per-day NL journal PDF filenames like "26-04-14.pdf".
 var nlJournalPDFLinkRe = regexp.MustCompile(`(?i)\d{2}-\d{2}-\d{2}\.pdf$`)
@@ -300,7 +305,7 @@ func ParseNLJournalDivisionsForTest(text, detailURL string, legislature, session
 // crawlNLVotesFromPDF performs a two-level crawl of the NL assembly journals:
 //
 //	/HouseBusiness/Journals/ → ga51session1/ → YY-MM-DD.pdf → parseNLJournalDivisions
-func crawlNLVotesFromPDF(indexURL string, legislature, session int, client *http.Client) ([]ProvincialDivisionResult, error) {
+func crawlNLVotesFromPDF(indexURL string, legislature, session int, client *http.Client, allSittings bool) ([]ProvincialDivisionResult, error) {
 	if client == nil {
 		client = utils.NewHTTPClient()
 	}
@@ -333,7 +338,7 @@ func crawlNLVotesFromPDF(indexURL string, legislature, session int, client *http
 		return crawlGenericProvincialVotesWithMatcher(indexURL, "nl", "newfoundland_labrador", legislature, session, client, newfoundlandVotesLinkRe)
 	}
 	sort.Strings(sessionDirs)
-	if len(sessionDirs) > 4 {
+	if !allSittings && len(sessionDirs) > 4 {
 		sessionDirs = sessionDirs[len(sessionDirs)-4:]
 	}
 
@@ -341,6 +346,13 @@ func crawlNLVotesFromPDF(indexURL string, legislature, session int, client *http
 	var pdfLinks []string
 	seenPDF := make(map[string]bool)
 	for _, dirURL := range sessionDirs {
+		if allSittings {
+			if m := nlSessionExtractRe.FindStringSubmatch(dirURL); len(m) == 3 {
+				leg, _ := strconv.Atoi(m[1])
+				sess, _ := strconv.Atoi(m[2])
+				clog.Infof("[nl-votes] all-sittings: crawling legislature %d session %d", leg, sess)
+			}
+		}
 		dirDoc, derr := fetchDoc(dirURL, client)
 		if derr != nil {
 			clog.Infof("[nl-votes] skip session dir %s: %v", dirURL, derr)
@@ -361,7 +373,7 @@ func crawlNLVotesFromPDF(indexURL string, legislature, session int, client *http
 	}
 
 	sort.Strings(pdfLinks)
-	if len(pdfLinks) > 80 {
+	if !allSittings && len(pdfLinks) > 80 {
 		pdfLinks = pdfLinks[len(pdfLinks)-80:]
 	}
 	if len(pdfLinks) == 0 {
@@ -406,14 +418,14 @@ func crawlNLVotesFromPDF(indexURL string, legislature, session int, client *http
 // present in the accessible static PDF format. Division results (Carried/Negatived) are
 // extracted from the motion outcome text; yea/nay counts are not available.
 // Two-level crawl: /HouseBusiness/Journals/ → ga51session1/ → YY-MM-DD.pdf
-func crawlNewfoundlandAndLabradorVotes(indexURL string, legislature, session int, client *http.Client) ([]ProvincialDivisionResult, error) {
+func crawlNewfoundlandAndLabradorVotes(indexURL string, legislature, session int, client *http.Client, allSittings bool) ([]ProvincialDivisionResult, error) {
 	if indexURL == "" {
 		indexURL = "https://www.assembly.nl.ca/HouseBusiness/Journals/"
 	}
-	return crawlNLVotesFromPDF(indexURL, legislature, session, client)
+	return crawlNLVotesFromPDF(indexURL, legislature, session, client, allSittings)
 }
 
 // CrawlNewfoundlandAndLabradorVotes crawls Newfoundland and Labrador votes/proceedings pages.
 func CrawlNewfoundlandAndLabradorVotes(indexURL string, legislature, session int, client *http.Client) ([]ProvincialDivisionResult, error) {
-	return crawlNewfoundlandAndLabradorVotes(indexURL, legislature, session, client)
+	return crawlNewfoundlandAndLabradorVotes(indexURL, legislature, session, client, false)
 }

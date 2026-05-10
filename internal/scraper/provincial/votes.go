@@ -374,7 +374,10 @@ var voteNamePrefixTokens = map[string]bool{
 }
 
 var newBrunswickDescRecordedDivisionTailRe = regexp.MustCompile(`(?is)\bRECORDED\s+DIVISION\b.*$`)
-var newBrunswickDescBoilerplateRe = regexp.MustCompile(`(?is)\b(?:and\s+the\s+debate\s+being\s+ended|the\s+debate\s+being\s+ended|and\s+the\s+question\s+being\s+put|the\s+question\s+being\s+put|leave\s+was\s+granted\s+to\s+dispense\s+with\s+the\s+ten\s*-?\s*minute\s+time\s+allotted\s+for\s+the\s+ringing\s+of\s+the\s+bells|on\s+the\s+following\s+recorded\s+division)\b`)
+var newBrunswickDescBoilerplateRe = regexp.MustCompile(`(?is)\b(?:and\s+the\s+debate\s+being\s+ended|the\s+debate\s+being\s+ended|and\s+the\s+debate\s+continuing|and\s+the\s+question\s+being\s+put|the\s+question\s+being\s+put|leave\s+was\s+granted\s+to\s+dispense\s+with\s+the\s+ten\s*-?\s*minute\s+time\s+allotted\s+for\s+the\s+ringing\s+of\s+the\s+bells|on\s+the\s+following\s+(?:recorded\s+)?division|it\s+was\s+(?:agreed|negatived)\s+to|speaker\s+resumed\s+the\s+chair|having\s+spoken|moved\s+by\s+(?:hon|mr|ms|mrs))\b`)
+
+// billNoInContextRe matches "Bill No. X" or "Bill X" in provincial journal text.
+var billNoInContextRe = regexp.MustCompile(`(?i)\bBill\s+(?:No\.?\s*)?(\d+\w*)`)
 
 var splitUppercaseNameTokenRe = regexp.MustCompile(`\b([A-Z])\s+([A-Z][A-Z][A-Z''\-]*)\b`)
 
@@ -479,12 +482,56 @@ func newBrunswickDescriptionFromContext(text string, matchStart int) string {
 	}
 
 	snippet = strings.TrimSpace(newBrunswickDescRecordedDivisionTailRe.ReplaceAllString(snippet, ""))
+
+	// Primary: look for "Bill No. X" in the context. Sentence-splitting on "." breaks
+	// "Bill No." into separate fragments, losing the bill number. Search directly first.
+	if m := billNoInContextRe.FindStringSubmatch(snippet); len(m) == 2 {
+		billNum := strings.ToUpper(strings.TrimSpace(m[1]))
+		if billNum != "" {
+			// Attempt to find an ALL-CAPS title in the 200 chars preceding the match.
+			matchPos := billNoInContextRe.FindStringIndex(snippet)
+			beforeBill := snippet
+			if matchPos != nil && matchPos[0] > 0 {
+				start := matchPos[0] - 200
+				if start < 0 {
+					start = 0
+				}
+				beforeBill = snippet[start:matchPos[0]]
+			}
+			words := strings.Fields(beforeBill)
+			var titleWords []string
+			for i := len(words) - 1; i >= 0; i-- {
+				w := words[i]
+				if w != strings.ToUpper(w) {
+					break
+				}
+				stripped := strings.Trim(w, `.,;:\/'"-`)
+				if stripped == "" {
+					break
+				}
+				titleWords = append([]string{w}, titleWords...)
+			}
+			if title := strings.TrimSpace(strings.Join(titleWords, " ")); title != "" {
+				return fmt.Sprintf("%s (Bill %s)", title, billNum)
+			}
+			return "Bill " + billNum
+		}
+	}
+
 	parts := strings.FieldsFunc(snippet, func(r rune) bool {
 		return r == '.' || r == ';' || r == ':'
 	})
 	for i := len(parts) - 1; i >= 0; i-- {
 		desc := strings.TrimSpace(parts[i])
-		if desc == "" || newBrunswickDescBoilerplateRe.MatchString(desc) {
+		if desc == "" || len(desc) < 5 {
+			continue
+		}
+		if newBrunswickDescBoilerplateRe.MatchString(desc) {
+			continue
+		}
+		// Skip all-caps name lists (voter names from adjacent divisions that leak
+		// into the context window when two divisions appear on the same PDF page).
+		if isAllCapsWordList(desc) {
 			continue
 		}
 		if len(desc) > 220 {
@@ -496,6 +543,22 @@ func newBrunswickDescriptionFromContext(text string, matchStart int) string {
 	}
 
 	return ""
+}
+
+// isAllCapsWordList reports whether desc contains no lowercase letters and at
+// least one word — i.e., looks like a voter name or all-caps header token that
+// leaked into the description context.  Legitimate descriptions always contain
+// at least one lowercase word.
+func isAllCapsWordList(desc string) bool {
+	if strings.TrimSpace(desc) == "" {
+		return false
+	}
+	for _, r := range desc {
+		if r >= 'a' && r <= 'z' {
+			return false
+		}
+	}
+	return true
 }
 
 // parsePDFDivisionsYeasNays parses recorded vote divisions from normalised PDF text
@@ -615,7 +678,15 @@ func crawlGenericProvincialVotes(indexURL, provinceCode, chamber string, legisla
 	return crawlGenericProvincialVotesWithMatcher(indexURL, provinceCode, chamber, legislature, session, client, genericVotesLinkRe)
 }
 
+func crawlGenericProvincialVotesWithAllSittings(indexURL, provinceCode, chamber string, legislature, session int, client *http.Client, allSittings bool, linkMatcher *regexp.Regexp) ([]ProvincialDivisionResult, error) {
+	return crawlGenericProvincialVotesWithMatcherOpts(indexURL, provinceCode, chamber, legislature, session, client, allSittings, linkMatcher)
+}
+
 func crawlGenericProvincialVotesWithMatcher(indexURL, provinceCode, chamber string, legislature, session int, client *http.Client, linkMatcher *regexp.Regexp) ([]ProvincialDivisionResult, error) {
+	return crawlGenericProvincialVotesWithMatcherOpts(indexURL, provinceCode, chamber, legislature, session, client, false, linkMatcher)
+}
+
+func crawlGenericProvincialVotesWithMatcherOpts(indexURL, provinceCode, chamber string, legislature, session int, client *http.Client, allSittings bool, linkMatcher *regexp.Regexp) ([]ProvincialDivisionResult, error) {
 	if client == nil {
 		client = utils.NewHTTPClient()
 	}
@@ -627,6 +698,9 @@ func crawlGenericProvincialVotesWithMatcher(indexURL, provinceCode, chamber stri
 	}
 
 	links := discoverProvincialVoteLinksWithMatcher(doc, indexURL, linkMatcher)
+	if !allSittings && len(links) > 40 {
+		links = links[len(links)-40:]
+	}
 	if len(links) == 0 {
 		links = []string{indexURL}
 	}
@@ -676,10 +750,6 @@ func discoverProvincialVoteLinksWithMatcher(doc *goquery.Document, indexURL stri
 	})
 
 	sort.Strings(links)
-	// Keep the most recent slice for speed/safety on very large archives.
-	if len(links) > 40 {
-		links = links[len(links)-40:]
-	}
 	return links
 }
 

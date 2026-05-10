@@ -444,6 +444,69 @@ func TestParsePEIJournalDivisions_PrefersMeaningfulContextOverBoilerplate(t *tes
 	}
 }
 
+func TestParsePEIJournalDivisions_ExtractsBillNameFromReading(t *testing.T) {
+	text := `The following Bill was read a Third Time: COMBATIVE SPORTS COMMISSIONER ACT Bill No. 21\ Hon. Mr. Speaker put the Question on the Motion that the said bill do now pass. A Recorded Division being sought, the names were recorded by the Clerk as follows: Nays 0 \ Yeas 20 \ Hon. Darlene Compton Land and Environment\ The Motion was CARRIED and resolved accordingly.`
+	divs := ParsePEIJournalDivisionsForTest(text, "https://docs.assembly.pe.ca/test.pdf", 67, 3, 1, "2026-05-05")
+	if len(divs) != 1 {
+		t.Fatalf("len(divs)=%d, want 1", len(divs))
+	}
+	desc := divs[0].Division.Description
+	if !strings.Contains(desc, "21") {
+		t.Errorf("description %q should contain bill number 21", desc)
+	}
+	if !strings.Contains(desc, "COMBATIVE") {
+		t.Errorf("description %q should contain bill title COMBATIVE", desc)
+	}
+	if strings.EqualFold(desc, "recorded division") {
+		t.Errorf("description should not be generic %q", desc)
+	}
+}
+
+func TestParsePEIJournalDivisions_ExtractsBillNameFromCommitteeReport(t *testing.T) {
+	text := `The following Bill was further considered by a Committee of the Whole House: AN ACT TO AMEND THE PLANNING ACT Bill No. 107\ Promoter: Gordon McNeilly Chair: Susie Dillon After some time spent therein, Hon. Mr. Speaker resumed the Chair and the Chairperson reported the Bill not recommended. Hon. Mr. Speaker put the Question on the Motion to adopt the Report of the Committee. A Recorded Division being sought, the names were recorded by the Clerk as follows: Nays 12 \ Yeas 7 \ Gordon McNeilly Charlottetown - West Royalty\ Motion resolved in the Negative.`
+	divs := ParsePEIJournalDivisionsForTest(text, "https://docs.assembly.pe.ca/test.pdf", 67, 3, 1, "2026-04-28")
+	if len(divs) != 1 {
+		t.Fatalf("len(divs)=%d, want 1", len(divs))
+	}
+	desc := divs[0].Division.Description
+	if !strings.Contains(desc, "107") {
+		t.Errorf("description %q should contain bill number 107", desc)
+	}
+	if strings.EqualFold(desc, "recorded division") {
+		t.Errorf("description should not be generic %q", desc)
+	}
+}
+
+func TestParsePEIJournalDivisions_UsesLastBillInOmnibusContext(t *testing.T) {
+	text := `AN ACT TO AMEND THE EDUCATION ACT Bill No. 64\ AN ACT TO AMEND THE ARCHIVES AND RECORDS ACT Bill No. 75\ EMPLOYMENT STANDARDS ACT Bill No. 76\ Hon. Madam Speaker put the Question on the Motion for Third Reading of the following bill: EMPLOYMENT STANDARDS ACT Bill No. 76\ A Recorded Division being sought, the names were recorded by the Clerk as follows: Nays 0 \ Yeas 22 \ Hon. Darlene Compton Land and Environment\ The Motion was CARRIED and resolved accordingly.`
+	divs := ParsePEIJournalDivisionsForTest(text, "https://docs.assembly.pe.ca/test.pdf", 67, 1, 1, "2024-11-29")
+	if len(divs) != 1 {
+		t.Fatalf("len(divs)=%d, want 1", len(divs))
+	}
+	desc := divs[0].Division.Description
+	if !strings.Contains(desc, "76") {
+		t.Errorf("description %q should contain bill number 76 (last bill)", desc)
+	}
+	if !strings.Contains(desc, "EMPLOYMENT STANDARDS ACT") {
+		t.Errorf("description %q should contain bill title EMPLOYMENT STANDARDS ACT", desc)
+	}
+}
+
+func TestParsePEIJournalDivisions_FallsBackForProceduralVote(t *testing.T) {
+	text := `who moved, seconded by Brad Trivers Rustico - Emerald, the following amendment. Speaking to the amendment: Gordon McNeilly Charlottetown - West Royalty; Peter Bevan - Baker New Haven - Rocky Point. There being no further speakers, Hon. Mr. Speaker put the question on the Amendment. A Recorded Division being sought, the names were recorded by the Clerk as follows: Nays 12 \ Yeas 7 \ Gordon McNeilly Charlottetown - West Royalty\ Motion resolved in the Negative.`
+	divs := ParsePEIJournalDivisionsForTest(text, "https://docs.assembly.pe.ca/test.pdf", 67, 2, 1, "2025-11-26")
+	if len(divs) != 1 {
+		t.Fatalf("len(divs)=%d, want 1", len(divs))
+	}
+	desc := divs[0].Division.Description
+	if desc == "" {
+		t.Errorf("description should not be empty for procedural vote")
+	}
+	if strings.EqualFold(desc, "recorded division") {
+		t.Errorf("description should not be generic %q for procedural vote", desc)
+	}
+}
+
 func TestIsPEICaptchaBody_CaseInsensitive(t *testing.T) {
 	if !isPEICaptchaBody([]byte(`<html><head><link href="HTTPS://CAPTCHA.PERFDRIVE.COM/challenge.css"></head></html>`)) {
 		t.Fatal("expected captcha signature to be detected case-insensitively")
