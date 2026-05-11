@@ -153,6 +153,29 @@ func CrawlAlbertaBills(indexURL string, legislature, session int, client *http.C
 	return crawlAlbertaBills(indexURL, legislature, session, client)
 }
 
+// crawlAlbertaAllSittingsBills crawls bills for the current legislature and the
+// two preceding ones (≈3 legislatures / ~10 years), trying sessions 1–4 each.
+func crawlAlbertaAllSittingsBills(indexURL string, legislature, session int, client *http.Client) ([]ProvincialBillStub, error) {
+	var all []ProvincialBillStub
+	seenID := make(map[string]bool)
+	for leg := legislature; leg >= legislature-2 && leg >= 1; leg-- {
+		for sess := 1; sess <= 4; sess++ {
+			clog.Debugf("[ab-bills] all-sittings: crawling legislature %d session %d", leg, sess)
+			bills, err := crawlAlbertaBills(indexURL, leg, sess, client)
+			if err != nil || len(bills) == 0 {
+				break
+			}
+			for _, b := range bills {
+				if !seenID[b.ID] {
+					seenID[b.ID] = true
+					all = append(all, b)
+				}
+			}
+		}
+	}
+	return all, nil
+}
+
 // ── Alberta votes ─────────────────────────────────────────────────────────────
 
 // albertaVotesPDFLinkRe matches VP PDF hrefs on the AB votes-and-proceedings page.
@@ -499,4 +522,27 @@ func crawlAlbertaVotes(indexURL string, legislature, session int, client *http.C
 // CrawlAlbertaVotes crawls Alberta votes/proceedings pages.
 func CrawlAlbertaVotes(indexURL string, legislature, session int, client *http.Client) ([]ProvincialDivisionResult, error) {
 	return crawlAlbertaVotes(indexURL, legislature, session, client, false)
+}
+
+// crawlAlbertaAllSittingsVotes iterates 3 legislatures × up to 4 sessions
+// using the AB VP URL's ?legl=&session= query params to fetch all historical PDFs.
+func crawlAlbertaAllSittingsVotes(legislature, session int, client *http.Client) ([]ProvincialDivisionResult, error) {
+	var all []ProvincialDivisionResult
+	seenID := make(map[string]bool)
+	for leg := legislature; leg >= legislature-2 && leg >= 1; leg-- {
+		for sess := 1; sess <= 4; sess++ {
+			vpURL := fmt.Sprintf("https://www.assembly.ab.ca/assembly-business/assembly-records/votes-and-proceedings?legl=%d&session=%d", leg, sess)
+			divs, err := crawlAlbertaVotesFromPDF(vpURL, leg, sess, client, true)
+			if err != nil || len(divs) == 0 {
+				break
+			}
+			for _, d := range divs {
+				if !seenID[d.Division.ID] {
+					seenID[d.Division.ID] = true
+					all = append(all, d)
+				}
+			}
+		}
+	}
+	return all, nil
 }

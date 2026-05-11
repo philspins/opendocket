@@ -150,6 +150,41 @@ func CrawlQuebecBills(indexURL string, legislature, session int, client *http.Cl
 	return crawlQuebecBills(indexURL, legislature, session, client)
 }
 
+// crawlQuebecAllSessionsBills crawls bills for every legislature/session listed in
+// the sessionLegislature dropdown on the QC bills page.
+func crawlQuebecAllSessionsBills(indexURL string, client *http.Client) ([]ProvincialBillStub, error) {
+	if indexURL == "" {
+		indexURL = "https://www.assnat.qc.ca/en/travaux-parlementaires/projets-loi/index.html"
+	}
+	indexDoc, err := fetchDoc(indexURL, client)
+	if err != nil {
+		return nil, err
+	}
+	opts := quebecAllSessionOptions(indexDoc)
+	if len(opts) == 0 {
+		return nil, nil
+	}
+	var all []ProvincialBillStub
+	seenID := make(map[string]bool)
+	for _, opt := range opts {
+		clog.Debugf("[qc-bills] all-sittings: crawling legislature %d session %d", opt.Legislature, opt.Session)
+		// The QC bills page uses a sessionLegislature query param for per-session filtering.
+		sessionURL := fmt.Sprintf("%s?sessionLegislature=%s", indexURL, opt.Value)
+		bills, berr := crawlProvincialBillsFromIndexWithMatcher(sessionURL, "qc", opt.Legislature, opt.Session, "quebec", client, quebecBillLinkRe)
+		if berr != nil {
+			clog.Debugf("[qc-bills] skip session %d/%d: %v", opt.Legislature, opt.Session, berr)
+			continue
+		}
+		for _, b := range bills {
+			if !seenID[b.ID] {
+				seenID[b.ID] = true
+				all = append(all, b)
+			}
+		}
+	}
+	return all, nil
+}
+
 // ── Quebec votes ──────────────────────────────────────────────────────────────
 
 func quebecSessionLegislatureValue(doc *goquery.Document, legislature, session int) string {

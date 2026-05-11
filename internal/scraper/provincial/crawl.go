@@ -189,12 +189,20 @@ func buildSessionPlan(conn *sql.DB, client *http.Client, delay time.Duration, sr
 	var divs []ProvincialDivisionResult
 	switch src.Special {
 	case "on":
-		dates, err := CrawlOntarioVPSittingDates(src.VotesURL, legislature, session, client)
-		if err != nil {
-			return sp, fmt.Errorf("ontario dates: %w", err)
+		if src.AllSittings {
+			allDivs, aErr := crawlOntarioAllSittingsVotes(legislature, client, delay)
+			if aErr != nil {
+				return sp, fmt.Errorf("ontario all-sittings votes: %w", aErr)
+			}
+			divs = allDivs
+		} else {
+			dates, err := CrawlOntarioVPSittingDates(src.VotesURL, legislature, session, client)
+			if err != nil {
+				return sp, fmt.Errorf("ontario dates: %w", err)
+			}
+			ontarioDivs, _ := crawlOntarioDaysConcurrently(dates, legislature, session, client, delay)
+			divs = ontarioDivs
 		}
-		ontarioDivs, _ := crawlOntarioDaysConcurrently(dates, legislature, session, client, delay)
-		divs = ontarioDivs
 	case "sk":
 		if src.AllSittings {
 			clog.Debugf("[sk-votes] all-sittings: crawling legislature %d session %d", legislature, session)
@@ -512,12 +520,20 @@ func CrawlProvinceSource(conn *sql.DB, client *http.Client, delay time.Duration,
 		var divs []ProvincialDivisionResult
 		switch src.Special {
 		case "on":
-			dates, err := CrawlOntarioVPSittingDates(src.VotesURL, legislature, effectiveSession, client)
-			if err != nil {
-				return fmt.Errorf("ontario dates: %w", err)
+			if src.AllSittings {
+				allDivs, aErr := crawlOntarioAllSittingsVotes(legislature, client, delay)
+				if aErr != nil {
+					return fmt.Errorf("ontario all-sittings votes: %w", aErr)
+				}
+				divs = allDivs
+			} else {
+				dates, err := CrawlOntarioVPSittingDates(src.VotesURL, legislature, effectiveSession, client)
+				if err != nil {
+					return fmt.Errorf("ontario dates: %w", err)
+				}
+				ontarioDivs, _ := crawlOntarioDaysConcurrently(dates, legislature, effectiveSession, client, delay)
+				divs = ontarioDivs
 			}
-			ontarioDivs, _ := crawlOntarioDaysConcurrently(dates, legislature, effectiveSession, client, delay)
-			divs = ontarioDivs
 		case "sk":
 			if src.AllSittings {
 				clog.Debugf("[sk-votes] all-sittings: crawling legislature %d session %d", legislature, effectiveSession)
@@ -678,6 +694,22 @@ func crawlAllSittingsBillsForSource(src ProvincialSource, legislature, session i
 	switch src.Code {
 	case "pe":
 		return crawlPEIAllAssemblyBills(src.BillsURL, legislature, session, peiSourceClient(src.BillsURL, client))
+	case "nl":
+		return crawlNewfoundlandAndLabradorBills(src.BillsURL, legislature, session, client, true)
+	case "mb":
+		return crawlManitobaBillsAllSessions(src.BillsURL, client)
+	case "nb":
+		return crawlNewBrunswickBillsAllSessions(src.BillsURL, client)
+	case "ns":
+		return crawlNovaScotiaBillsAllSessions(client)
+	case "qc":
+		return crawlQuebecAllSessionsBills(src.BillsURL, qcSourceClient(src.BillsURL, client))
+	case "ab":
+		return crawlAlbertaAllSittingsBills(src.BillsURL, legislature, session, client)
+	case "on":
+		return crawlOntarioAllBills(client)
+	case "sk":
+		return crawlSaskatchewanBillsAllSessions(src.BillsURL, client)
 	}
 	return crawlBillsForSource(src, legislature, session, client)
 }
@@ -696,7 +728,10 @@ func crawlDivisionsForSource(src ProvincialSource, legislature, session int, cli
 	case "nb":
 		return crawlNewBrunswickVotes(src.VotesURL, legislature, session, client, src.AllSittings)
 	case "ab":
-		return crawlAlbertaVotes(src.VotesURL, legislature, session, client, src.AllSittings)
+		if src.AllSittings {
+			return crawlAlbertaAllSittingsVotes(legislature, session, client)
+		}
+		return crawlAlbertaVotes(src.VotesURL, legislature, session, client, false)
 	case "nl":
 		return crawlNewfoundlandAndLabradorVotes(src.VotesURL, legislature, session, client, src.AllSittings)
 	case "ns":

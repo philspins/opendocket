@@ -37,6 +37,12 @@ func CrawlOntarioBills(indexURL string, legislature, session int, client *http.C
 	return crawlOntarioBills(indexURL, legislature, session, client)
 }
 
+// crawlOntarioAllBills fetches all Ontario bills from the all-bills index page.
+func crawlOntarioAllBills(client *http.Client) ([]ProvincialBillStub, error) {
+	const allBillsURL = "https://www.ola.org/en/legislative-business/bills/all"
+	return crawlProvincialBillsFromIndexWithMatcher(allBillsURL, "on", 0, 0, "ontario", client, genericBillLinkRe)
+}
+
 // ── Ontario Votes and Proceedings ─────────────────────────────────────────────
 
 var ontarioDivCountRe = regexp.MustCompile(`\((\d+)\)`)
@@ -387,4 +393,28 @@ func parseOntarioVPDoc(doc *goquery.Document, parliament, session int, date stri
 
 	clog.Debugf("[ontario-votes] %s: parsed %d divisions", date, len(results))
 	return results
+}
+
+// crawlOntarioAllSittingsVotes iterates 3 parliaments backwards from legislature,
+// trying sessions 1–3 each, collecting all V&P divisions. Called when AllSittings=true.
+func crawlOntarioAllSittingsVotes(legislature int, client *http.Client, delay time.Duration) ([]ProvincialDivisionResult, error) {
+	var all []ProvincialDivisionResult
+	seenID := make(map[string]bool)
+	for parl := legislature; parl >= legislature-2 && parl >= 1; parl-- {
+		for sess := 1; sess <= 3; sess++ {
+			clog.Debugf("[on-votes] all-sittings: crawling parliament %d session %d", parl, sess)
+			dates, err := crawlOntarioVPSittingDates("", parl, sess, client)
+			if err != nil || len(dates) == 0 {
+				break
+			}
+			divs, _ := crawlOntarioDaysConcurrently(dates, parl, sess, client, delay)
+			for _, d := range divs {
+				if !seenID[d.Division.ID] {
+					seenID[d.Division.ID] = true
+					all = append(all, d)
+				}
+			}
+		}
+	}
+	return all, nil
 }

@@ -22,6 +22,9 @@ import (
 
 var manitobaCurrentSessionLinkRe = regexp.MustCompile(`(?i)\.\./\d+-\d+/index\.php$`)
 var manitobaBillLinkRe = regexp.MustCompile(`(?i)(businessofthehouse|bill|legislature)`)
+// mbBillsSessionExtractRe extracts legislature and session from a MB bills URL
+// like "web2.gov.mb.ca/bills/43-3/index.php" → groups 1="43", 2="3".
+var mbBillsSessionExtractRe = regexp.MustCompile(`/bills/(\d+)-(\d+)`)
 
 // ── Manitoba bills ────────────────────────────────────────────────────────────
 
@@ -110,6 +113,59 @@ func parseManitobaBillRows(doc *goquery.Document, sourceURL string, legislature,
 // CrawlManitobaBills crawls Manitoba bills pages.
 func CrawlManitobaBills(indexURL string, legislature, session int, client *http.Client) ([]ProvincialBillStub, error) {
 	return crawlManitobaBills(indexURL, legislature, session, client)
+}
+
+// crawlManitobaBillsAllSessions crawls bills for every session listed on the MB
+// bills index page (web2.gov.mb.ca/bills/sess/index.php links like ../43-3/index.php).
+func crawlManitobaBillsAllSessions(indexURL string, client *http.Client) ([]ProvincialBillStub, error) {
+	if indexURL == "" {
+		indexURL = "https://web2.gov.mb.ca/bills/sess/index.php"
+	}
+	if client == nil {
+		client = utils.NewHTTPClient()
+	}
+	indexDoc, err := fetchDoc(indexURL, client)
+	if err != nil {
+		return nil, err
+	}
+	seen := make(map[string]bool)
+	var sessionURLs []string
+	indexDoc.Find("a[href]").Each(func(_ int, a *goquery.Selection) {
+		href := normalizeHref(a.AttrOr("href", ""))
+		if href == "" || !manitobaCurrentSessionLinkRe.MatchString(href) {
+			return
+		}
+		full := resolveRelativeURL(indexURL, href)
+		if seen[full] {
+			return
+		}
+		seen[full] = true
+		sessionURLs = append(sessionURLs, full)
+	})
+
+	var all []ProvincialBillStub
+	seenID := make(map[string]bool)
+	for _, sessionURL := range sessionURLs {
+		m := mbBillsSessionExtractRe.FindStringSubmatch(sessionURL)
+		if len(m) != 3 {
+			continue
+		}
+		leg, _ := strconv.Atoi(m[1])
+		sess, _ := strconv.Atoi(m[2])
+		clog.Debugf("[mb-bills] all-sittings: crawling legislature %d session %d", leg, sess)
+		sessionDoc, derr := fetchDoc(sessionURL, client)
+		if derr != nil {
+			clog.Infof("[mb-bills] skip session %s: %v", sessionURL, derr)
+			continue
+		}
+		for _, bill := range parseManitobaBillRows(sessionDoc, sessionURL, leg, sess) {
+			if !seenID[bill.ID] {
+				seenID[bill.ID] = true
+				all = append(all, bill)
+			}
+		}
+	}
+	return all, nil
 }
 
 // MBMonthFromGrid maps Manitoba calendar row/column into month number.

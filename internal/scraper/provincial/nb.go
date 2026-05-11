@@ -1,6 +1,7 @@
 package provincial
 
 import (
+	"fmt"
 	"net/http"
 	"regexp"
 	"sort"
@@ -35,6 +36,62 @@ func crawlNewBrunswickBills(indexURL string, legislature, session int, client *h
 // CrawlNewBrunswickBills crawls New Brunswick bills pages.
 func CrawlNewBrunswickBills(indexURL string, legislature, session int, client *http.Client) ([]ProvincialBillStub, error) {
 	return crawlNewBrunswickBills(indexURL, legislature, session, client)
+}
+
+// crawlNewBrunswickBillsAllSessions crawls bills for every legislature/session
+// discovered from the NB journal index (same leg/sess pairs as votes).
+func crawlNewBrunswickBillsAllSessions(indexURL string, client *http.Client) ([]ProvincialBillStub, error) {
+	if indexURL == "" {
+		indexURL = "https://www.legnb.ca/en/legislation/bills"
+	}
+	if client == nil {
+		client = utils.NewHTTPClient()
+	}
+
+	type legSess struct{ leg, sess int }
+	var sessions []legSess
+	seenLS := make(map[legSess]bool)
+
+	// Discover sessions from the journal index (same leg/sess URL structure).
+	journalURL := "https://www.legnb.ca/en/house-business/journals"
+	journalDoc, jerr := fetchDoc(journalURL, client)
+	if jerr == nil {
+		for _, sURL := range discoverNewBrunswickJournalSessionLinks(journalDoc, journalURL) {
+			if m := nbJournalSessionExtractRe.FindStringSubmatch(sURL); len(m) == 3 {
+				leg, _ := strconv.Atoi(m[1])
+				sess, _ := strconv.Atoi(m[2])
+				ls := legSess{leg, sess}
+				if !seenLS[ls] {
+					seenLS[ls] = true
+					sessions = append(sessions, ls)
+				}
+			}
+		}
+	}
+
+	if len(sessions) == 0 {
+		return nil, nil
+	}
+
+	var all []ProvincialBillStub
+	seenID := make(map[string]bool)
+	for _, s := range sessions {
+		// NB bills per-session URL mirrors the journal URL structure.
+		sessionBillsURL := fmt.Sprintf("https://www.legnb.ca/en/legislation/bills/%d/%d", s.leg, s.sess)
+		clog.Debugf("[nb-bills] all-sittings: crawling legislature %d session %d", s.leg, s.sess)
+		bills, berr := crawlProvincialBillsFromIndexWithMatcher(sessionBillsURL, "nb", s.leg, s.sess, "new_brunswick", client, newBrunswickBillLinkRe)
+		if berr != nil {
+			clog.Debugf("[nb-bills] skip session %d/%d: %v", s.leg, s.sess, berr)
+			continue
+		}
+		for _, b := range bills {
+			if !seenID[b.ID] {
+				seenID[b.ID] = true
+				all = append(all, b)
+			}
+		}
+	}
+	return all, nil
 }
 
 // ── New Brunswick votes ───────────────────────────────────────────────────────

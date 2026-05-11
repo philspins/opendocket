@@ -33,6 +33,10 @@ var saskatchewanProgressEntryRe = regexp.MustCompile(`(?i)\b(\d{1,3}[A-Z]?)\s+(?
 var saskatchewanBillLinkRe = regexp.MustCompile(`(?i)(legislative-business/bills|/bills/)`)
 var skDateFromURLRe = regexp.MustCompile(`/(\d{8})Minutes-HTML\.htm`)
 var skCountRe = regexp.MustCompile(`(?:YEAS|NAYS)[^\d]*(\d+)`)
+// skBillSessionPageRe matches SK per-session bills sub-pages linked from the index.
+var skBillSessionPageRe = regexp.MustCompile(`(?i)/legislative-business/bills/[^/\s"'#?]+/?$`)
+// skSessionNumsRe extracts leading digit sequences from SK session URL slugs.
+var skSessionNumsRe = regexp.MustCompile(`\d+`)
 
 // ── Saskatchewan bills ────────────────────────────────────────────────────────
 
@@ -129,6 +133,69 @@ func parseSaskatchewanBillsFromProgressText(text, sourceURL string, legislature,
 // CrawlSaskatchewanBills crawls Saskatchewan bills pages.
 func CrawlSaskatchewanBills(indexURL string, legislature, session int, client *http.Client) ([]ProvincialBillStub, error) {
 	return crawlSaskatchewanBills(indexURL, legislature, session, client)
+}
+
+// crawlSaskatchewanBillsAllSessions discovers per-session sub-pages from the SK
+// bills index, extracts legislature/session numbers from the URL slug, and calls
+// crawlSaskatchewanBillsFromProgressPDF for each session page.
+func crawlSaskatchewanBillsAllSessions(indexURL string, client *http.Client) ([]ProvincialBillStub, error) {
+	indexURL = normalizeSaskatchewanBillsURL(indexURL)
+	if indexURL == "" {
+		indexURL = "https://www.legassembly.sk.ca/legislative-business/bills/"
+	}
+	if client == nil {
+		client = utils.NewHTTPClient()
+	}
+	indexDoc, err := fetchDoc(indexURL, client)
+	if err != nil {
+		return nil, err
+	}
+	normalizedIndex := strings.TrimRight(indexURL, "/")
+	seen := make(map[string]bool)
+	var sessionURLs []string
+	indexDoc.Find("a[href]").Each(func(_ int, a *goquery.Selection) {
+		href := normalizeHref(a.AttrOr("href", ""))
+		if href == "" || !skBillSessionPageRe.MatchString(href) {
+			return
+		}
+		full := resolveRelativeURL(indexURL, href)
+		if strings.TrimRight(full, "/") == normalizedIndex || seen[full] {
+			return
+		}
+		seen[full] = true
+		sessionURLs = append(sessionURLs, full)
+	})
+	if len(sessionURLs) == 0 {
+		return crawlSaskatchewanBillsFromProgressPDF(indexURL, SaskatchewanLegislature, SaskatchewanSession, client)
+	}
+	var all []ProvincialBillStub
+	seenID := make(map[string]bool)
+	for _, sessionURL := range sessionURLs {
+		// Extract legislature and session from URL slug digits (e.g. "29th-4th-session" → 29, 4).
+		slug := sessionURL[strings.LastIndex(strings.TrimRight(sessionURL, "/"), "/")+1:]
+		nums := skSessionNumsRe.FindAllString(slug, -1)
+		if len(nums) < 2 {
+			continue
+		}
+		leg, _ := strconv.Atoi(nums[0])
+		sess, _ := strconv.Atoi(nums[1])
+		if leg == 0 || sess == 0 {
+			continue
+		}
+		clog.Debugf("[sk-bills] all-sittings: crawling legislature %d session %d", leg, sess)
+		bills, berr := crawlSaskatchewanBillsFromProgressPDF(sessionURL, leg, sess, client)
+		if berr != nil {
+			clog.Debugf("[sk-bills] skip session %d/%d: %v", leg, sess, berr)
+			continue
+		}
+		for _, b := range bills {
+			if !seenID[b.ID] {
+				seenID[b.ID] = true
+				all = append(all, b)
+			}
+		}
+	}
+	return all, nil
 }
 
 // ── Saskatchewan votes ────────────────────────────────────────────────────────

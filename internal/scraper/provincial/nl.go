@@ -20,7 +20,7 @@ var newfoundlandBillLinkRe = regexp.MustCompile(`(?i)(housebusiness|bill|legisla
 
 // ── Newfoundland and Labrador bills ───────────────────────────────────────────
 
-func crawlNewfoundlandAndLabradorBills(indexURL string, legislature, session int, client *http.Client) ([]ProvincialBillStub, error) {
+func crawlNewfoundlandAndLabradorBills(indexURL string, legislature, session int, client *http.Client, allSittings bool) ([]ProvincialBillStub, error) {
 	if indexURL == "" {
 		indexURL = "https://www.assembly.nl.ca/HouseBusiness/Bills/"
 	}
@@ -56,24 +56,32 @@ func crawlNewfoundlandAndLabradorBills(indexURL string, legislature, session int
 	if len(sessionURLs) == 0 {
 		return crawlProvincialBillsFromIndexWithMatcher(indexURL, "nl", legislature, session, "newfoundland_labrador", client, newfoundlandBillLinkRe)
 	}
-	if len(sessionURLs) > 4 {
+	if !allSittings && len(sessionURLs) > 4 {
 		sessionURLs = sessionURLs[:4]
 	}
 	out := make([]ProvincialBillStub, 0)
 	seenID := make(map[string]bool)
 	for _, sessionURL := range sessionURLs {
+		leg, sess := legislature, session
+		if allSittings {
+			if m := nlSessionExtractRe.FindStringSubmatch(sessionURL); len(m) == 3 {
+				leg, _ = strconv.Atoi(m[1])
+				sess, _ = strconv.Atoi(m[2])
+				clog.Debugf("[nl-bills] all-sittings: crawling legislature %d session %d", leg, sess)
+			}
+		}
 		sessionDoc, derr := fetchDoc(sessionURL, client)
 		if derr != nil {
 			continue
 		}
-		for _, bill := range parseStructuredProvincialBillRows(sessionDoc, sessionURL, "nl", legislature, session, "newfoundland_labrador") {
+		for _, bill := range parseStructuredProvincialBillRows(sessionDoc, sessionURL, "nl", leg, sess, "newfoundland_labrador") {
 			if seenID[bill.ID] {
 				continue
 			}
 			seenID[bill.ID] = true
 			out = append(out, bill)
 		}
-		if len(out) > 0 {
+		if !allSittings && len(out) > 0 {
 			break
 		}
 	}
@@ -86,7 +94,7 @@ func crawlNewfoundlandAndLabradorBills(indexURL string, legislature, session int
 
 // CrawlNewfoundlandAndLabradorBills crawls Newfoundland and Labrador bills pages.
 func CrawlNewfoundlandAndLabradorBills(indexURL string, legislature, session int, client *http.Client) ([]ProvincialBillStub, error) {
-	return crawlNewfoundlandAndLabradorBills(indexURL, legislature, session, client)
+	return crawlNewfoundlandAndLabradorBills(indexURL, legislature, session, client, false)
 }
 
 // ── Newfoundland and Labrador votes ───────────────────────────────────────────

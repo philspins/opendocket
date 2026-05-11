@@ -66,6 +66,33 @@ func CrawlNovaScotiaBills(indexURL string, legislature, session int, client *htt
 	return crawlNovaScotiaBills(indexURL, legislature, session, client)
 }
 
+// crawlNovaScotiaBillsAllSessions crawls bills for every assembly/session
+// discovered via the NS Hansard index. Bills pages follow the same
+// assembly-{leg}-session-{sess} URL pattern as Hansard pages.
+func crawlNovaScotiaBillsAllSessions(client *http.Client) ([]ProvincialBillStub, error) {
+	sessions := discoverNovaScotiaAllSessions(client)
+	if len(sessions) == 0 {
+		return nil, nil
+	}
+	var all []ProvincialBillStub
+	seenID := make(map[string]bool)
+	for _, s := range sessions {
+		sessionURL := fmt.Sprintf("https://nslegislature.ca/legislative-business/bills-statutes/bills/assembly-%d-session-%d", s.leg, s.sess)
+		clog.Debugf("[ns-bills] all-sittings: crawling assembly %d session %d", s.leg, s.sess)
+		bills, berr := crawlProvincialBillsFromIndexWithMatcher(sessionURL, "ns", s.leg, s.sess, "nova_scotia", client, novaScotiaBillLinkRe)
+		if berr != nil || len(bills) == 0 {
+			continue
+		}
+		for _, b := range bills {
+			if !seenID[b.ID] {
+				seenID[b.ID] = true
+				all = append(all, b)
+			}
+		}
+	}
+	return all, nil
+}
+
 // ── Nova Scotia votes — HTML path ─────────────────────────────────────────────
 
 // nsDateFromHansardURL parses the sitting date from a Hansard day-page URL.
