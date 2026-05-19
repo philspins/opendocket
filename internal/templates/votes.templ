@@ -2,10 +2,14 @@ package templates
 
 import (
 	"fmt"
+	"net/url"
+	"strconv"
+	"strings"
+
 	"github.com/philspins/opendocket/internal/store"
 )
 
-templ VotesFeed(ps store.ParliamentStatus, divs []store.DivisionRow, total int, page int, perPage int) {
+templ VotesFeed(ps store.ParliamentStatus, divs []store.DivisionRow, total int, f store.DivisionFilter) {
 	@Layout("Votes", ps) {
 		<div class="space-y-6">
 			<div class="title-row">
@@ -13,71 +17,181 @@ templ VotesFeed(ps store.ParliamentStatus, divs []store.DivisionRow, total int, 
 				<span class="text-sm text-gray-500">{ fmt.Sprint(total) } total</span>
 			</div>
 
+			<!-- Filter bar -->
+			<div class="bills-filter-bar">
+				<!-- Active filter chips -->
+				if f.Chamber != "" {
+					<a href={ templ.SafeURL(votesURLWithout(f, "chamber")) } class="filter-chip">{ ChamberLabel(f.Chamber) }<span class="filter-chip-x">×</span></a>
+				}
+				if f.Result != "" {
+					<a href={ templ.SafeURL(votesURLWithout(f, "result")) } class="filter-chip">{ f.Result }<span class="filter-chip-x">×</span></a>
+				}
+
+				<!-- Filter picker -->
+				<details class="filter-picker">
+					<summary class="filter-add-btn">
+						<svg xmlns="http://www.w3.org/2000/svg" width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="16"/><line x1="8" y1="12" x2="16" y2="12"/></svg>
+						Filter
+					</summary>
+					<div class="filter-picker-panel">
+						<form method="GET" action="/votes">
+							<input type="hidden" name="per_page" value={ strconv.Itoa(f.PerPage) }/>
+							<div class="space-y-2.5">
+								<div>
+									<label class="filter-picker-label">Chamber / Province</label>
+									<select name="chamber" class="input-field w-full text-sm">
+										<option value="">All</option>
+										<option value="commons" selected?={ f.Chamber == "commons" }>House of Commons</option>
+										<option value="senate" selected?={ f.Chamber == "senate" }>Senate</option>
+										<option value="alberta" selected?={ f.Chamber == "alberta" }>Alberta</option>
+										<option value="british_columbia" selected?={ f.Chamber == "british_columbia" }>British Columbia</option>
+										<option value="manitoba" selected?={ f.Chamber == "manitoba" }>Manitoba</option>
+										<option value="new_brunswick" selected?={ f.Chamber == "new_brunswick" }>New Brunswick</option>
+										<option value="newfoundland_labrador" selected?={ f.Chamber == "newfoundland_labrador" }>Newfoundland &amp; Labrador</option>
+										<option value="nova_scotia" selected?={ f.Chamber == "nova_scotia" }>Nova Scotia</option>
+										<option value="ontario" selected?={ f.Chamber == "ontario" }>Ontario</option>
+										<option value="pei" selected?={ f.Chamber == "pei" }>Prince Edward Island</option>
+										<option value="quebec" selected?={ f.Chamber == "quebec" }>Quebec</option>
+										<option value="saskatchewan" selected?={ f.Chamber == "saskatchewan" }>Saskatchewan</option>
+									</select>
+								</div>
+								<div>
+									<label class="filter-picker-label">Result</label>
+									<select name="result" class="input-field w-full text-sm">
+										<option value="">All</option>
+										<option value="Carried" selected?={ f.Result == "Carried" }>Carried</option>
+										<option value="Negatived" selected?={ f.Result == "Negatived" }>Negatived</option>
+									</select>
+								</div>
+							</div>
+							<div class="flex items-center justify-between mt-4 pt-3 border-t border-gray-200 dark:border-gray-700">
+								<a href="/votes" class="text-sm text-gray-400 hover:text-gray-600">Clear all</a>
+								<button type="submit" class="btn btn-primary text-sm">Apply</button>
+							</div>
+						</form>
+					</div>
+				</details>
+			</div>
+
 			<div class="table-shell vote-table-shell">
-				<table class="vote-table min-w-full text-sm">
+				<table class="vote-table vote-feed-table min-w-full text-sm">
 					<thead>
 						<tr>
-							<th class="px-4 py-3">Date</th>
-							<th class="px-4 py-3">Bill</th>
-							<th class="px-4 py-3">Description</th>
-							<th class="px-4 py-3 text-right">Yeas</th>
-							<th class="px-4 py-3 text-right">Nays</th>
-							<th class="px-4 py-3">Result</th>
-							<th class="px-4 py-3">Chamber</th>
-							<th class="px-4 py-3 text-right">Legislature</th>
-							<th class="px-4 py-3 text-right">Session</th>
-							<th class="px-4 py-3 text-right">Division</th>
+							<th>Date</th>
+							<th>Leg / Sess / Div</th>
+							<th>Bill</th>
+							<th>Description</th>
+							<th>Yeas</th>
+							<th>Nays</th>
+							<th>Result</th>
+							<th>Chamber</th>
 						</tr>
 					</thead>
 					<tbody>
 						for _, d := range divs {
 							<tr>
-								<td class="px-4 py-2.5 col-date">{ FormatDate(d.Date) }</td>
-								<td class="px-4 py-2.5 col-bill">
-									if d.BillNumber != "" {
-										<a href={ templ.SafeURL("/bills/" + d.BillID) } class="hover:underline">{ d.BillNumber }</a>
-									}
-								</td>
-								<td class="px-4 py-2.5 col-description text-xs">
-									if d.BillID != "" {
-										<a href={ templ.SafeURL("/bills/" + d.BillID) } class="hover:underline">{ d.Description }</a>
-									} else {
-										{ d.Description }
-									}
-								</td>
-								<td class="px-4 py-2.5 col-yea text-right">{ fmt.Sprint(d.Yeas) }</td>
-								<td class="px-4 py-2.5 col-nay text-right">{ fmt.Sprint(d.Nays) }</td>
-								<td class="px-4 py-2.5 col-result col-meta">{ d.Result }</td>
-								<td class="px-4 py-2.5 col-chamber col-meta">{ ChamberLabel(d.Chamber) }</td>
-								<td class="px-4 py-2.5 col-legislature col-meta text-right text-xs">
-									{ fmt.Sprint(d.Parliament) }
-								</td>
-								<td class="px-4 py-2.5 col-session col-meta text-right text-xs">
+								<td class="col-date">{ FormatDate(d.Date) }</td>
+								<td class="col-meta-trio">
+									<span>{ fmt.Sprint(d.Parliament) }</span>
+									<span class="meta-sep">/</span>
 									if sessURL := sessionSourceURL(d.Chamber, d.Parliament, d.Session); sessURL != "" {
-										<a href={ safeExternalURL(sessURL) } target="_blank" rel="noopener" class="hover:underline">{ fmt.Sprint(d.Session) }</a>
+										<a href={ safeExternalURL(sessURL) } target="_blank" rel="noopener" class="text-blue-600 hover:underline dark:text-blue-400">{ fmt.Sprint(d.Session) }</a>
 									} else {
-										{ fmt.Sprint(d.Session) }
+										<span>{ fmt.Sprint(d.Session) }</span>
 									}
-								</td>
-								<td class="px-4 py-2.5 col-division col-meta text-right text-xs">
+									<span class="meta-sep">/</span>
 									if d.SittingURL != "" {
-										<a href={ safeExternalURL(d.SittingURL) } target="_blank" rel="noopener" class="hover:underline">{ fmt.Sprint(d.Number) }</a>
+										<a href={ safeExternalURL(d.SittingURL) } target="_blank" rel="noopener" class="text-blue-600 hover:underline dark:text-blue-400">{ fmt.Sprint(d.Number) }</a>
 									} else {
-										{ fmt.Sprint(d.Number) }
+										<span>{ fmt.Sprint(d.Number) }</span>
 									}
 								</td>
+								<td class="col-bill">
+									if d.BillNumber != "" {
+										<a href={ templ.SafeURL("/bills/" + d.BillID) } class="text-blue-600 hover:underline dark:text-blue-400">{ d.BillNumber }</a>
+									}
+								</td>
+								<td class="col-chamber">{ ChamberLabel(d.Chamber) }</td>
+								<td class="col-yea">{ fmt.Sprint(d.Yeas) }</td>
+								<td class="col-nay">{ fmt.Sprint(d.Nays) }</td>
+								<td class="col-result">{ d.Result }</td>
+								<td class="col-description">{ divisionDescription(d) }</td>
 							</tr>
 						}
 						if len(divs) == 0 {
 							<tr>
-								<td colspan="10" class="px-4 py-8 text-center text-gray-500">No votes recorded yet.</td>
+								<td class="col-empty text-center text-gray-500">No votes recorded yet.</td>
 							</tr>
 						}
 					</tbody>
 				</table>
 			</div>
 
-			@serverPagination(NewPageInfo(page, total, perPage), "/votes", "")
+			@serverPagination(NewPageInfo(f.Page, total, f.PerPage), "/votes", votesPageParams(f))
 		</div>
 	}
+}
+
+// divisionDescription returns the best human-readable description for a division.
+// When the stored description is only a bare bill-number stub (e.g. "Bill No. 247")
+// and the bill title is available from the joined bills table, the title is shown
+// instead so the row carries meaningful context without a re-crawl.
+func divisionDescription(d store.DivisionRow) string {
+	if d.BillTitle != "" && isBarebillRef(d.Description) {
+		return d.BillTitle
+	}
+	return d.Description
+}
+
+// isBarebillRef returns true when s contains only a bill-number reference with no
+// additional descriptive text (e.g. "Bill No. 247" or "Bill No. 5").
+func isBarebillRef(s string) bool {
+	s = strings.TrimSpace(s)
+	if s == "" {
+		return true
+	}
+	// Match "Bill No. 247" or "Bill (No. 5)" with nothing else meaningful after
+	for _, prefix := range []string{"bill no.", "bill (no."} {
+		if strings.HasPrefix(strings.ToLower(s), prefix) {
+			rest := strings.TrimSpace(s[len(prefix):])
+			// Only digits (and optional closing paren) left → bare ref
+			rest = strings.TrimLeft(rest, "0123456789) ")
+			if rest == "" {
+				return true
+			}
+		}
+	}
+	return false
+}
+
+func votesQueryString(f store.DivisionFilter) string {
+	params := url.Values{}
+	if f.PerPage > 0 {
+		params.Set("per_page", strconv.Itoa(f.PerPage))
+	}
+	if f.Chamber != "" {
+		params.Set("chamber", f.Chamber)
+	}
+	if f.Result != "" {
+		params.Set("result", f.Result)
+	}
+	return params.Encode()
+}
+
+func votesURLWithout(f store.DivisionFilter, field string) string {
+	g := f
+	g.Page = 0
+	switch field {
+	case "chamber":
+		g.Chamber = ""
+	case "result":
+		g.Result = ""
+	}
+	return "/votes?" + votesQueryString(g)
+}
+
+func votesPageParams(f store.DivisionFilter) string {
+	g := f
+	g.Page = 0
+	return votesQueryString(g)
 }

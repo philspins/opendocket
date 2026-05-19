@@ -418,13 +418,19 @@ func (s *Server) handleVotes(w http.ResponseWriter, r *http.Request) {
 	if perPage != 5 && perPage != 10 && perPage != 25 && perPage != 50 {
 		perPage = 10
 	}
+	f := store.DivisionFilter{
+		Chamber: q.Get("chamber"),
+		Result:  q.Get("result"),
+		Page:    page,
+		PerPage: perPage,
+	}
 	ps := s.parliamentStatus()
-	divs, total, err := s.store.ListDivisions(page, perPage)
+	divs, total, err := s.store.ListDivisions(f)
 	if err != nil {
 		http.Error(w, "internal error", http.StatusInternalServerError)
 		return
 	}
-	_ = templates.VotesFeed(ps, divs, total, page, perPage).Render(r.Context(), w)
+	_ = templates.VotesFeed(ps, divs, total, f).Render(r.Context(), w)
 }
 
 func (s *Server) handleMembers(w http.ResponseWriter, r *http.Request) {

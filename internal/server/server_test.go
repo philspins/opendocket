@@ -881,11 +881,11 @@ func TestHandleHome_ShowsRecentBillVotesForSelectedRepresentatives(t *testing.T)
 	}
 
 	for _, div := range []store.DivisionRecord{
-		{ID: "div-fed-old", Parliament: 45, Session: 1, Number: 1, Date: "2026-01-01", BillID: "bill-fed-1", Description: "Federal bill one older vote", Result: "Passed", Chamber: "commons", LastScraped: "2026-01-01T00:00:00Z"},
-		{ID: "div-fed-new", Parliament: 45, Session: 1, Number: 2, Date: "2026-02-01", BillID: "bill-fed-1", Description: "Federal bill one latest vote", Result: "Passed", Chamber: "commons", LastScraped: "2026-01-01T00:00:00Z"},
-		{ID: "div-fed-two", Parliament: 45, Session: 1, Number: 3, Date: "2026-01-15", BillID: "bill-fed-2", Description: "Federal bill two vote", Result: "Passed", Chamber: "commons", LastScraped: "2026-01-01T00:00:00Z"},
-		{ID: "div-prov-one", Parliament: 1, Session: 1, Number: 1, Date: "2026-01-20", BillID: "bill-prov-1", Description: "Provincial bill vote", Result: "Passed", Chamber: "ontario", LastScraped: "2026-01-01T00:00:00Z"},
-		{ID: "div-other", Parliament: 45, Session: 1, Number: 4, Date: "2026-02-03", BillID: "bill-other", Description: "Unrelated member vote", Result: "Passed", Chamber: "commons", LastScraped: "2026-01-01T00:00:00Z"},
+		{ID: "div-fed-old", Parliament: 45, Session: 1, Number: 1, Date: "2026-01-01", BillID: "bill-fed-1", Description: "Federal bill one older vote", Yeas: 150, Nays: 100, Result: "Passed", Chamber: "commons", LastScraped: "2026-01-01T00:00:00Z"},
+		{ID: "div-fed-new", Parliament: 45, Session: 1, Number: 2, Date: "2026-02-01", BillID: "bill-fed-1", Description: "Federal bill one latest vote", Yeas: 155, Nays: 95, Result: "Passed", Chamber: "commons", LastScraped: "2026-01-01T00:00:00Z"},
+		{ID: "div-fed-two", Parliament: 45, Session: 1, Number: 3, Date: "2026-01-15", BillID: "bill-fed-2", Description: "Federal bill two vote", Yeas: 160, Nays: 90, Result: "Passed", Chamber: "commons", LastScraped: "2026-01-01T00:00:00Z"},
+		{ID: "div-prov-one", Parliament: 1, Session: 1, Number: 1, Date: "2026-01-20", BillID: "bill-prov-1", Description: "Provincial bill vote", Yeas: 45, Nays: 20, Result: "Passed", Chamber: "ontario", LastScraped: "2026-01-01T00:00:00Z"},
+		{ID: "div-other", Parliament: 45, Session: 1, Number: 4, Date: "2026-02-03", BillID: "bill-other", Description: "Unrelated member vote", Yeas: 170, Nays: 80, Result: "Passed", Chamber: "commons", LastScraped: "2026-01-01T00:00:00Z"},
 	} {
 		if err := store.UpsertDivision(conn, div); err != nil {
 			t.Fatalf("UpsertDivision %s: %v", div.ID, err)

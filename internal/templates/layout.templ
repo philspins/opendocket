@@ -1043,6 +1043,80 @@ templ Layout(title string, ps store.ParliamentStatus) {
 					.mobile-menu   { display: none !important; }
 				}
 
+				/* Vote feed: two-row card layout with field labels.
+				   Row 1 — date | leg/sess/div | bill | (flex) | chamber (right-aligned)
+				   Row 2 — description (spans left) | yeas | nays | result (right-clustered) */
+				.vote-feed-table,
+				.vote-feed-table tbody,
+				.vote-feed-table tr,
+				.vote-feed-table th,
+				.vote-feed-table td { display: block; }
+				.vote-feed-table { width: 100%; }
+				.vote-feed-table tr.hidden { display: none; }
+				.vote-feed-table thead { display: none; }
+				.vote-feed-table td { padding: 0 !important; min-width: 0; }
+				.vote-feed-table tr {
+					display: grid;
+					grid-template-columns: auto auto auto auto 1fr auto auto auto;
+					column-gap: 1.5rem;
+					row-gap: 0.7rem;
+					padding: 0.85rem 1.1rem;
+					border-bottom: 1px solid var(--color-border);
+					width: 100%;
+					box-sizing: border-box;
+				}
+				/* Row 1: date | meta-trio | bill | chamber | (1fr spacer) | yea | nay | result */
+				.vote-feed-table td.col-date       { grid-row: 1; grid-column: 1; }
+				.vote-feed-table td.col-meta-trio  { grid-row: 1; grid-column: 2; }
+				.vote-feed-table td.col-bill       { grid-row: 1; grid-column: 3; }
+				.vote-feed-table td.col-chamber    { grid-row: 1; grid-column: 4; }
+				.vote-feed-table td.col-yea        { grid-row: 1; grid-column: 6; text-align: right; }
+				.vote-feed-table td.col-nay        { grid-row: 1; grid-column: 7; text-align: right; }
+				.vote-feed-table td.col-result     { grid-row: 1; grid-column: 8; text-align: right; width: auto !important; white-space: nowrap; }
+				/* Row 2: description full width, no label */
+				.vote-feed-table td.col-description { grid-row: 2; grid-column: 1 / -1; width: auto !important; }
+
+				/* Field labels via ::before */
+				.vote-feed-table td::before {
+					display: block;
+					font-family: "Inconsolata", monospace;
+					font-size: 0.62rem;
+					text-transform: uppercase;
+					letter-spacing: 0.08em;
+					color: var(--color-text-secondary);
+					opacity: 0.7;
+					font-weight: 600;
+					margin-bottom: 0.25rem;
+				}
+				.vote-feed-table td.col-date::before        { content: 'Date'; }
+				.vote-feed-table td.col-meta-trio::before   { content: 'Leg / Sess / Div'; }
+				.vote-feed-table td.col-bill::before        { content: 'Bill'; }
+				.vote-feed-table td.col-chamber::before     { content: 'Chamber'; }
+				.vote-feed-table td.col-description::before { content: none; }
+				.vote-feed-table td.col-yea::before         { content: 'Yeas'; }
+				.vote-feed-table td.col-nay::before         { content: 'Nays'; }
+				.vote-feed-table td.col-result::before      { content: 'Result'; }
+
+				/* Meta trio: inline numbers with / separators */
+				.vote-feed-table td.col-meta-trio {
+					font-family: "Inconsolata", monospace;
+					font-size: 0.88rem;
+					white-space: nowrap;
+				}
+				.vote-feed-table td.col-meta-trio .meta-sep {
+					color: var(--color-text-secondary);
+					opacity: 0.4;
+					margin: 0 0.35rem;
+				}
+
+				/* Empty state */
+				.vote-feed-table td.col-empty {
+					grid-row: 1;
+					grid-column: 1 / -1;
+					padding: 2rem 0 !important;
+				}
+				.vote-feed-table td.col-empty::before { content: none; }
+
 				/* Responsive vote table: convert to two-row card layout on small screens */
 				@media (max-width: 640px) {
 					body { overflow-x: hidden; }
@@ -1125,7 +1199,6 @@ templ Layout(title string, ps store.ParliamentStatus) {
 
 					.vote-table td.col-description {
 						grid-area: desc;
-						/* Override global width:100% — grid area handles sizing */
 						width: auto !important;
 						font-size: 0.78rem;
 						line-height: 1.45;
@@ -1133,6 +1206,33 @@ templ Layout(title string, ps store.ParliamentStatus) {
 						overflow-wrap: break-word;
 						word-break: break-word;
 					}
+
+					/* Vote feed mobile: 3-row card with labels.
+					   Row 1 — date (left) | chamber (right)
+					   Row 2 — leg/sess/div · bill (left) | yea nay result (right)
+					   Row 3 — description (full width) */
+					.vote-feed-table tr {
+						grid-template-columns: auto auto 1fr auto auto auto;
+						column-gap: 0.75rem;
+						row-gap: 0.65rem;
+						padding: 0.75rem 0.85rem;
+					}
+					/* Override base .vote-table display:none for cells we want visible */
+					.vote-feed-table td.col-chamber,
+					.vote-feed-table td.col-bill        { display: block; }
+					.vote-feed-table td.col-date       { grid-row: 1; grid-column: 1 / span 3; }
+					.vote-feed-table td.col-chamber    { grid-row: 1; grid-column: 4 / span 3; text-align: right; }
+					.vote-feed-table td.col-meta-trio  { grid-row: 2; grid-column: 1; }
+					.vote-feed-table td.col-bill       { grid-row: 2; grid-column: 2; }
+					.vote-feed-table td.col-yea        { grid-row: 2; grid-column: 4; text-align: right; }
+					.vote-feed-table td.col-nay        { grid-row: 2; grid-column: 5; text-align: right; }
+					.vote-feed-table td.col-result     { grid-row: 2; grid-column: 6; text-align: right; }
+					.vote-feed-table td.col-description {
+						grid-area: unset;
+						grid-row: 3;
+						grid-column: 1 / -1;
+					}
+					.vote-feed-table td.col-empty { grid-column: 1 / -1; }
 				}
 			</style>
 		</head>

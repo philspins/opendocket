@@ -206,7 +206,7 @@ func TestUpsertMemberVote(t *testing.T) {
 
 	// Insert prerequisites
 	store.UpsertMember(d, store.MemberRecord{ID: "123006", Name: "Jane", Active: true, LastScraped: "2024"})
-	store.UpsertDivision(d, store.DivisionRecord{ID: "45-1-892", Parliament: 45, Session: 1, Number: 892, LastScraped: "2024"})
+	store.UpsertDivision(d, store.DivisionRecord{ID: "45-1-892", Parliament: 45, Session: 1, Number: 892, Yeas: 150, Nays: 100, LastScraped: "2024"})
 
 	if err := store.UpsertMemberVote(d, "45-1-892", "123006", "Yea"); err != nil {
 		t.Fatalf("UpsertMemberVote: %v", err)
@@ -223,7 +223,7 @@ func TestUpsertMemberVote_Updates(t *testing.T) {
 	d := testutil.OpenDB(t)
 
 	store.UpsertMember(d, store.MemberRecord{ID: "123006", Name: "Jane", Active: true, LastScraped: "2024"})
-	store.UpsertDivision(d, store.DivisionRecord{ID: "45-1-892", Parliament: 45, Session: 1, Number: 892, LastScraped: "2024"})
+	store.UpsertDivision(d, store.DivisionRecord{ID: "45-1-892", Parliament: 45, Session: 1, Number: 892, Yeas: 150, Nays: 100, LastScraped: "2024"})
 
 	store.UpsertMemberVote(d, "45-1-892", "123006", "Nay")
 	store.UpsertMemberVote(d, "45-1-892", "123006", "Yea")
@@ -256,7 +256,7 @@ func TestDivisionExists(t *testing.T) {
 		t.Errorf("expected false for missing division, got %v err=%v", exists, err)
 	}
 
-	store.UpsertDivision(d, store.DivisionRecord{ID: "45-1-999", Parliament: 45, Session: 1, Number: 999, LastScraped: "2024"})
+	store.UpsertDivision(d, store.DivisionRecord{ID: "45-1-999", Parliament: 45, Session: 1, Number: 999, Yeas: 10, Nays: 5, LastScraped: "2024"})
 
 	exists, err = store.DivisionExists(d, "45-1-999")
 	if err != nil || !exists {
