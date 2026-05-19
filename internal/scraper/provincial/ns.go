@@ -45,6 +45,22 @@ var nsHansardSlugRe = regexp.MustCompile(`(?i)house_(\d{2})([a-z]{3})(\d{1,2})`)
 // two-column paragraph vote format used by assembly 61–63.
 var nsDoubleSpaceRe = regexp.MustCompile(`  +`)
 
+// nsTimestampRe matches bold timestamp elements like "1:05 P.M." that precede
+// vote tables in NS Hansard but should not be used as division descriptions.
+var nsTimestampRe = regexp.MustCompile(`(?i)^\[?\d+:\d+\s*[ap]\.?m\.?\]?$`)
+
+// nsRecordedVoteOnRe matches the clerk's announcement before a recorded vote,
+// e.g. "The Clerk will conduct a recorded vote on Bill No. 247."
+var nsRecordedVoteOnRe = regexp.MustCompile(`(?i)recorded vote on (.+)`)
+
+// nsBillNoInTextRe matches a "Bill No. X" reference anywhere in paragraph text,
+// e.g. in the Speaker's "The motion is for second reading of Bill No. 247."
+var nsBillNoInTextRe = regexp.MustCompile(`(?i)(Bill\s+No\.?\s*\d+[^.,]*)`)
+
+// nsCommitteeOfWholeRe identifies Committee of the Whole House on Supply votes,
+// which are procedural and should not be stored as recorded divisions.
+var nsCommitteeOfWholeRe = regexp.MustCompile(`(?i)committee\s+of\s+the\s+whole`)
+
 var nsMonthAbbr = map[string]string{
 	"jan": "01", "feb": "02", "mar": "03", "apr": "04",
 	"may": "05", "jun": "06", "jul": "07", "aug": "08",
@@ -260,6 +276,11 @@ func parseNSHansardTableVotes(doc *goquery.Document, pageURL string, legislature
 			return
 		}
 
+		if nsIsCommitteeOfWholeVote(table) {
+			clog.Debugf("[ns-votes] skipping Committee of the Whole vote on %s", date)
+			return
+		}
+
 		desc := nsDescriptionForVoteTable(table)
 		if desc == "" {
 			desc = "Recorded division"
@@ -417,17 +438,63 @@ func parseNSParagraphVoteRow(text string) (yea, nay string) {
 }
 
 // nsDescriptionForVoteTable walks backwards through the siblings of the vote
-// table to find the nearest <b> element, which contains the bill or motion name.
+// table to find the bill or motion being voted on. It checks each sibling for:
+//  1. A clerk's "recorded vote on Bill No. X" announcement
+//  2. Any paragraph containing "Bill No. X" (e.g. Speaker's motion statement)
+//  3. A non-timestamp, non-section-heading <b> element
 func nsDescriptionForVoteTable(table *goquery.Selection) string {
 	for s := table.Prev(); s.Length() > 0; s = s.Prev() {
+		text := strings.TrimSpace(s.Text())
+
+		// Clerk's announcement: "…recorded vote on Bill No. X."
+		if m := nsRecordedVoteOnRe.FindStringSubmatch(text); len(m) == 2 {
+			if desc := strings.TrimRight(strings.TrimSpace(m[1]), "."); desc != "" {
+				return desc
+			}
+		}
+
+		// Bold element — skip timestamps ("1:05 P.M.") and ALL-CAPS section headings
+		// ("PUBLIC BILLS FOR SECOND READING") that contain no bill context.
+		// Checked before plain-text bill-ref scan so the full bold text (including
+		// trailing period) is returned for paragraphs like
+		// <p><b>Bill No. 42 - An Act respecting Something.</b></p>.
 		if b := s.Find("b").First(); b.Length() > 0 {
-			text := strings.TrimSpace(b.Text())
-			if text != "" {
-				return text
+			boldText := strings.TrimSpace(b.Text())
+			if boldText == "" || nsTimestampRe.MatchString(boldText) {
+				continue
+			}
+			isAllCaps := boldText == strings.ToUpper(boldText)
+			hasBillContext := strings.ContainsAny(boldText, "0123456789.") ||
+				strings.Contains(strings.ToLower(boldText), "bill")
+			if isAllCaps && !hasBillContext {
+				continue // section heading, keep looking
+			}
+			return boldText
+		}
+
+		// Plain-text "Bill No. X" — catches Speaker motion statements like
+		// "The motion is for second reading of Bill No. 247." in paragraphs
+		// that have no bold child element.
+		if m := nsBillNoInTextRe.FindStringSubmatch(text); len(m) == 2 {
+			if desc := strings.TrimRight(strings.TrimSpace(m[1]), ".,"); desc != "" {
+				return desc
 			}
 		}
 	}
 	return ""
+}
+
+// nsIsCommitteeOfWholeVote returns true when the preceding siblings of a vote
+// table contain a "Committee of the Whole" motion, which is procedural and
+// should not be stored as a recorded division.
+func nsIsCommitteeOfWholeVote(table *goquery.Selection) bool {
+	count := 0
+	for s := table.Prev(); s.Length() > 0 && count < 15; s, count = s.Prev(), count+1 {
+		if nsCommitteeOfWholeRe.MatchString(strings.TrimSpace(s.Text())) {
+			return true
+		}
+	}
+	return false
 }
 
 // ── Nova Scotia votes — PDF fallback ─────────────────────────────────────────

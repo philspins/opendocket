@@ -1,6 +1,7 @@
 package provincial
 
 import (
+	"strings"
 	"testing"
 )
 
@@ -222,6 +223,107 @@ func TestParseNSHansardHTMLPage_ParagraphFormat_MultipleVotes(t *testing.T) {
 	}
 	if results[1].Division.Description != "Bill No. 2 - Second Act." {
 		t.Errorf("div2 desc=%q", results[1].Division.Description)
+	}
+}
+
+func TestParseNSHansardHTMLPage_ClerkAnnouncementBeforeTable(t *testing.T) {
+	// Reproduces the assembly-65 layout where the bill reference lives in a plain
+	// paragraph ("The Clerk will conduct a recorded vote on Bill No. 247.") and a
+	// bold timestamp ("1:05 P.M.") appears earlier — the timestamp must not become
+	// the description.
+	// Source: https://nslegislature.ca/legislative-business/hansard-debates/assembly-65-session-1/house_26mar25
+	const html = `<html><body>
+<p><b>1:05 P.M.</b></p>
+<p><b>SPEAKER</b></p>
+<p>Hon. Danielle Barkhouse</p>
+<p>THE SPEAKER: Order. Pursuant to the Rules of the House, we will finish where we left off yesterday.</p>
+<p>The Clerk will conduct a recorded vote on Bill No. 247.</p>
+<p>[The Clerk called the roll.]</p>
+<p>[1:07 p.m.]</p>
+<table>
+  <thead><tr><th>YEAS</th><th>NAYS</th></tr></thead>
+  <tbody>
+    <tr><td>Hon. Nolan Young</td><td>Claudia Chender</td></tr>
+    <tr><td>Hon. Kim Masland</td><td>Lisa Lachance</td></tr>
+  </tbody>
+</table>
+</body></html>`
+
+	doc := mustDocFromHTML(t, html)
+	results := parseNSHansardHTMLPage(doc, "https://nslegislature.ca/legislative-business/hansard-debates/assembly-65-session-1/house_26mar25", 65, 1, 43)
+	if len(results) != 1 {
+		t.Fatalf("len(results)=%d want 1", len(results))
+	}
+	desc := results[0].Division.Description
+	if desc == "1:05 P.M." || desc == "SPEAKER" {
+		t.Fatalf("description is a timestamp/heading %q; want bill reference", desc)
+	}
+	if !strings.Contains(desc, "247") {
+		t.Fatalf("description=%q; want it to contain bill number 247", desc)
+	}
+}
+
+func TestParseNSHansardHTMLPage_SpeakerMotionBillRef(t *testing.T) {
+	// Reproduces the assembly-65 March 24 layout: the bill reference is in the
+	// Speaker's motion statement ("The motion is for second reading of Bill No. 247.")
+	// NOT in a "recorded vote on …" clerk announcement. The section heading
+	// "PUBLIC BILLS FOR SECOND READING" must be skipped.
+	// Source: https://nslegislature.ca/legislative-business/hansard-debates/assembly-65-session-1/house_26mar24
+	const html = `<html><body>
+<p><b>PUBLIC BILLS FOR SECOND READING</b></p>
+<p>THE SPEAKER: The motion is for second reading of Bill No. 247.</p>
+<p>All those in favour?</p>
+<p>There has been a request for a recorded vote.</p>
+<p>[The Division bells were rung.]</p>
+<p>THE SPEAKER: Order. Are the Whips satisfied?</p>
+<p>The Clerk will conduct a recorded vote.</p>
+<p>[The Clerk called the roll.]</p>
+<p>[11:30 p.m.]</p>
+<table>
+  <thead><tr><th>YEAS</th><th>NAYS</th></tr></thead>
+  <tbody>
+    <tr><td>Alice Smith</td><td>Bob Jones</td></tr>
+  </tbody>
+</table>
+</body></html>`
+
+	doc := mustDocFromHTML(t, html)
+	results := parseNSHansardHTMLPage(doc, "https://nslegislature.ca/legislative-business/hansard-debates/assembly-65-session-1/house_26mar24", 65, 1, 42)
+	if len(results) != 1 {
+		t.Fatalf("len(results)=%d want 1", len(results))
+	}
+	desc := results[0].Division.Description
+	if strings.Contains(desc, "SECOND READING") || strings.Contains(desc, "PUBLIC BILLS") {
+		t.Fatalf("description is a section heading %q; want bill reference", desc)
+	}
+	if !strings.Contains(desc, "247") {
+		t.Fatalf("description=%q; want bill number 247", desc)
+	}
+}
+
+func TestParseNSHansardHTMLPage_CommitteeOfWholeSkipped(t *testing.T) {
+	// Committee of the Whole House on Supply votes are procedural and must not
+	// be stored. The motion text identifies them unambiguously.
+	const html = `<html><body>
+<p>THE SPEAKER: The motion is that the House concurs in the report of the Committee of the Whole House on Supply.</p>
+<p>There has been a request for a recorded vote.</p>
+<p>[The Division bells were rung.]</p>
+<p>THE SPEAKER: Order. Are the Whips satisfied?</p>
+<p>The Clerk will now conduct a recorded vote.</p>
+<p>[The Clerk called the roll.]</p>
+<p>[11:16 p.m.]</p>
+<table>
+  <thead><tr><th>YEAS</th><th>NAYS</th></tr></thead>
+  <tbody>
+    <tr><td>Alice Smith</td><td>Bob Jones</td></tr>
+  </tbody>
+</table>
+</body></html>`
+
+	doc := mustDocFromHTML(t, html)
+	results := parseNSHansardHTMLPage(doc, "https://nslegislature.ca/legislative-business/hansard-debates/assembly-65-session-1/house_26mar24", 65, 1, 42)
+	if len(results) != 0 {
+		t.Fatalf("expected 0 results for Committee of Whole Supply vote, got %d", len(results))
 	}
 }
 
