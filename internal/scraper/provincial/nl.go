@@ -142,6 +142,20 @@ func parseNLJournalDivisions(text, detailURL string, legislature, session, start
 		return divs
 	}
 
+	// Outcome-only: only proceed if a formal division indicator exists in the document.
+	// "The Speaker put the question" appears for both voice votes and formal divisions;
+	// without AYES/NAYS lists or "The House divided", the outcome is a voice vote and
+	// should not be recorded as a division.
+	textLower := strings.ToLower(text)
+	hasFormalDivision := strings.Contains(textLower, "divided") ||
+		strings.Contains(textLower, "ayes") ||
+		strings.Contains(textLower, "nays") ||
+		strings.Contains(textLower, "recorded vote") ||
+		strings.Contains(textLower, "standing vote")
+	if !hasFormalDivision {
+		return nil
+	}
+
 	// Outcome-only: find "agreed to" / "defeated" patterns.
 	carriedIdxs := nlCarriedRe.FindAllStringIndex(text, -1)
 	negIdxs := nlNegativedRe.FindAllStringIndex(text, -1)

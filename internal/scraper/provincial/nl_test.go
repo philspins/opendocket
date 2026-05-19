@@ -2,8 +2,20 @@ package provincial
 
 import "testing"
 
-func TestParseNLJournalDivisions_OutcomeOnly(t *testing.T) {
-	text := `The house considered Bill 3. On the motion that the bill be read a third time, the question was put, and the motion was agreed to. On the amendment to the bill, the question was put, and the amendment was defeated.`
+func TestParseNLJournalDivisions_VoiceVoteNotRecorded(t *testing.T) {
+	// Voice-vote-only journal: "The Speaker put the question on the motion" with no
+	// AYES/NAYS listing and no "The House divided" — should produce zero divisions.
+	text := `The Honourable Mr. Sullivan moved that the Message together with the Estimates, be referred to a Committee of the Whole on Supply. The Speaker put the question on the motion and declared the motion carried.`
+	divs := ParseNLJournalDivisionsForTest(text, "https://www.assembly.nl.ca/HouseBusiness/Journals/ga45session1/04-03-30.pdf", 45, 1, 9, "2004-03-30")
+	if len(divs) != 0 {
+		t.Fatalf("expected 0 divisions for voice-vote-only journal, got %d", len(divs))
+	}
+}
+
+func TestParseNLJournalDivisions_OutcomeOnlyWithDividedIndicator(t *testing.T) {
+	// Outcome-only: text contains "The House divided" as formal indicator but no AYES/NAYS
+	// member list — should record the outcomes as divisions without member votes.
+	text := `The house considered Bill 3. The House divided. On the motion that the bill be read a third time, the question was put, and the motion was agreed to. On the amendment to the bill, the question was put, and the amendment was defeated.`
 	divs := ParseNLJournalDivisionsForTest(text, "https://example.com/26-04-14.pdf", 51, 1, 1, "2026-04-14")
 	if len(divs) == 0 {
 		t.Fatal("expected at least one division")
