@@ -433,7 +433,18 @@ func parseMBHighlightedSittingDatesFromPDFOCR(pdfBytes []byte, year int) ([]stri
 // mbVotesPDFLinkRe matches per-day Votes and Proceedings PDF links on MB session pages.
 var mbVotesPDFLinkRe = regexp.MustCompile(`(?i)\d+(?:rd|th|st|nd)/votes_\d+\.pdf`)
 var mbAyeNaySectionRe = regexp.MustCompile(`(?is)\bAYE\b\s+(.{1,1000}?)\.{3,}\s*(\d{1,3})\s+\bNAY\b\s+(.{0,600}?)\.{3,}\s*(\d{1,3})`)
-var mbMotionDescriptionRe = regexp.MustCompile(`(?is)(THAT\s+Bill(?:\s*\(No\.\s*\d+\)|\s+No\.\s*\d+).{0,320}?|Resolution\s+No\.\s*\d+\s*:.{0,320}?)(?:And\s+the\s+Question\s+being\s+put|It\s+was\s+(?:agreed|negatived)\s+to,\s+on\s+the\s+following\s+division|$)`)
+
+// mbBillEmDashRe matches the "Bill (No. X) – " prefix that separates a bill
+// number from its English act title in Manitoba Votes and Proceedings PDFs.
+var mbBillEmDashRe = regexp.MustCompile(`(?i)Bill\s*\(No\.\s*\d+\)\s*[–\-]+\s*`)
+
+// mbMotionDescriptionRe captures the motion being voted on from the text
+// preceding a recorded division. It handles four formats:
+//   - THAT Bill (No. X) / Bill No. X …  (classic THAT clause)
+//   - Bill (No. X) – Act Title …         (plain bill reading, no THAT)
+//   - amendment to Bill (No. X) – …      (amendment motion)
+//   - Resolution No. X: …
+var mbMotionDescriptionRe = regexp.MustCompile(`(?is)(THAT\s+Bill(?:\s*\(No\.\s*\d+\)|\s+No\.\s*\d+).{0,400}?|(?:amendment\s+to\s+)?Bill\s*\(No\.\s*\d+\)\s*[–\-].{0,400}?|Resolution\s+No\.\s*\d+\s*:.{0,320}?)(?:/Loi|And\s+the\s+Question\s+being\s+put|It\s+was\s+(?:agreed|negatived)\s+to,\s+on\s+the\s+following\s+division|$)`)
 var manitobaVotesLinkRe = regexp.MustCompile(
 	`(?i)(recorded_votes|votes|journals?|hansard|\d+(?:rd|th|st|nd)/\d+(?:rd|th|st|nd)_\d+\.html|/\d+(?:rd|th|st|nd)/votes_\d+\.pdf)`)
 
@@ -492,6 +503,21 @@ func manitobaSessionPageMatches(href string, legislature, session int) bool {
 	return strings.Contains(strings.ToLower(href), want)
 }
 
+// mbSessionFromURL extracts the legislature and session numbers from a Manitoba
+// session index URL (e.g. ".../43rd/43rd_2nd.html") and returns them with ok=true.
+func mbSessionFromURL(rawURL string) (legislature, session int, ok bool) {
+	m := mbSessionExtractRe.FindStringSubmatch(rawURL)
+	if len(m) != 3 {
+		return 0, 0, false
+	}
+	leg, err1 := strconv.Atoi(m[1])
+	sess, err2 := strconv.Atoi(m[2])
+	if err1 != nil || err2 != nil || leg <= 0 || sess <= 0 {
+		return 0, 0, false
+	}
+	return leg, sess, true
+}
+
 // crawlManitobaVotesFromPDF performs a two-level crawl:
 //
 //	votes_proceedings.html → 43rd/43rd_3rd.html → 3rd/votes_NNN.pdf → parsePDFDivisionsYeasNays
@@ -536,17 +562,27 @@ func crawlManitobaVotesFromPDF(indexURL string, legislature, session int, client
 		sessionLinks = filterMBSessionsToRecentLegislatures(sessionLinks, 3)
 	}
 
-	// Level 2: for each session page, collect PDF links.
-	var pdfLinks []string
+	// Level 2: for each session page, collect PDF links with per-entry metadata.
+	// The link text (or its parent element text) on the session index page often
+	// contains the sitting date (e.g. "Monday, June 2, 2025"), which is more
+	// reliable than trying to parse it from the PDF content stream.
+	type mbPDFEntry struct {
+		url         string
+		legislature int
+		session     int
+		date        string // non-empty when the session page HTML contained a recognisable date
+	}
+	var pdfEntries []mbPDFEntry
 	seenPDF := make(map[string]bool)
 	for _, sessURL := range sessionLinks {
-		if allSittings {
-			if m := mbSessionExtractRe.FindStringSubmatch(sessURL); len(m) == 3 {
-				leg, _ := strconv.Atoi(m[1])
-				sess, _ := strconv.Atoi(m[2])
-				clog.Debugf("[mb-votes] all-sittings: crawling legislature %d session %d", leg, sess)
-			}
+		// Determine the legislature/session for this page, falling back to the
+		// function parameters when the URL does not encode them (e.g. current-session
+		// links that omit the ordinal).
+		leg, sess := legislature, session
+		if l, s, ok := mbSessionFromURL(sessURL); ok {
+			leg, sess = l, s
 		}
+		clog.Debugf("[mb-votes] crawling session page legislature=%d session=%d: %s", leg, sess, sessURL)
 		sessDoc, serr := fetchDoc(sessURL, client)
 		if serr != nil {
 			clog.Infof("[mb-votes] skip session %s: %v", sessURL, serr)
@@ -562,49 +598,67 @@ func crawlManitobaVotesFromPDF(indexURL string, legislature, session int, client
 				return
 			}
 			seenPDF[full] = true
-			pdfLinks = append(pdfLinks, full)
+			// Try to extract the sitting date from the link text or its parent.
+			date := utils.FindDateInText(strings.TrimSpace(a.Text()))
+			if date == "" {
+				if parent := a.Parent(); parent.Length() > 0 {
+					date = utils.FindDateInText(strings.TrimSpace(parent.Text()))
+				}
+			}
+			pdfEntries = append(pdfEntries, mbPDFEntry{url: full, legislature: leg, session: sess, date: date})
 		})
 	}
 
-	sort.Strings(pdfLinks)
-	if !allSittings && len(pdfLinks) > 80 {
-		pdfLinks = pdfLinks[len(pdfLinks)-80:]
+	sort.Slice(pdfEntries, func(i, j int) bool { return pdfEntries[i].url < pdfEntries[j].url })
+	if !allSittings && len(pdfEntries) > 80 {
+		pdfEntries = pdfEntries[len(pdfEntries)-80:]
 	}
-	if len(pdfLinks) == 0 {
+	if len(pdfEntries) == 0 {
 		clog.Infof("[mb-votes] no VP PDFs discovered; falling back to generic parser")
 		return crawlGenericProvincialVotesWithMatcher(indexURL, "mb", "manitoba", legislature, session, client, manitobaVotesLinkRe)
 	}
 
 	var results []ProvincialDivisionResult
-	nextDivNum := 1
-	for _, pdfURL := range pdfLinks {
-		text, terr := downloadAndExtractPDFText(pdfURL, "mb", client)
+	// Per-session division number counters: each session's divisions are numbered
+	// independently starting from 1.
+	nextDivNums := make(map[string]int)
+	sessKey := func(leg, sess int) string { return fmt.Sprintf("%d-%d", leg, sess) }
+	for _, entry := range pdfEntries {
+		text, terr := downloadAndExtractPDFText(entry.url, "mb", client)
 		if terr != nil {
 			if errors.Is(terr, errNonPDFResponse) {
-				clog.Debugf("[mb-votes] skip non-pdf link %s: %v", pdfURL, terr)
+				clog.Debugf("[mb-votes] skip non-pdf link %s: %v", entry.url, terr)
 				continue
 			}
-			clog.Infof("[mb-votes] skip pdf %s: %v", pdfURL, terr)
+			clog.Infof("[mb-votes] skip pdf %s: %v", entry.url, terr)
 			continue
 		}
-		date := extractDateFromURL(pdfURL)
+		date := entry.date
+		if date == "" {
+			date = extractDateFromURL(entry.url)
+		}
 		if date == "" {
 			date = utils.FindDateInText(text)
 		}
 		if date == "" {
 			date = utils.TodayISO()
 		}
-		divs := parseManitobaAyeNayDivisions(text, pdfURL, legislature, session, nextDivNum, date)
+		key := sessKey(entry.legislature, entry.session)
+		if nextDivNums[key] == 0 {
+			nextDivNums[key] = 1
+		}
+		nextDivNum := nextDivNums[key]
+		divs := parseManitobaAyeNayDivisions(text, entry.url, entry.legislature, entry.session, nextDivNum, date)
 		if len(divs) == 0 {
-			divs = parsePDFDivisionsYeasNays(text, pdfURL, "mb", "manitoba", legislature, session, nextDivNum, date, extractPlainVoteNames)
+			divs = parsePDFDivisionsYeasNays(text, entry.url, "mb", "manitoba", entry.legislature, entry.session, nextDivNum, date, extractPlainVoteNames)
 		}
 		results = append(results, divs...)
-		nextDivNum += len(divs)
+		nextDivNums[key] += len(divs)
 		if len(divs) == 0 {
-			nextDivNum++
+			nextDivNums[key]++
 		}
 	}
-	clog.Debugf("[mb-votes] parsed %d divisions from %d PDFs", len(results), len(pdfLinks))
+	clog.Debugf("[mb-votes] parsed %d divisions from %d PDFs", len(results), len(pdfEntries))
 	return results, nil
 }
 
@@ -652,6 +706,34 @@ func parseManitobaAyeNayDivisions(text, detailURL string, legislature, session, 
 	return results
 }
 
+// cleanManitobaDescription strips PDF artifacts from a Manitoba motion description:
+// backslashes (extraction noise), French text after "/Loi", the leading "THAT "
+// parliamentary preamble, and \u2014 when the THAT clause introduces a
+// "Bill (No. X) \u2013 Act Title" \u2014 the bill-number prefix so only the act title remains
+// (the bill number is shown separately in the Bill column).
+// Capitalises the first letter for motions that begin in lowercase (e.g. "amendment to \u2026").
+func cleanManitobaDescription(s string) string {
+	s = strings.ReplaceAll(s, `\`, "")
+	if i := strings.Index(s, "/Loi"); i >= 0 {
+		s = s[:i]
+	}
+	s = strings.TrimSpace(s)
+	if len(s) >= 5 && strings.EqualFold(s[:5], "THAT ") {
+		s = strings.TrimSpace(s[5:])
+		// Strip "Bill (No. X) \u2013 " so the description shows only the act title.
+		if loc := mbBillEmDashRe.FindStringIndex(s); loc != nil {
+			if tail := strings.TrimSpace(s[loc[1]:]); tail != "" {
+				s = tail
+			}
+		}
+	}
+	s = strings.TrimRight(s, " ,;\u2013-")
+	if len(s) > 0 {
+		s = strings.ToUpper(s[:1]) + s[1:]
+	}
+	return s
+}
+
 func extractManitobaDivisionDescription(text string, markerStart int) string {
 	start := markerStart - 1200
 	if start < 0 {
@@ -659,7 +741,7 @@ func extractManitobaDivisionDescription(text string, markerStart int) string {
 	}
 	context := strings.TrimSpace(strings.Join(strings.Fields(strings.ReplaceAll(text[start:markerStart], "\u00a0", " ")), " "))
 	if matches := mbMotionDescriptionRe.FindAllStringSubmatch(context, -1); len(matches) > 0 {
-		return strings.TrimSpace(matches[len(matches)-1][1])
+		return cleanManitobaDescription(matches[len(matches)-1][1])
 	}
 	// The bill motion may be further back when a full AYE/NAY block from the
 	// previous division falls between the THAT clause and this division's AYE.
@@ -670,7 +752,7 @@ func extractManitobaDivisionDescription(text string, markerStart int) string {
 	if wideStart < start {
 		wideCtx := strings.TrimSpace(strings.Join(strings.Fields(strings.ReplaceAll(text[wideStart:markerStart], "\u00a0", " ")), " "))
 		if matches := mbMotionDescriptionRe.FindAllStringSubmatch(wideCtx, -1); len(matches) > 0 {
-			return strings.TrimSpace(matches[len(matches)-1][1])
+			return cleanManitobaDescription(matches[len(matches)-1][1])
 		}
 	}
 	return newBrunswickDescriptionFromContext(text, markerStart)

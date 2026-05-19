@@ -2,6 +2,7 @@ package provincial
 
 import (
 	"path/filepath"
+	"strconv"
 	"strings"
 	"testing"
 
@@ -86,9 +87,9 @@ func TestParseManitobaAyeNayDivisions_BillDescriptionAcrossAdjacentDivisions(t *
 	if len(divs) < 2 {
 		t.Fatalf("len(divs)=%d, want >=2", len(divs))
 	}
-	// First division: description must reference the bill.
-	if !strings.Contains(divs[0].Division.Description, "Bill (No. 5)") {
-		t.Errorf("div[0].description=%q; expected Bill (No. 5)", divs[0].Division.Description)
+	// First division: THAT + em-dash strips bill-number prefix, leaving act title.
+	if !strings.Contains(divs[0].Division.Description, "Accessibility for Manitobans") {
+		t.Errorf("div[0].description=%q; expected act title with 'Accessibility for Manitobans'", divs[0].Division.Description)
 	}
 	// Second division: all-caps NAY voter names must NOT be the description.
 	if strings.Contains(divs[1].Division.Description, "BALCAEN") || strings.Contains(divs[1].Division.Description, "EWASKO") {
@@ -107,6 +108,59 @@ func TestParseManitobaAyeNayDivisions_LiveNoParensBillFormat(t *testing.T) {
 	}
 	if ExtractProvincialBillNumber(divs[0].Division.Description) != "232" {
 		t.Fatalf("bill number=%q", ExtractProvincialBillNumber(divs[0].Division.Description))
+	}
+}
+
+func TestParseManitobaAyeNayDivisions_BillEmDashFormat(t *testing.T) {
+	// Covers three real-world motion formats that lack a "THAT" prefix:
+	//  1. Plain "Bill (No. X) – Act Title/Loi..." — keep bill reference in description.
+	//  2. "amendment to Bill (No. X) – Act Title/Loi..." — capitalise and keep bill ref.
+	//  3. Multiple bills in context — last match (closest to AYE) wins.
+	ayeNay := func(yeas, nays int) string {
+		yNames := strings.Repeat("SMITH JONES BROWN COOK ADAMS ", yeas/5+1)
+		nNames := strings.Repeat("BAKER BYRAM EWASKO GUENTER ", nays/4+1)
+		return "And the Question being put. It was agreed to, on the following division: AYE " +
+			yNames + ".......... " + strconv.Itoa(yeas) +
+			" NAY " + nNames + ".......... " + strconv.Itoa(nays)
+	}
+
+	tests := []struct {
+		name    string
+		text    string
+		wantDesc string
+	}{
+		{
+			name: "plain bill em-dash",
+			text: "Bill (No. 47) – The Fair Trade in Canada (Internal Trade Mutual Recognition) Act" +
+				"/Loi sur le commerce équitable au Canada. " + ayeNay(32, 19),
+			wantDesc: "Bill (No. 47) – The Fair Trade in Canada (Internal Trade Mutual Recognition) Act",
+		},
+		{
+			name: "amendment to bill",
+			text: "amendment to Bill (No. 48) – The Protective Detention and Care of Intoxicated Persons Act" +
+				"/Loi sur la détention des personnes. " + ayeNay(21, 32),
+			wantDesc: "Amendment to Bill (No. 48) – The Protective Detention and Care of Intoxicated Persons Act",
+		},
+		{
+			name: "multiple bills — last before AYE wins",
+			// Bill (No. 29) appears closer to the AYE block than Bill (No. 47).
+			text: "Bill (No. 47) – The Fair Trade Act/Loi whatever. " +
+				"Bill (No. 29) – The Workplace Safety and Health Amendment Act/Loi santé. " +
+				ayeNay(32, 20),
+			wantDesc: "Bill (No. 29) – The Workplace Safety and Health Amendment Act",
+		},
+	}
+
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			divs := ParseManitobaAyeNayDivisionsForTest(tc.text, "https://example.com/votes_test.pdf", 43, 3, 1, "2026-05-18")
+			if len(divs) != 1 {
+				t.Fatalf("len(divs)=%d, want 1", len(divs))
+			}
+			if divs[0].Division.Description != tc.wantDesc {
+				t.Errorf("description:\n  got  %q\n  want %q", divs[0].Division.Description, tc.wantDesc)
+			}
+		})
 	}
 }
 
@@ -133,6 +187,28 @@ func TestExtractLegislatureSessionCandidates_ManitobaFormats(t *testing.T) {
 		}
 		if best.Legislature != tc.want.Legislature || best.Session != tc.want.Session {
 			t.Fatalf("best=%+v, want legislature=%d session=%d", best, tc.want.Legislature, tc.want.Session)
+		}
+	}
+}
+
+func TestMBSessionFromURL(t *testing.T) {
+	tests := []struct {
+		url      string
+		wantLeg  int
+		wantSess int
+		wantOK   bool
+	}{
+		{"https://www.gov.mb.ca/legislature/business/43rd/43rd_2nd.html", 43, 2, true},
+		{"https://www.gov.mb.ca/legislature/business/43rd/43rd_3rd.html", 43, 3, true},
+		{"https://www.gov.mb.ca/legislature/business/42nd/42nd_5th.html", 42, 5, true},
+		{"https://example.com/votes_063.pdf", 0, 0, false},
+		{"https://example.com/no-match.html", 0, 0, false},
+	}
+	for _, tc := range tests {
+		leg, sess, ok := mbSessionFromURL(tc.url)
+		if ok != tc.wantOK || leg != tc.wantLeg || sess != tc.wantSess {
+			t.Errorf("mbSessionFromURL(%q) = (%d, %d, %v), want (%d, %d, %v)",
+				tc.url, leg, sess, ok, tc.wantLeg, tc.wantSess, tc.wantOK)
 		}
 	}
 }
@@ -164,10 +240,10 @@ func TestCleanupManitobaStaleSessionDivisions(t *testing.T) {
 	}
 	defer conn.Close()
 
-	if err := store.UpsertDivision(conn, store.DivisionRecord{ID: "mb-43-3-2025-04-07-2", Parliament: 43, Session: 3, Number: 2, Date: "2025-04-07", SittingURL: "https://www.gov.mb.ca/legislature/business/43rd/2nd/votes_037.pdf", LastScraped: "2026-01-01T00:00:00Z"}); err != nil {
+	if err := store.UpsertDivision(conn, store.DivisionRecord{ID: "mb-43-3-2025-04-07-2", Parliament: 43, Session: 3, Number: 2, Date: "2025-04-07", Yeas: 30, Nays: 20, SittingURL: "https://www.gov.mb.ca/legislature/business/43rd/2nd/votes_037.pdf", LastScraped: "2026-01-01T00:00:00Z"}); err != nil {
 		t.Fatalf("insert stale division: %v", err)
 	}
-	if err := store.UpsertDivision(conn, store.DivisionRecord{ID: "mb-43-3-2025-10-07-44", Parliament: 43, Session: 3, Number: 44, Date: "2025-10-07", SittingURL: "https://www.gov.mb.ca/legislature/business/43rd/3rd/votes_044.pdf", LastScraped: "2026-01-01T00:00:00Z"}); err != nil {
+	if err := store.UpsertDivision(conn, store.DivisionRecord{ID: "mb-43-3-2025-10-07-44", Parliament: 43, Session: 3, Number: 44, Date: "2025-10-07", Yeas: 35, Nays: 18, SittingURL: "https://www.gov.mb.ca/legislature/business/43rd/3rd/votes_044.pdf", LastScraped: "2026-01-01T00:00:00Z"}); err != nil {
 		t.Fatalf("insert current division: %v", err)
 	}
 	_, err = conn.Exec(`INSERT INTO members (id, name, province, chamber, active, government_level) VALUES
@@ -201,6 +277,55 @@ func TestCleanupManitobaStaleSessionDivisions(t *testing.T) {
 	}
 	if staleCount != 0 || currentCount != 1 || staleVoteCount != 0 {
 		t.Fatalf("staleCount=%d currentCount=%d staleVoteCount=%d", staleCount, currentCount, staleVoteCount)
+	}
+}
+
+func TestCleanManitobaDescription(t *testing.T) {
+	tests := []struct {
+		in   string
+		want string
+	}{
+		{
+			// Raw PDF text: backslashes, leading THAT, French after /Loi
+			in:   `THAT Bill No. 210\ The Indigenous Veterans Day Act Commemoration of Days, Weeks and Months Act Amended\/Loi sur la Journ` + "\x0e" + `e des anciens combattants autochtones`,
+			want: "Bill No. 210 The Indigenous Veterans Day Act Commemoration of Days, Weeks and Months Act Amended",
+		},
+		{
+			// Parenthesised bill number, clean /Loi boundary
+			in:   "THAT Bill (No. 232) The Autism Strategy Act/Loi sur la strategie sur l'autisme, be now read a Second Time",
+			want: "Bill (No. 232) The Autism Strategy Act",
+		},
+		{
+			// THAT + em-dash: strip both "THAT" and the bill-number prefix, leaving just the act title.
+			in:   "THAT Bill (No. 5) – The Accessibility for Manitobans Amendment Act/Loi modifiant la Loi sur l'accessibilite, be now read a Third Time",
+			want: "The Accessibility for Manitobans Amendment Act",
+		},
+		{
+			// THAT + em-dash, longer act title with parenthesised clause.
+			in:   "THAT Bill (No. 48) – The Protective Detention and Care of Intoxicated Persons Act/Loi sur la détention des personnes",
+			want: "The Protective Detention and Care of Intoxicated Persons Act",
+		},
+		{
+			// No THAT prefix: keep "Bill (No. X) –" so bill context is preserved.
+			in:   "Bill (No. 47) – The Fair Trade in Canada (Internal Trade Mutual Recognition) Act/Loi sur le commerce",
+			want: "Bill (No. 47) – The Fair Trade in Canada (Internal Trade Mutual Recognition) Act",
+		},
+		{
+			// Amendment motion: capitalise first letter, keep bill reference.
+			in:   "amendment to Bill (No. 48) – The Protective Detention and Care of Intoxicated Persons Act/Loi sur la détention",
+			want: "Amendment to Bill (No. 48) – The Protective Detention and Care of Intoxicated Persons Act",
+		},
+		{
+			// No French section — description unchanged except THAT strip
+			in:   "THAT Resolution No. 1: Something be done",
+			want: "Resolution No. 1: Something be done",
+		},
+	}
+	for _, tc := range tests {
+		got := cleanManitobaDescription(tc.in)
+		if got != tc.want {
+			t.Errorf("cleanManitobaDescription(%q)\n  got  %q\n  want %q", tc.in, got, tc.want)
+		}
 	}
 }
 
