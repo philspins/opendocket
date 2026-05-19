@@ -172,6 +172,9 @@ func UpsertBill(db *sql.DB, b BillRecord) error {
 
 // UpsertDivision inserts or updates a division record.
 func UpsertDivision(db *sql.DB, d DivisionRecord) error {
+	if d.Yeas == 0 && d.Nays == 0 {
+		return fmt.Errorf("division %s has zero yeas and zero nays; voice votes must not be stored as divisions", d.ID)
+	}
 	chamber := d.Chamber
 	if chamber == "" {
 		chamber = "commons"

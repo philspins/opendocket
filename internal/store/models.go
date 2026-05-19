@@ -29,6 +29,7 @@ type DivisionRow struct {
 	Date        string
 	BillID      string
 	BillNumber  string
+	BillTitle   string
 	Description string
 	Yeas        int
 	Nays        int
@@ -107,6 +108,13 @@ type BillFilter struct {
 	SubscribedBillIDs   []string // used when Sort="auto" to pin subscribed bills first
 	Page                int
 	PerPage             int
+}
+
+type DivisionFilter struct {
+	Chamber string // "" means all; otherwise matches d.chamber exactly
+	Result  string // "" | "Carried" | "Negatived"
+	Page    int
+	PerPage int
 }
 
 type BillStageRow struct {

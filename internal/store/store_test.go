@@ -1260,6 +1260,25 @@ func TestUpsertDivisionAndGetBillDivisions(t *testing.T) {
 	}
 }
 
+func TestUpsertDivision_RejectsZeroVotes(t *testing.T) {
+	conn := tempDB(t)
+	err := store.UpsertDivision(conn, store.DivisionRecord{
+		ID: "nl-45-1-9", Parliament: 45, Session: 1, Number: 9,
+		Date: "2004-03-30", Yeas: 0, Nays: 0,
+		Result: "Carried", Chamber: "newfoundland_labrador", LastScraped: "2026-01-01",
+	})
+	if err == nil {
+		t.Fatal("expected error upserting division with yeas=0 and nays=0, got nil")
+	}
+	var count int
+	if scanErr := conn.QueryRow(`SELECT COUNT(*) FROM divisions WHERE id = 'nl-45-1-9'`).Scan(&count); scanErr != nil {
+		t.Fatalf("query: %v", scanErr)
+	}
+	if count != 0 {
+		t.Fatal("division with zero votes should not have been inserted")
+	}
+}
+
 func TestListDivisionsAndGetRecentDivisions(t *testing.T) {
 	conn := tempDB(t)
 	for i := 1; i <= 3; i++ {
@@ -1272,7 +1291,7 @@ func TestListDivisionsAndGetRecentDivisions(t *testing.T) {
 		}
 	}
 	st := store.New(conn)
-	divs, total, err := st.ListDivisions(1, 10)
+	divs, total, err := st.ListDivisions(store.DivisionFilter{Page: 1, PerPage: 10})
 	if err != nil {
 		t.Fatalf("ListDivisions: %v", err)
 	}
@@ -1806,7 +1825,7 @@ func TestListDivisions_DefaultPagination(t *testing.T) {
 	}
 
 	// page=0 and perPage=0 should apply defaults (page→1, perPage→50).
-	divs, total, err := st.ListDivisions(0, 0)
+	divs, total, err := st.ListDivisions(store.DivisionFilter{Page: 0, PerPage: 0})
 	if err != nil {
 		t.Fatalf("ListDivisions: %v", err)
 	}

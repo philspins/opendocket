@@ -240,7 +240,7 @@ func (s *Store) GetBillStages(billID string) ([]BillStageRow, error) {
 func (s *Store) GetBillDivisions(billID string) ([]DivisionRow, error) {
 	rows, err := s.db.Query(`
 		SELECT d.id, d.parliament, d.session, d.number, COALESCE(d.date,''),
-		       COALESCE(d.bill_id,''), COALESCE(b.number,''),
+		       COALESCE(d.bill_id,''), COALESCE(b.number,''), COALESCE(b.title,''),
 		       COALESCE(d.description,''), d.yeas, d.nays, d.paired,
 		       COALESCE(d.result,''), COALESCE(d.chamber,''), COALESCE(d.sitting_url,'')
 		FROM divisions d
@@ -256,30 +256,35 @@ func (s *Store) GetBillDivisions(billID string) ([]DivisionRow, error) {
 
 // ── division queries ──────────────────────────────────────────────────────────
 
-// ListDivisions returns a paginated list of divisions.
-func (s *Store) ListDivisions(page, perPage int) ([]DivisionRow, int, error) {
-	if perPage <= 0 {
-		perPage = 50
+// ListDivisions returns a paginated, optionally filtered list of divisions.
+func (s *Store) ListDivisions(f DivisionFilter) ([]DivisionRow, int, error) {
+	if f.PerPage <= 0 {
+		f.PerPage = 50
 	}
-	if page < 1 {
-		page = 1
+	if f.Page < 1 {
+		f.Page = 1
 	}
-	offset := (page - 1) * perPage
+	offset := (f.Page - 1) * f.PerPage
+
+	where, args := buildDivisionWhereClause(f)
 
 	var total int
-	if err := s.db.QueryRow("SELECT COUNT(*) FROM divisions").Scan(&total); err != nil {
+	countArgs := make([]interface{}, len(args))
+	copy(countArgs, args)
+	if err := s.db.QueryRow("SELECT COUNT(*) FROM divisions d"+where, countArgs...).Scan(&total); err != nil {
 		return nil, 0, err
 	}
 
+	queryArgs := append(args, f.PerPage, offset)
 	rows, err := s.db.Query(`
 		SELECT d.id, d.parliament, d.session, d.number, COALESCE(d.date,''),
-		       COALESCE(d.bill_id,''), COALESCE(b.number,''),
+		       COALESCE(d.bill_id,''), COALESCE(b.number,''), COALESCE(b.title,''),
 		       COALESCE(d.description,''), d.yeas, d.nays, d.paired,
 		       COALESCE(d.result,''), COALESCE(d.chamber,''), COALESCE(d.sitting_url,'')
 		FROM divisions d
-		LEFT JOIN bills b ON b.id = d.bill_id
+		LEFT JOIN bills b ON b.id = d.bill_id`+where+`
 		ORDER BY d.date DESC, d.id DESC
-		LIMIT ? OFFSET ?`, perPage, offset)
+		LIMIT ? OFFSET ?`, queryArgs...)
 	if err != nil {
 		return nil, 0, err
 	}
@@ -288,13 +293,30 @@ func (s *Store) ListDivisions(page, perPage int) ([]DivisionRow, int, error) {
 	return divs, total, err
 }
 
+func buildDivisionWhereClause(f DivisionFilter) (string, []interface{}) {
+	var clauses []string
+	var args []interface{}
+	if f.Chamber != "" {
+		clauses = append(clauses, "d.chamber = ?")
+		args = append(args, f.Chamber)
+	}
+	if f.Result != "" {
+		clauses = append(clauses, "d.result = ?")
+		args = append(args, f.Result)
+	}
+	if len(clauses) == 0 {
+		return "", args
+	}
+	return " WHERE " + strings.Join(clauses, " AND "), args
+}
+
 func scanDivisionRows(rows *sql.Rows) ([]DivisionRow, error) {
 	var out []DivisionRow
 	for rows.Next() {
 		var d DivisionRow
 		if err := rows.Scan(
 			&d.ID, &d.Parliament, &d.Session, &d.Number, &d.Date,
-			&d.BillID, &d.BillNumber,
+			&d.BillID, &d.BillNumber, &d.BillTitle,
 			&d.Description, &d.Yeas, &d.Nays, &d.Paired,
 			&d.Result, &d.Chamber, &d.SittingURL,
 		); err != nil {
@@ -1167,7 +1189,7 @@ func (s *Store) GetRecentDivisions(limit int) ([]DivisionRow, error) {
 	if limit <= 0 {
 		limit = 10
 	}
-	divs, _, err := s.ListDivisions(1, limit)
+	divs, _, err := s.ListDivisions(DivisionFilter{Page: 1, PerPage: limit})
 	return divs, err
 }
 
